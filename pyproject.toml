@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "condition_coverage"
+version = "0.0.1"
+description = "Condition coverage for Python: true and false for each operand of every and/or"
+requires-python = ">=3.13"
+readme = "README.md"
+authors = [{ name = "Jon Jagger" }]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+condition_coverage = ["html/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]

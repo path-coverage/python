@@ -1,0 +1,145 @@
+# condition_coverage
+
+Condition coverage for Python, to run alongside coverage.py's line and branch
+coverage. A Python port of the Ruby gem of the same name
+(https://rubygems.org/gems/condition_coverage).
+
+Status: covers `and` and `or`: each leaf operand of a condition, however its
+operators are chained, nested or grouped.
+
+## The gap it fills
+
+coverage.py tracks branches, not the conditions inside them:
+
+```python
+if trail_id in trails and trails[trail_id].is_new:
+    return "new"
+```
+
+is two branches. Tests that take both can still leave
+`trails[trail_id].is_new` never false, or never evaluated, and branch
+coverage reports 100%.
+
+## Use
+
+From code, before any covered module is imported:
+
+```python
+import condition_coverage
+
+condition_coverage.start(
+    root="/app",                   # cover globs and site names are relative to it
+    cover=["src/**/*.py"],         # each matching module is instrumented as it is imported
+    coverage_dir="/tmp/coverage",  # where condition_coverage.json is written
+    report=["gaps", "html"],       # the reporters run at exit (default ["gaps"])
+)
+```
+
+An unknown reporter is refused by name, with the list of the ones there are.
+
+With pytest, from the environment alone:
+
+```sh
+export CONDITION_COVERAGE_ROOT=/app
+export CONDITION_COVERAGE_COVER=src/**/*.py,lib/*.py   # comma-separated
+export CONDITION_COVERAGE_DIR=/tmp/coverage
+export CONDITION_COVERAGE_REPORT=gaps,html             # optional, default gaps
+python -m pytest -p condition_coverage.pytest_plugin test/
+```
+
+The plugin starts before any conftest is imported, and does nothing when
+`CONDITION_COVERAGE_COVER` is not set. Under pytest-xdist each worker writes
+a part, `condition_coverage.gw0.json` and so on, and the controller adds
+every part's counts to its own report, so the gaps are those that every
+worker left.
+
+## What a run reports
+
+As the process exits (or, under the pytest plugin, as pytest finishes):
+
+- `condition_coverage.json` is written to `coverage_dir`: every site of every
+  covered file, with each operand's true and false counts:
+  `{"sites": {site: [{"truthy": n, "falsy": n, "only": ...}, ...]}}`.
+- `gaps` prints one line per missing outcome, in manifest order:
+
+```text
+src/model/trail.py:12:11 operand 1 never false
+src/model/flow.py:40:8 operand 0 never true
+src/model/flow.py:40:8 operand 2 never evaluated
+src/scripts/backfill.py:9:7 never reached
+```
+
+A site is named by the `path:line:column` where its condition starts: the
+path relative to `root`, the line 1-based, the column a 0-based byte offset,
+as Python's `ast` gives it. A site in a covered file the run never imported
+is still reported, as `never reached`.
+
+A site is an outermost condition. Its operands are numbered left to right
+across the whole of it, nested conditions included:
+
+```python
+ok(id) and new(id) and len(id) == 6       # one `and` site, operands 0 1 2
+ok(id) and (new(id) or len(id) == 6)      # an `or` nested in an `and` site, 0 1 2
+ok(id) and new(id) or len(id) == 6        # an `and` nested in an `or` site, 0 1 2
+any(k and k.ok for k in ids) and ok(id)   # two sites: the generator's is its own
+```
+
+An operand whose form allows one outcome only needs only to be evaluated: its
+other outcome is impossible, not a gap. `None`, `False`, `0`, `''` and empty
+displays (`[]`, `{}`, `()`) can only be falsy; other literals, displays
+holding an item that is not an unpacking (`[None]`, but not `[*xs]`),
+lambdas, and f-strings holding literal text can only be truthy. Calls and
+names are left open, even `Config()` or `DEFAULT`, since a class can define
+`__bool__` or `__len__` and a constant can hold an empty value; reporting a
+gap that cannot be closed is the lesser error than hiding one that can.
+
+```python
+tags = record.get("tags") or []   # operand 1: never evaluated, or no gap
+```
+
+- `html` writes `index.html` to `coverage_dir`: the covered files with their
+  sites, outcomes seen (with a percent) and outcomes missing, each column
+  sortable. Each file name opens `files/<path>.html`, the file's source. On
+  a line holding a condition the line number is a button (outlined when
+  every outcome was seen, solid when any is missing) that opens a tree of
+  the condition: its operators, nested as Python groups them, and each leaf
+  operand's true and false counts and its gap. A condition written over
+  several lines has one button over all of its line numbers. Trees with
+  gaps start open. A header lists every site as a link to its line, and
+  arrows beside each site with gaps jump to the previous and next one.
+
+## How it works
+
+A meta path finder, placed first on `sys.meta_path`, hands each covered
+module to a loader that parses its source, wraps each leaf operand in a
+record call, and compiles the changed tree:
+
+```python
+ok(id) and new(id)
+# compiles as
+__condition_coverage_record__("k.py:2:4", 0, ok(id)) and \
+    __condition_coverage_record__("k.py:2:4", 1, new(id))
+```
+
+The record call counts whether the operand was truthy or falsy and returns
+it unchanged, so short-circuiting and the value of the expression are
+preserved. Each inserted node takes the location of the leaf it wraps, so
+line numbers in tracebacks, and coverage.py's line and branch figures, are
+those of the file as written. The rewrite happens in memory: the loader
+neither reads nor writes the bytecode cache, and no file on disk changes.
+
+## Constraints
+
+- CPython 3.13 or later (`pathlib.PurePath.full_match`).
+- A module imported before `start` is not instrumented, and nor is the
+  script run as `__main__`; all their sites show as `never reached`.
+- An operand's truth is taken once more by the record call, so an operand
+  whose `__bool__` has side effects sees it called twice.
+- Counts are kept per process; the at-exit report does not run on
+  `os._exit` or an uncaught signal.
+
+## Development
+
+`bin/test.sh` runs the tests with the python in a sibling `server` repo's
+`.venv_fast_test` (override with `PYTHON=...`), writing nothing into this
+repo.

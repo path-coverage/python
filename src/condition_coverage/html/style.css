@@ -1,0 +1,149 @@
+/* Blue (seen both ways) and orange (missing) stay distinct for
+   red-green colour blindness; states also differ in form. */
+:root {
+  --bg: #FBFBFC;
+  --surface: #FFFFFF;
+  --panel: #F2F4F7;
+  --fg: #1C2230;
+  --muted: #5B6577;
+  --rule: #D5DAE2;
+  --ok: #1F5FBF;
+  --ok-tint: #E6EEFA;
+  --warn: #A35200;
+  --bad: #B54708;
+  --on-status: #FFFFFF;
+  --link: #1F5FBF;
+  /* The tree is inverted from the page, so it never reads as
+     more source lines. */
+  --tree-bg: #1E2638;
+  --tree-fg: #E8ECF4;
+  --tree-muted: #A3AEC2;
+  --tree-rule: #3A4560;
+  --tree-gap: #F5A25D;
+  --font-body: "Helvetica Neue", Arial, sans-serif;
+  --font-code: Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151C; --surface: #181C25; --panel: #212633; --fg: #E4E8EF;
+    --muted: #9AA4B5; --rule: #323949; --ok: #7FB0FF; --ok-tint: #1A2740;
+    --warn: #F0A35E; --bad: #F08A3C; --on-status: #12151C; --link: #7FB0FF;
+    --tree-bg: #E6EAF2; --tree-fg: #1C2230; --tree-muted: #4E5869;
+    --tree-rule: #BCC4D2; --tree-gap: #A8480A;
+    color-scheme: dark;
+  }
+}
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; }
+a { color: var(--link); }
+.page {
+  max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;
+  padding: 40px max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px));
+}
+h1 { margin: 0; font-size: 28px; font-weight: 600; }
+.box { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 16px; text-align: left; }
+th { background: var(--panel); }
+td { border-top: 1px solid var(--rule); }
+td:first-child { font-family: var(--font-code); }
+.num, td:not(:first-child) { text-align: right; }
+th button {
+  font: 600 14px var(--font-body); color: var(--fg); background: none; border: 0;
+  padding: 4px 0; cursor: pointer;
+}
+th button::after { content: " \2195"; color: var(--muted); }
+th[aria-sort="ascending"] button::after { content: " \25B2"; color: var(--fg); }
+th[aria-sort="descending"] button::after { content: " \25BC"; color: var(--fg); }
+th button:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+
+/* A file's page: plain source; on lines holding a condition the
+   line numbers are one button. Every number has the same box, so
+   digits stay aligned whether or not they are on a button. */
+.back { margin: 0; font-size: 14px; }
+h1.path { font-family: var(--font-code); font-size: 20px; }
+/* The back link, path and site lists stick together as one
+   header. */
+.head {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 0 -16px; padding: 12px 16px; background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+.jumps { display: flex; flex-direction: column; gap: 8px; }
+.jump-list { display: flex; gap: 6px; align-items: center; overflow-x: auto; white-space: nowrap; min-width: 0; }
+.jump-label { width: 64px; flex-shrink: 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+a.jump {
+  font: 600 13px/22px var(--font-code); padding: 0 9px; border-radius: 999px;
+  text-decoration: none; border: 1px solid; font-variant-numeric: tabular-nums;
+}
+a.jump[data-status="covered"] { background: var(--ok-tint); color: var(--ok); border-color: var(--ok); }
+a.jump[data-status="gaps"] { background: var(--bad); color: var(--on-status); border-color: var(--bad); }
+a.jump:focus-visible, .nav a:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+/* The source pane's border and background start after the nav
+   column, so the arrows sit outside the pane yet scroll with
+   their line. */
+.box:has(> .code) { position: relative; isolation: isolate; border: 0; background: none; border-radius: 0; }
+.box:has(> .code)::before {
+  content: ""; position: absolute; inset: 0 0 0 48px; z-index: -1;
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--surface); pointer-events: none;
+}
+.nav { display: flex; width: 48px; flex-shrink: 0; }
+.nav a { width: 22px; text-align: center; line-height: 32px; font-size: 18px; color: var(--bad); text-decoration: none; }
+.nav a:hover { color: var(--fg); }
+/* Clears the sticky header when a link jumps to a line. */
+.lineno { scroll-margin-top: 190px; }
+button.lnum:has(.lineno:target) { outline: 3px solid var(--link); outline-offset: 2px; }
+.code { font-family: var(--font-code); font-size: 14px; line-height: 32px; padding: 10px 0; min-width: 720px; }
+.line, .block { display: flex; align-items: flex-start; }
+.srcs { display: flex; flex-direction: column; }
+.src { white-space: pre; }
+.lineno {
+  display: block; width: 52px; padding-right: 20px; text-align: right;
+  color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+button.lnum {
+  display: flex; flex-direction: column; flex-shrink: 0; margin: 4px 0; padding: 0;
+  border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+  font: 600 14px/24px var(--font-code); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+button.lnum { position: relative; }
+button.lnum::before {
+  content: "\25B8"; position: absolute; left: 7px; top: 4px;
+  font-size: 11px; line-height: 24px; transition: transform 120ms;
+}
+button.lnum[aria-expanded="true"]::before { transform: rotate(90deg); }
+/* With a site count the count and the triangle share the
+   button's height, one 11px line each. */
+button.lnum:has(.site-count)::before { top: 12px; line-height: 11px; }
+/* On a button over two or more lines the triangle sits at the
+   very bottom. */
+button.lnum:has(.lineno + .lineno)::before { top: auto; bottom: 2px; line-height: 11px; }
+.site-count {
+  position: absolute; left: 7px; top: 1px;
+  font-size: 9px; line-height: 11px; font-weight: 700;
+}
+/* The rule between sites spans the tree's full width, through
+   its 16px side padding. */
+.site + .site {
+  border-top: 1px solid var(--tree-rule); margin: 6px -16px 0; padding: 6px 16px 0;
+}
+button.lnum .lineno { width: 50px; padding-right: 19px; color: inherit; line-height: 32px; margin: -4px 0; }
+button.lnum[data-status="covered"] { background: var(--ok-tint); color: var(--ok); border-color: var(--ok); }
+button.lnum[data-status="gaps"] { background: var(--bad); color: var(--on-status); border-color: var(--bad); }
+button.lnum:hover { filter: brightness(1.1); }
+button.lnum:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.tree {
+  margin: 4px 20px 12px 120px; padding: 10px 16px; border: 1px solid var(--tree-rule);
+  border-radius: 8px; background: var(--tree-bg); color: var(--tree-fg); line-height: 30px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.row { display: grid; grid-template-columns: auto minmax(200px, 1fr) 70px 70px 160px; column-gap: 16px; }
+.row.headings { font-family: var(--font-body); font-size: 12px; color: var(--tree-muted); }
+.row.headings span:first-child { grid-column: span 2; }
+.row.headings span:nth-child(2), .row.headings span:nth-child(3) { text-align: right; }
+.operator { grid-column: span 2; font-weight: 600; }
+.branch { white-space: pre; color: var(--tree-muted); margin-right: -16px; }
+.row .text { white-space: pre; }
+.row .truthy, .row .falsy { text-align: right; font-variant-numeric: tabular-nums; }
+.row .gap { color: var(--tree-gap); font-weight: 600; }
