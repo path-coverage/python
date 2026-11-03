@@ -1,47 +1,42 @@
-from condition_coverage.gaps import lines
+from path_coverage.gaps import code, lines
+
+SITE = "src/model/flow.py:2:11"
+TEXTS = {SITE: ["user.active", "user.admin", "flow.public"]}
 
 
 def test_d40e6a01():
-    """One line per missing outcome in manifest order, one `never reached`
-    line for a site none of whose operands ran, nothing for a site seen
-    both ways."""
-    operands = {
-        "src/model/flow.py:2:11": [
-            {"truthy": 3, "falsy": 1},
-            {"truthy": 0, "falsy": 2},
-            {"truthy": 0, "falsy": 0},
-        ],
-        "src/model/flow.py:5:11": [
-            {"truthy": 0, "falsy": 0},
-            {"truthy": 0, "falsy": 0},
-        ],
-        "src/model/trail.py:9:15": [
-            {"truthy": 4, "falsy": 1},
-            {"truthy": 2, "falsy": 2},
-        ],
-        "src/model/trail.py:12:8": [
-            {"truthy": 1, "falsy": 1},
-            {"truthy": 5, "falsy": 0},
-        ],
+    """Example: user.active and (user.admin or flow.public), with two of
+    its four paths taken
+    One line per path never taken, in possible-path order.
+    Each names the outcome of every leaf the path reaches, by its text.
+    A leaf the path never reaches is left out."""
+    operands = {SITE: [{"truthy": 2, "falsy": 1}, {"truthy": 0, "falsy": 2}, {"truthy": 2, "falsy": 0}]}
+    paths = {
+        SITE: [
+            {"path": [True, True, None], "count": 0},
+            {"path": [True, False, True], "count": 2},
+            {"path": [True, False, False], "count": 0},
+            {"path": [False, None, None], "count": 1},
+        ]
     }
-    assert lines(operands) == [
-        "src/model/flow.py:2:11 operand 1 never true",
-        "src/model/flow.py:2:11 operand 2 never evaluated",
-        "src/model/flow.py:5:11 never reached",
-        "src/model/trail.py:12:8 operand 1 never false",
+    assert lines(operands, paths, TEXTS) == [
+        f"{SITE} path never taken: `user.active` true, `user.admin` true",
+        f"{SITE} path never taken: `user.active` true, `user.admin` false, `flow.public` false",
     ]
 
 
 def test_d40e6a02():
-    """A leaf with one possible outcome needs only to be evaluated."""
-    operands = {
-        "src/model/tags.py:1:7": [
-            {"truthy": 2, "falsy": 1},
-            {"truthy": 0, "falsy": 1, "only": "falsy"},
-        ],
-        "src/model/tags.py:2:7": [
-            {"truthy": 3, "falsy": 1},
-            {"truthy": 0, "falsy": 0, "only": "truthy"},
-        ],
-    }
-    assert lines(operands) == ["src/model/tags.py:2:7 operand 1 never evaluated"]
+    """Example: a site none of whose leaves ever ran
+    It gets one line, `never reached`, not a line per path."""
+    operands = {SITE: [{"truthy": 0, "falsy": 0}] * 3}
+    paths = {SITE: [{"path": [True, True, None], "count": 0}]}
+    assert lines(operands, paths, TEXTS) == [f"{SITE} never reached"]
+
+
+def test_d40e6a03():
+    """Example: leaf texts holding backticks, or spread over lines
+    Each is quoted as a Markdown code span on one line.
+    Its fence is one backtick longer than any run inside it."""
+    assert code("tags\n    or []") == "`tags or []`"
+    assert code("x == '`'") == "``x == '`'``"
+    assert code("`x`") == "`` `x` ``"

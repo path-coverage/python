@@ -1,5 +1,5 @@
-from condition_coverage.manifest import sites
-from condition_coverage.source_lines import lines_of
+from path_coverage.manifest import sites
+from path_coverage.source_lines import lines_of
 
 SOURCE = (
     "def can_attest(user, flow):\n"
@@ -17,7 +17,7 @@ def test_0d9b5501():
     site's status and its span, from the line the site starts on to the
     line its last operand ends on, so a multi-line condition is one span."""
     operands = {
-        "src/model/flow.py:2:7": [{"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
+        "src/model/flow.py:2:4": [{"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
         "src/model/flow.py:5:8": [{"truthy": 2, "falsy": 0}, {"truthy": 0, "falsy": 0}],
     }
     found = sites(SOURCE, "src/model/flow.py")

@@ -1,4 +1,79 @@
-from condition_coverage.manifest import Condition, Leaf, sites
+from path_coverage.manifest import Arm, Condition, Leaf, sites
+
+
+def test_5c1e9a07():
+    """Example: if order.big and order.new: ... else: ...
+    An if statement is a site, named at its keyword, col 4.
+    Its predicate's `and` nests in it, as no site of its own.
+    Its then and else arms are plain, as they are statements."""
+    source = (
+        "def fee(order):\n"
+        "    if order.big and order.new:\n"
+        "        return 5\n"
+        "    else:\n"
+        "        return 7\n"
+    )
+    both = Condition(operator="and", operands=(Leaf(2, 7, 2, 16), Leaf(2, 21, 2, 30)))
+    assert sites(source, "k.py") == {
+        "k.py:2:4": Condition(operator="if", operands=(both, Arm("then"), Arm("else"))),
+    }
+
+
+def test_5c1e9a08():
+    """Example: if order.big: ... elif order.new: ...
+    The elif is a site of its own, named at its keyword.
+    The if's else arm is the whole elif.
+    The elif has no else, so it has a then arm only."""
+    source = (
+        "def fee(order):\n"
+        "    if order.big:\n"
+        "        return 5\n"
+        "    elif order.new:\n"
+        "        return 6\n"
+        "    return 7\n"
+    )
+    assert sites(source, "k.py") == {
+        "k.py:2:4": Condition(
+            operator="if", operands=(Leaf(2, 7, 2, 16), Arm("then"), Arm("else"))
+        ),
+        "k.py:4:4": Condition(operator="if", operands=(Leaf(4, 9, 4, 18), Arm("then"))),
+    }
+
+
+def test_5c1e9a05():
+    """Example: "admin" if user.admin else "guest"
+    A conditional expression is a site, even with a one-leaf predicate.
+    It is named where it starts, at "admin", col 11.
+    Its operands are its predicate, then its then and else arms.
+    Both arms are plain values, so neither holds a condition."""
+    source = (
+        "def role(user):\n"
+        '    return "admin" if user.admin else "guest"\n'
+    )
+    assert sites(source, "src/model/user.py") == {
+        "src/model/user.py:2:11": Condition(
+            operator="ternary",
+            operands=(Leaf(2, 22, 2, 32), Arm("then", None), Arm("else", None)),
+        ),
+    }
+
+
+def test_5c1e9a06():
+    """Example: user.admin or flow.public if user.active else False
+    The then arm holds an `or`.
+    It is part of the conditional expression's site, not a site of its own.
+    Its leaves are numbered after the predicate's."""
+    source = (
+        "def can_see(user, flow):\n"
+        "    return user.admin or flow.public if user.active else False\n"
+    )
+    either = Condition(operator="or", operands=(Leaf(2, 11, 2, 21), Leaf(2, 25, 2, 36)))
+    condition = Condition(
+        operator="ternary",
+        operands=(Leaf(2, 40, 2, 51), Arm("then", either), Arm("else", None)),
+    )
+    assert sites(source, "src/model/flow.py") == {"src/model/flow.py:2:11": condition}
+    assert condition.leaves() == [Leaf(2, 40, 2, 51), Leaf(2, 11, 2, 21), Leaf(2, 25, 2, 36)]
 
 
 def test_5c1e9a01():

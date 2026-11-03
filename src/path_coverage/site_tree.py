@@ -1,0 +1,90 @@
+"""The tree shown under a site's line on its file's page: a grid whose
+columns are the site's paths, never taken first."""
+
+from .manifest import Arm, Condition
+from .paths_report import segment
+from .site_paths import THEN_ON
+
+
+def tree_of(source, condition, paths):
+    """{"operator", "counts", "cells", "operands"} for one site, from its
+    paths, [{"path", "count"}, ...]. counts are the columns' counts. Every
+    node has cells, one per column: a leaf {"text", "cells"} its outcome,
+    None where unreached; a condition {"operator", "cells", "operands"} its
+    value; an arm {"arm", "text", "cells", "body"} whether the column took
+    it, body being its condition's tree, None for a plain arm."""
+    columns = [
+        taken
+        for _, taken in sorted(
+            enumerate(paths), key=lambda item: (0 if item[1]["count"] == 0 else 1, item[0])
+        )
+    ]
+    outcomes = [taken["path"] for taken in columns]
+    tree = _node(source, condition, outcomes, iter(range(len(condition.leaves()))))
+    return {**tree, "counts": [taken["count"] for taken in columns]}
+
+
+def _node(source, condition, outcomes, leaves):
+    """The tree of condition, each leaf taking the next index of leaves, so
+    leaves pair with path entries left to right: its operands first, then
+    its arms, as each arm's cells follow from the predicate's."""
+    operands = [
+        _node(source, operand, outcomes, leaves)
+        if isinstance(operand, Condition)
+        else operand
+        if isinstance(operand, Arm)
+        else _leaf(source, operand, outcomes, next(leaves))
+        for operand in condition.operands
+    ]
+    predicate = operands[0]
+    operands = [
+        _arm(source, operand, predicate["cells"], THEN_ON[condition.operator], outcomes, leaves)
+        if isinstance(operand, Arm)
+        else operand
+        for operand in operands
+    ]
+    return {
+        "operator": condition.operator,
+        "cells": _value(condition.operator, operands),
+        "operands": operands,
+    }
+
+
+def _arm(source, arm, decided, then_on, outcomes, leaves):
+    """One arm of a choice: its text, None for an if's arm, whether each
+    column took it, from the predicate's cells and the outcome on which its
+    choice takes its then arm, and the tree of its condition."""
+    picked = then_on if arm.kind == "then" else not then_on
+    body = arm.body and _node(source, arm.body, outcomes, leaves)
+    return {
+        "arm": arm.kind,
+        "text": segment(source, *arm.at) if arm.at else None,
+        "cells": [outcome == picked for outcome in decided],
+        "body": body or None,
+    }
+
+
+def _value(operator, operands):
+    """A condition's value in each column: a choice's is its taken arm's
+    body's, None for a plain arm; a chain's is that of the last operand it
+    reached."""
+    if operator in THEN_ON:
+        arms = operands[1:]
+        return [
+            next(
+                (arm["body"]["cells"][column] if arm["body"] else None)
+                for arm in arms
+                if arm["cells"][column]
+            )
+            if any(arm["cells"][column] for arm in arms)
+            else None
+            for column in range(len(arms[0]["cells"]))
+        ]
+    columns = zip(*(operand["cells"] for operand in operands))
+    return [next((cell for cell in reversed(column) if cell is not None), None) for column in columns]
+
+
+def _leaf(source, leaf, outcomes, index):
+    """One leaf's text and its outcome in each column."""
+    text = segment(source, leaf.line, leaf.col, leaf.end_line, leaf.end_col)
+    return {"text": text, "cells": [path[index] for path in outcomes]}

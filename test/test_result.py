@@ -1,5 +1,5 @@
-from condition_coverage.manifest import sites
-from condition_coverage.result import operands
+from path_coverage.manifest import sites
+from path_coverage.result import operands, paths
 
 SOURCE = (
     "def can_attest(user, flow):\n"
@@ -40,5 +40,28 @@ def test_c3b8f402():
         site: [
             {"truthy": 2, "falsy": 1},
             {"truthy": 0, "falsy": 1, "only": "falsy"},
+        ],
+    }
+
+
+def test_c3b8f403():
+    """Example: can_attest's and/or taken twice one way and once another,
+    and is_new's and never evaluated
+    Every site lists each possible path with its count.
+    A path never taken has count 0.
+    So is_new's site lists its paths too, every count 0."""
+    site = "src/model/flow.py:2:11"
+    site_paths = {site: {(True, False, True): 2, (False, None, None): 1}}
+    assert paths(sites(SOURCE, "src/model/flow.py"), site_paths) == {
+        site: [
+            {"path": [True, True, None], "count": 0},
+            {"path": [True, False, True], "count": 2},
+            {"path": [True, False, False], "count": 0},
+            {"path": [False, None, None], "count": 1},
+        ],
+        "src/model/flow.py:5:11": [
+            {"path": [True, True], "count": 0},
+            {"path": [True, False], "count": 0},
+            {"path": [False, None], "count": 0},
         ],
     }

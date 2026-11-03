@@ -1,4 +1,17 @@
-from condition_coverage.merge import merge
+from path_coverage.merge import merge, merge_paths
+
+
+def test_f2c67d02():
+    """Example: two workers' paths for flow.py's and, one taking
+    [True, True] once, the other twice and [False, None] once
+    Each path's counts are added across the runs.
+    A path in one run only keeps its count."""
+    site = "src/model/flow.py:2:11"
+    worker_0 = {site: [{"path": [True, True], "count": 1}, {"path": [False, None], "count": 0}]}
+    worker_1 = {site: [{"path": [True, True], "count": 2}, {"path": [False, None], "count": 1}]}
+    assert merge_paths([worker_0, worker_1]) == {
+        site: [{"path": [True, True], "count": 3}, {"path": [False, None], "count": 1}]
+    }
 
 
 def test_f2c67d01():

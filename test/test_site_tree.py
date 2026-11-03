@@ -1,52 +1,69 @@
-from condition_coverage.manifest import sites
-from condition_coverage.site_tree import tree_of
+from path_coverage.manifest import sites
+from path_coverage.site_paths import possible
+from path_coverage.site_tree import tree_of
+
+
+def _tree(source, counts):
+    """The tree of source's one site, its possible paths taken counts
+    times each, in possible order."""
+    [condition] = sites(source, "k.py").values()
+    paths = [{"path": path, "count": count} for path, count in zip(possible(condition), counts)]
+    return tree_of(source, condition, paths)
 
 
 def test_1a6c3e01():
-    """A site's tree nests as its condition does; each leaf has its text cut
-    from the source (byte columns, so non-ASCII text before it is counted
-    right), its counts, and its gap in the gaps report's words."""
-    source = (
-        "def can_attest(user, flow):\n"
-        "    return user.name != 'J\N{LATIN SMALL LETTER O WITH STROKE}rgen'"
-        " and (user.admin or flow.public)\n"
-    )
-    [condition] = sites(source, "src/model/flow.py").values()
-    counts = [
-        {"truthy": 3, "falsy": 1},
-        {"truthy": 0, "falsy": 3},
-        {"truthy": 2, "falsy": 1},
-    ]
-    assert tree_of(source, condition, counts) == {
+    """Example: ok(id) and id.startswith('N'), taken once each way but
+    true then false
+    The tree names its operator, with one column per path.
+    Paths never taken (count 0) come first, each with its count.
+    Each leaf has its source text and its outcome on each path, None
+    where unreached; the site has its value on each path."""
+    source = "def kata(id):\n    return ok(id) and id.startswith('N')\n"
+    assert _tree(source, [1, 0, 1]) == {
         "operator": "and",
+        "counts": [0, 1, 1],
+        "cells": [False, True, False],
         "operands": [
-            {
-                "text": "user.name != 'J\N{LATIN SMALL LETTER O WITH STROKE}rgen'",
-                "truthy": 3,
-                "falsy": 1,
-                "gap": None,
-            },
-            {
-                "operator": "or",
-                "operands": [
-                    {"text": "user.admin", "truthy": 0, "falsy": 3, "gap": "never true"},
-                    {"text": "flow.public", "truthy": 2, "falsy": 1, "gap": None},
-                ],
-            },
+            {"text": "ok(id)", "cells": [True, True, False]},
+            {"text": "id.startswith('N')", "cells": [False, True, None]},
         ],
     }
 
 
 def test_1a6c3e02():
-    """A leaf written over several lines keeps all of its text."""
+    """Example: new(id) or len(id) == 6 if ok(id) else "no"
+    The predicate ok(id) decides which arm each path took.
+    The then arm holds an `or`, so it has its tree; the else arm ("no")
+    is plain, so its tree is None.
+    The ternary's value on a path is its taken arm's, None for a plain
+    arm."""
+    source = 'def kata(id):\n    return new(id) or len(id) == 6 if ok(id) else "no"\n'
+    tree = _tree(source, [1, 0, 2, 3])
+    assert tree["counts"] == [0, 1, 2, 3]
+    assert tree["cells"] == [True, True, False, None]
+    predicate, then_arm, else_arm = tree["operands"]
+    assert predicate == {"text": "ok(id)", "cells": [True, True, True, False]}
+    assert then_arm["arm"] == "then"
+    assert then_arm["text"] == "new(id) or len(id) == 6"
+    assert then_arm["cells"] == [True, True, True, False]
+    assert then_arm["body"]["operator"] == "or"
+    assert else_arm == {"arm": "else", "text": '"no"', "cells": [False, False, False, True], "body": None}
+
+
+def test_1a6c3e03():
+    """Example: if order.big and order.new: ... else: ...
+    An if's tree is a ternary's, its arms plain.
+    So the if's value on every path is None."""
     source = (
-        "def is_compliant(trail):\n"
-        "    return trail.done and all(\n"
-        "        a.ok for a in trail.attestations\n"
-        "    )\n"
+        "def fee(order):\n"
+        "    if order.big and order.new:\n"
+        "        return 5\n"
+        "    else:\n"
+        "        return 7\n"
     )
-    [condition] = sites(source, "src/model/trail.py").values()
-    counts = [{"truthy": 2, "falsy": 1}, {"truthy": 1, "falsy": 1}]
-    assert tree_of(source, condition, counts)["operands"][1]["text"] == (
-        "all(\n        a.ok for a in trail.attestations\n    )"
-    )
+    tree = _tree(source, [1, 0, 2])
+    assert tree["operator"] == "if"
+    assert tree["cells"] == [None, None, None]
+    _, then_arm, else_arm = tree["operands"]
+    assert then_arm["cells"] == [False, True, False]
+    assert else_arm["cells"] == [True, False, True]

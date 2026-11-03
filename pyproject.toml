@@ -3,18 +3,21 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "condition_coverage"
+name = "path_coverage"
 version = "0.0.1"
-description = "Condition coverage for Python: true and false for each operand of every and/or"
+description = "Path coverage for Python: the paths taken through each decision, and across each function's decisions"
 requires-python = ">=3.13"
 readme = "README.md"
 authors = [{ name = "Jon Jagger" }]
+
+[project.scripts]
+path_coverage_collector = "path_coverage.collector:command"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-condition_coverage = ["html/*"]
+path_coverage = ["html/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
