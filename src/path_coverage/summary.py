@@ -2,6 +2,7 @@
 every file."""
 
 import re
+from pathlib import PurePosixPath
 
 from . import totals
 
@@ -44,9 +45,35 @@ def total(rows):
     }
 
 
+def groups(rows, named):
+    """[name, rows, total] for each of named, {name: [glob, ...]}, in order:
+    the rows whose path matches any of its globs, and their total. Then
+    Ungrouped, the rows no group matches, when there are any."""
+    grouped = []
+    for name, globs in named.items():
+        own = [row for row in rows if matches(row["path"], globs)]
+        grouped.append([name, own, total(own)])
+    every = [glob for globs in named.values() for glob in globs]
+    rest = [row for row in rows if not matches(row["path"], every)]
+    if rest:
+        grouped.append(["Ungrouped", rest, total(rest)])
+    return grouped
+
+
+def matches(path, globs):
+    """True when path, relative to root, matches any of globs, as cover
+    globs match."""
+    return any(PurePosixPath(path).full_match(glob) for glob in globs)
+
+
 def _add(pairs):
-    """[taken, possible] pairs added together."""
-    return [sum(column) for column in zip(*pairs)]
+    """[taken, possible] pairs added together; [0, 0] for no pairs, as a
+    group matching no file has."""
+    taken = possible = 0
+    for pair_taken, pair_possible in pairs:
+        taken += pair_taken
+        possible += pair_possible
+    return [taken, possible]
 
 
 def path_of(site):

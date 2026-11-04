@@ -1,5 +1,5 @@
 from path_coverage.path_manifest import Decision, PathMethod
-from path_coverage.summary import files, total
+from path_coverage.summary import files, groups, total
 
 
 def _paths(*counts):
@@ -55,3 +55,44 @@ def test_1a6f0c03():
         {"path": "src/fee.py", "sites": 3, "decisions": [2, 4], "methods": [1, 4]},
     ]
     assert total(rows) == {"sites": 5, "decisions": [5, 10], "methods": [1, 4]}
+
+
+KATA = {"path": "src/model/kata.py", "sites": 2, "decisions": [3, 6], "methods": None}
+FEE = {"path": "src/model/fee.py", "sites": 3, "decisions": [2, 4], "methods": None}
+ROUTES = {"path": "src/app/routes.py", "sites": 1, "decisions": [1, 2], "methods": None}
+SETUP = {"path": "setup.py", "sites": 1, "decisions": [0, 2], "methods": None}
+
+
+def test_1a6f0c04():
+    """Example: groups models (src/model/**/*.py) and kata (**/kata.py)
+    Each group is [name, its rows, their total], in the order given.
+    A file is in every group a glob of which it matches, so kata.py is in
+    both.
+    Ungrouped comes last, holding the rows no group matches."""
+    rows = [ROUTES, FEE, KATA, SETUP]
+    named = {"models": ["src/model/**/*.py"], "kata": ["**/kata.py"]}
+    assert groups(rows, named) == [
+        ["models", [FEE, KATA], {"sites": 5, "decisions": [5, 10], "methods": None}],
+        ["kata", [KATA], {"sites": 2, "decisions": [3, 6], "methods": None}],
+        ["Ungrouped", [ROUTES, SETUP], {"sites": 2, "decisions": [1, 4], "methods": None}],
+    ]
+
+
+def test_1a6f0c05():
+    """Example: groups code (src/**/*.py) and setup (setup.py)
+    Every row is in a group.
+    So there is no Ungrouped group."""
+    rows = [ROUTES, KATA, SETUP]
+    named = {"code": ["src/**/*.py"], "setup": ["setup.py"]}
+    assert [name for name, _, _ in groups(rows, named)] == ["code", "setup"]
+
+
+def test_1a6f0c06():
+    """Example: a group lib (lib/**/*.py) that no file matches
+    Its total has no sites and 0 / 0 paths within each decision.
+    So its tab's Total row shows - rather than failing."""
+    assert groups([KATA], {"lib": ["lib/**/*.py"]})[0] == [
+        "lib",
+        [],
+        {"sites": 0, "decisions": [0, 0], "methods": None},
+    ]

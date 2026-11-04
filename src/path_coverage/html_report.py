@@ -19,21 +19,23 @@ ASSETS = Path(__file__).parent / "html"
 JUMP_LISTS = {"covered": "Covered", "gaps": "Gaps"}
 TEE, ELBOW, BAR, DASH = "&#9500;", "&#9492;", "&#9474;", "&#9472;"
 OUTCOMES = {True: "T", False: "F", None: ""}
-# A bullet marks a path taking a plain arm.
-TAKEN = {True: "&#8226;", False: ""}
+# A tick marks a path taking a plain arm.
+TAKEN = {True: "&#10003;", False: ""}
 # The choices whose arms are named by their kind, then or else, as their
 # text is statements.
 NAMED_ARMS = ("if",)
 
 
-def write(operands, files, coverage_dir, paths, methods=None, taken=None):
+def write(operands, files, coverage_dir, paths, methods=None, taken=None, groups=None):
     """Writes index.html and files/<path>.html into coverage_dir. operands
     and paths are as result.operands and result.paths give them; files is
     {path relative to root: (source, sites)} for each covered file; methods
     and taken, the functions whose paths are counted and the paths they
-    took, are given when methods are measured."""
+    took, are given when methods are measured; groups, {name: [glob, ...]},
+    each get a tab of the index page."""
     rows = summary.files(paths, methods, taken)
-    (coverage_dir / "index.html").write_text(index_page(rows, summary.total(rows)))
+    tabs = summary.groups(rows, groups) if groups else []
+    (coverage_dir / "index.html").write_text(index_page(rows, summary.total(rows), tabs))
     for path, (source, sites) in files.items():
         out = coverage_dir / "files" / f"{path}.html"
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -73,24 +75,69 @@ def _fill(template, **values):
     return re.sub(r"\{\{(\w+)\}\}", lambda match: values[match.group(1)], template)
 
 
-# The heading of the across column, there only when methods are measured.
-ACROSS = (
+# The heading of the methods column, there only when methods are measured.
+METHODS = (
     '<th class="num" aria-sort="none"><button type="button" data-column="3"'
-    f' data-type="number">{escape("Across a function's decisions")}</button></th>'
+    ' data-type="number">Within each method</button></th>'
 )
 
 
-def index_page(rows, total):
-    """The whole index page: the files table, sortable by any column, with
-    one row per summary.files row, and total, as summary.total gives it, as
-    its footer."""
+# The headings of the columns every files table has.
+HEAD = (
+    '<th aria-sort="none"><button type="button" data-column="0"'
+    ' data-type="text">File</button></th>\n'
+    '<th class="num" aria-sort="none"><button type="button" data-column="1"'
+    ' data-type="number">Sites</button></th>\n'
+    '<th class="num" aria-sort="none"><button type="button" data-column="2"'
+    ' data-type="number">Within each decision</button></th>'
+)
+
+
+def index_page(rows, total, groups=()):
+    """The whole index page: a files table, sortable by any column, with one
+    row per summary.files row, and total, as summary.total gives it, as its
+    footer. groups, [name, rows, total] for each group as summary.groups
+    gives them, each get a tab and a table after All files; with none there
+    is no tab bar, just the one table."""
+    tables = [["All files", rows, total], *groups]
+    script = _asset("sort.js") + (_asset("tabs.js") if groups else "")
     return _fill(
         _asset("index.html"),
         style=_asset("style.css"),
-        script=_asset("sort.js"),
-        across=ACROSS if total["methods"] is not None else "",
-        rows="\n".join(index_row(row) for row in rows),
-        total=_counts_row(_cell("Total", "Total"), total),
+        script=script,
+        tabs=_tab_bar([name for name, _, _ in tables]) if groups else "",
+        tables="\n".join(
+            _table(index, own_rows, own_total)
+            for index, (_, own_rows, own_total) in enumerate(tables)
+        ),
+    )
+
+
+def _tab_bar(names):
+    """The tab bar of names, the first tab selected, each tab controlling
+    the table of the same index."""
+    tabs = "".join(
+        f'<button type="button" role="tab" aria-selected="{"true" if index == 0 else "false"}"'
+        f' aria-controls="files-{index}">{escape(name)}</button>'
+        for index, name in enumerate(names)
+    )
+    return f'<nav class="tabs" role="tablist" aria-label="Groups">{tabs}</nav>'
+
+
+def _table(index, rows, total):
+    """The index-th tab's table of rows, total as its footer; any but the
+    first starts hidden."""
+    head = HEAD + (f"\n{METHODS}" if total["methods"] is not None else "")
+    hidden = "" if index == 0 else ' hidden="hidden"'
+    body = "\n".join(index_row(row) for row in rows)
+    return "\n".join(
+        [
+            f'<table class="files" id="files-{index}" role="tabpanel"{hidden}>',
+            f"<thead>\n<tr>\n{head}\n</tr>\n</thead>",
+            f"<tbody>\n{body}\n</tbody>",
+            f"<tfoot>\n{_counts_row(_cell('Total', 'Total'), total)}\n</tfoot>",
+            "</table>",
+        ]
     )
 
 
@@ -103,8 +150,7 @@ def index_row(row):
 
 def _counts_row(first, row):
     """A row of first, then row's sites, its total within each decision,
-    and, when methods are measured, its total across a function's
-    decisions."""
+    and, when methods are measured, its total within each method."""
     cells = [first, _cell(row["sites"], row["sites"]), _paths_cell(row["decisions"])]
     if row["methods"] is not None:
         cells.append(_paths_cell(row["methods"]))
@@ -113,12 +159,12 @@ def _counts_row(first, row):
 
 def _paths_cell(pair):
     """A cell showing [taken, possible] paths, eg 3 / 6 (50%), sorted by its
-    percent. With no paths to take, as in a file with no function of two or
+    percent. With no paths to take, as in a file with no method of two or
     more decisions, it shows -, titled with why, with an empty sort value,
     which sort.js keeps last whichever way the column is sorted."""
     taken, possible_count = pair
     if possible_count == 0:
-        return _cell("", "-", "no function with two or more decisions")
+        return _cell("", "-", "no method with two or more decisions")
     percent = round(100 * taken / possible_count)
     return _cell(percent, f"{taken} / {possible_count} ({percent}%)")
 

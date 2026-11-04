@@ -70,7 +70,7 @@ def test_4f08d204():
 def test_4f08d207():
     """Example: if order.big: ... else: ... with one of its two paths taken
     An if's arms are named then and else, as their text is statements.
-    A plain arm marks each path that takes it with a bullet."""
+    A plain arm marks each path that takes it with a tick."""
     lines = [{"number": 2, "text": "    if order.big:", "status": "gaps", "span": (2, 2)}]
     trees = {
         2: [
@@ -90,7 +90,7 @@ def test_4f08d207():
     assert (
         '<div class="row" data-arm=""><span class="branch" data-branch="">&#9500;&#9472; </span>'
         '<span class="arm" data-label="">then</span>'
-        '<span class="cell" data-cell=""></span><span class="cell" data-cell="">&#8226;</span></div>'
+        '<span class="cell" data-cell=""></span><span class="cell" data-cell="">&#10003;</span></div>'
     ) in html
 
 
@@ -149,33 +149,81 @@ def test_4f08d201():
 
 def test_4f08d205():
     """Example: a methods total of [0, 0], then of None
-    [0, 0]: the file has no function of two or more decisions.
+    [0, 0]: the file has no method of two or more decisions.
     So the cell shows -, titled with why, with an empty data-sort, which
     sort.js keeps last whichever way the column is sorted.
-    None: methods are not measured, so the row has no across cell."""
+    None: methods are not measured, so the row has no methods cell."""
     row = {"path": "src/kata.py", "sites": 1, "decisions": [1, 2], "methods": [0, 0]}
-    title = "no function with two or more decisions"
+    title = "no method with two or more decisions"
     assert index_row(row).endswith(f'<td data-sort="" title="{title}">-</td></tr>')
     assert index_row({**row, "methods": None}).count("<td") == 3
 
 
 def test_4f08d206():
     """Example: rows for kata.py and fee.py, methods measured
-    The page's table has a heading per column, the across one included.
+    The page's table has a heading per column, the within each method one
+    included.
     Its footer is the Total row, which sorting leaves last."""
     rows = [
         {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": [0, 0]},
         {"path": "src/fee.py", "sites": 3, "decisions": [2, 4], "methods": [1, 4]},
     ]
     page = index_page(rows, {"sites": 5, "decisions": [5, 10], "methods": [1, 4]})
-    assert "Across a function&#x27;s decisions</button></th>" in page
+    assert 'data-column="3" data-type="number">Within each method</button></th>' in page
     assert (
         '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="5">5</td>'
         '<td data-sort="50">5 / 10 (50%)</td><td data-sort="25">1 / 4 (25%)</td></tr>\n'
         "</tfoot>"
     ) in page
     unmeasured = index_page(rows[:1], {"sites": 2, "decisions": [3, 6], "methods": None})
-    assert "Across" not in unmeasured
+    assert "Within each method" not in unmeasured
+
+
+KATA = {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": None}
+KATA_TEST = {"path": "test/test_kata.py", "sites": 1, "decisions": [1, 2], "methods": None}
+
+
+def test_4f08d209():
+    """Example: rows for src/kata.py and test/test_kata.py, groups code and
+    test
+    A tab bar names All files, then each group, the first selected.
+    Each tab controls a table of its own, with its own Total row.
+    Every table but the first starts hidden.
+    The page's script switches tabs as well as sorting."""
+    rows = [KATA, KATA_TEST]
+    groups = [
+        ["code", [KATA], {"sites": 2, "decisions": [3, 6], "methods": None}],
+        ["test", [KATA_TEST], {"sites": 1, "decisions": [1, 2], "methods": None}],
+    ]
+    page = index_page(rows, {"sites": 3, "decisions": [4, 8], "methods": None}, groups)
+    assert (
+        '<nav class="tabs" role="tablist" aria-label="Groups">'
+        '<button type="button" role="tab" aria-selected="true" aria-controls="files-0">'
+        "All files</button>"
+        '<button type="button" role="tab" aria-selected="false" aria-controls="files-1">'
+        "code</button>"
+        '<button type="button" role="tab" aria-selected="false" aria-controls="files-2">'
+        "test</button></nav>"
+    ) in page
+    assert '<table class="files" id="files-0" role="tabpanel">' in page
+    assert '<table class="files" id="files-1" role="tabpanel" hidden="hidden">' in page
+    assert '<table class="files" id="files-2" role="tabpanel" hidden="hidden">' in page
+    assert page.count("<tfoot>") == 3
+    assert (
+        '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="1">1</td>'
+        '<td data-sort="50">1 / 2 (50%)</td></tr>\n</tfoot>'
+    ) in page
+    assert "Switches the index page's tabs" in page
+
+
+def test_4f08d20a():
+    """Example: rows for src/kata.py and test/test_kata.py, no groups
+    There is no tab bar, just the one table.
+    The page's script only sorts."""
+    page = index_page([KATA, KATA_TEST], {"sites": 3, "decisions": [4, 8], "methods": None})
+    assert 'role="tablist"' not in page
+    assert page.count('<table class="files"') == 1
+    assert "Switches the index page's tabs" not in page
 
 
 def test_4f08d202():

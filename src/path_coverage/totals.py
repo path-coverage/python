@@ -13,7 +13,7 @@ def decisions(paths):
 
 
 def methods(found, taken):
-    """Paths across each function's decisions: found, as
+    """Paths within each method, through its decisions: found, as
     path_manifest.methods gives them, each with every path through its
     decisions; taken, as the recorder counts them, holds the ones taken."""
     seen = possible_count = 0

@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from . import (
+    console_summary,
     gaps,
     html_report,
     manifest,
@@ -18,13 +19,12 @@ from . import (
     paths_report,
     post,
     result,
-    totals,
 )
 from .merge import merge, merge_paths
 from .recorder import Recorder
 from .rewriter import RECORDER_NAME, rewrite
 
-REPORTERS = ("gaps", "html", "post")
+REPORTERS = ("gaps", "html", "post", "summary")
 MEASURES = ("decisions", "methods")
 
 _recorder = Recorder()
@@ -34,30 +34,41 @@ _finder = None
 class _Config:
     """Where covered files are, what is measured, and where reports go."""
 
-    def __init__(self, root, cover, coverage_dir, report, measure, collector):
+    def __init__(
+        self, root, cover, coverage_dir, report, measure, collector, skip=(), groups=None
+    ):
         """Resolves root and coverage_dir; cover is a list of globs relative
-        to root; report names the reporters to run, measure what is measured
-        (paths within each decision, and, with "methods", across each
-        function's decisions too), and collector the url the post reporter
-        sends to."""
+        to root, and skip of globs of files not covered though a cover glob
+        matches them; report names the reporters to run, measure what is
+        measured (paths within each decision, and, with "methods", within
+        each method too), collector the url the post reporter sends to, and
+        groups {name: [glob, ...]}, each group's files, relative to root."""
         self.root = Path(root).resolve()
         self.cover = list(cover)
+        self.skip = list(skip)
         self.coverage_dir = Path(coverage_dir)
         self.report = list(report)
         self.methods = "methods" in measure
         self.collector = collector
+        self.groups = {name: list(globs) for name, globs in (groups or {}).items()}
 
     def relative(self, path):
         """path relative to root, as sites name it."""
         return Path(path).resolve().relative_to(self.root).as_posix()
 
     def covers(self, path):
-        """True when path is under root and matches a cover glob."""
+        """True when path is under root and matches a cover glob and no
+        skip glob."""
         try:
             relative = Path(self.relative(path))
         except ValueError:
             return False
-        return any(relative.full_match(glob) for glob in self.cover)
+        return any(relative.full_match(glob) for glob in self.cover) and not self.skips(relative)
+
+    def skips(self, relative):
+        """True when relative, a path relative to root, matches a skip
+        glob."""
+        return any(Path(relative).full_match(glob) for glob in self.skip)
 
 
 class _Loader(importlib.machinery.SourceFileLoader):
@@ -110,14 +121,14 @@ def _check(setting, names, known):
             raise ValueError(f"unknown {setting} {name!r}; the {setting}s are: {', '.join(known)}")
 
 
-def _config(root, cover, coverage_dir, report, measure, collector):
+def _config(root, cover, coverage_dir, report, measure, collector, skip, groups=None):
     """The settings, each checked: unknown reporters and measures are
     refused by name, as is the post reporter with no collector."""
     _check("reporter", report, REPORTERS)
     _check("measure", measure, MEASURES)
     if "post" in report and not collector:
         raise ValueError("the post reporter needs a collector url")
-    return _Config(root, cover, coverage_dir, report, measure, collector)
+    return _Config(root, cover, coverage_dir, report, measure, collector, skip, groups)
 
 
 def start(
@@ -125,24 +136,29 @@ def start(
     root,
     cover,
     coverage_dir,
+    skip=(),
     report=("gaps",),
     measure=("decisions",),
     collector=None,
+    groups=None,
     part=None,
     on_exit=atexit.register,
 ):
     """Instruments every covered module imported from now on and reports at
-    exit, counting afresh. measure is "decisions" (the default) for the
-    paths within each decision, with "methods" for the paths across each
-    function's decisions too. report names the reporters: "gaps" (the
-    default) prints the paths never taken, "html" writes pages, and "post"
-    sends the JSON report to collector, a url. A run given a part name (eg
-    an xdist worker's) writes only its part file; the main run clears stale
-    parts now and adds every part to its own report at exit. on_exit is
-    atexit.register except in tests, which must not print a report as their
-    own process exits."""
+    exit, counting afresh. skip lists globs of files not covered though a
+    cover glob matches them. measure is "decisions" (the default) for the
+    paths within each decision, with "methods" for the paths within each
+    method too. report names the reporters: "gaps" (the default) prints the
+    paths never taken, "html" writes pages, "summary" prints the totals,
+    and "post" sends the JSON report to collector, a url. groups, {name:
+    [glob, ...]}, names groups of covered files: each gets a tab of the
+    index page, its own summary lines and its own JSON totals. A run given
+    a part name (eg an xdist worker's) writes only its part file; the main
+    run clears stale parts now and adds every part to its own report at
+    exit. on_exit is atexit.register except in tests, which must not print
+    a report as their own process exits."""
     global _finder, _recorder
-    config = _config(root, cover, coverage_dir, report, measure, collector)
+    config = _config(root, cover, coverage_dir, report, measure, collector, skip, groups)
     recorder = _recorder = Recorder()
     if part is None:
         for stale in _parts(config):
@@ -155,9 +171,11 @@ def start(
 def start_from_env(env, part=None, on_exit=atexit.register):
     """Starts from settings in env alone, for a run whose code cannot be
     changed: covers the comma-separated PATH_COVERAGE_COVER globs under
-    PATH_COVERAGE_ROOT, reporting into PATH_COVERAGE_DIR with the
+    PATH_COVERAGE_ROOT, skipping any matching the comma-separated
+    PATH_COVERAGE_SKIP globs, reporting into PATH_COVERAGE_DIR with the
     comma-separated PATH_COVERAGE_REPORT reporters and PATH_COVERAGE_MEASURE
-    measures (default decisions), as part when given one. With
+    measures (default decisions), and the comma-separated name:glob
+    PATH_COVERAGE_GROUPS, as part when given one. With
     PATH_COVERAGE_COLLECTOR, a url, the reporters default to post, sending
     there; otherwise to gaps. Returns whether it started; without
     PATH_COVERAGE_COVER it starts nothing."""
@@ -167,14 +185,27 @@ def start_from_env(env, part=None, on_exit=atexit.register):
     start(
         root=env["PATH_COVERAGE_ROOT"],
         cover=env["PATH_COVERAGE_COVER"].split(","),
+        skip=[glob for glob in env.get("PATH_COVERAGE_SKIP", "").split(",") if glob],
         coverage_dir=env["PATH_COVERAGE_DIR"],
         report=env.get("PATH_COVERAGE_REPORT", "post" if collector else "gaps").split(","),
         measure=env.get("PATH_COVERAGE_MEASURE", "decisions").split(","),
         collector=collector,
+        groups=_env_groups(env.get("PATH_COVERAGE_GROUPS", "")),
         part=part,
         on_exit=on_exit,
     )
     return True
+
+
+def _env_groups(text):
+    """{name: [glob, ...]} of text, comma-separated name:glob pairs, eg
+    "code:src/**/*.py,test:test/**/*.py"; a name given twice gets both
+    globs."""
+    groups = {}
+    for pair in filter(None, text.split(",")):
+        name, glob = pair.split(":", 1)
+        groups.setdefault(name, []).append(glob)
+    return groups
 
 
 def stop():
@@ -182,12 +213,22 @@ def stop():
     sys.meta_path.remove(_finder)
 
 
-def render(*, root, cover, coverage_dir, runs, report=("gaps",), measure=("decisions",)):
+def render(
+    *,
+    root,
+    cover,
+    coverage_dir,
+    runs,
+    skip=(),
+    report=("gaps",),
+    measure=("decisions",),
+    groups=None,
+):
     """Runs the reporters from the JSON reports at runs (eg those a collector
     saved), their counts added together, parsing each covered file afresh,
     so the report shows only the gaps that every run left. It writes the
     merged JSON report into coverage_dir too."""
-    config = _config(root, cover, coverage_dir, report, measure, None)
+    config = _config(root, cover, coverage_dir, report, measure, None, skip, groups)
     files = _files(config)
     reports = [json.loads(Path(path).read_text()) for path in runs]
     sites = _sites(files)
@@ -227,9 +268,11 @@ def _finish(config, files, operands, paths, method_paths):
     }
     methods = _methods(files) if config.methods else None
     report = _report_json(operands, paths, files, method_paths)
-    report["totals"] = {"decisions": totals.decisions(paths)}
-    if methods is not None:
-        report["totals"]["methods"] = totals.methods(methods, taken)
+    report["totals"] = console_summary.totals(paths, methods, taken)
+    if config.groups:
+        report["totals"]["groups"] = console_summary.group_totals(
+            paths, methods, taken, config.groups
+        )
     text = json.dumps(report, indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)
@@ -239,19 +282,26 @@ def _finish(config, files, operands, paths, method_paths):
         for line in path_gaps.lines(methods or {}, taken):
             print(line)
     if "html" in config.report:
-        html_report.write(operands, files, config.coverage_dir, paths, methods, taken)
+        html_report.write(
+            operands, files, config.coverage_dir, paths, methods, taken, config.groups
+        )
+    if "summary" in config.report:
+        for line in console_summary.lines(paths, methods, taken, config.groups):
+            print(line)
     if "post" in config.report:
         post.deliver(text, config.collector)
 
 
 def _files(config):
     """{path relative to root: (source, sites)} for every covered file,
-    whether or not the run imported it."""
+    whether or not the run imported it, and none a skip glob matches."""
     files = {}
     for glob in config.cover:
         for path in sorted(config.root.glob(glob)):
-            source = path.read_text()
             relative = config.relative(path)
+            if config.skips(relative):
+                continue
+            source = path.read_text()
             files[relative] = (source, manifest.sites(source, relative))
     return files
 

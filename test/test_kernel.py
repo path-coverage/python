@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -222,7 +223,9 @@ def test_e5a70c08(tmp_path):
             on_exit=lambda report: None,
         )
     except ValueError as error:
-        assert str(error) == "unknown reporter 'htm'; the reporters are: gaps, html, post"
+        assert str(error) == (
+            "unknown reporter 'htm'; the reporters are: gaps, html, post, summary"
+        )
     else:
         path_coverage.stop()
         raise AssertionError("start accepted reporter 'htm'")
@@ -369,6 +372,150 @@ def test_e5a70c0d(tmp_path):
     else:
         path_coverage.stop()
         raise AssertionError("start accepted post with no collector")
+
+
+def test_e5a70c0e(tmp_path, capsys):
+    """Example: cover src/*.py, skip src/*_policies.py, once as skip=,
+    once as PATH_COVERAGE_SKIP
+    A file a skip glob matches is not covered, though a cover glob
+    matches it too.
+    So never_imported_policies.py is not reported, not even as never
+    reached; never_imported_flows.py still is."""
+    project = PROJECTS / "never_imported"
+    starts = [
+        lambda on_exit: path_coverage.start(
+            root=project,
+            cover=["src/*.py"],
+            skip=["src/*_policies.py"],
+            coverage_dir=tmp_path,
+            on_exit=on_exit,
+        ),
+        lambda on_exit: path_coverage.start_from_env(
+            {
+                "PATH_COVERAGE_ROOT": str(project),
+                "PATH_COVERAGE_COVER": "src/*.py",
+                "PATH_COVERAGE_SKIP": "lib/*.py,src/*_policies.py",
+                "PATH_COVERAGE_DIR": str(tmp_path),
+            },
+            on_exit=on_exit,
+        ),
+    ]
+    for start in starts:
+        exits = []
+        start(exits.append)
+        path_coverage.stop()
+        exits[0]()
+        assert capsys.readouterr().out == "src/never_imported_flows.py:6:11 never reached\n"
+
+
+def _is_public_twice(project, start):
+    """Starts with start, imports never_imported_flows.py and calls is_public
+    twice, taking two of its three paths, then stops and runs the report;
+    never_imported_policies.py is never imported."""
+    exits = []
+    start(exits.append)
+    try:
+        flows = _imported(project, "never_imported_flows")
+        assert flows.is_public({"public": False, "owner": "everyone"}) is True
+        assert flows.is_public({"public": True, "owner": "kosli"}) is True
+    finally:
+        path_coverage.stop()
+    exits[0]()
+
+
+def test_e5a70c0f(tmp_path, capsys):
+    """Example: report=["summary"], no groups, flows taking 2 of its 3
+    paths and policies none of its 3
+    The summary reporter prints the paths taken of all possible within
+    decisions, over every covered file.
+    Methods are not measured, so there is no methods line."""
+    project = PROJECTS / "never_imported"
+    _is_public_twice(
+        project,
+        lambda on_exit: path_coverage.start(
+            root=project,
+            cover=["src/*.py"],
+            coverage_dir=tmp_path,
+            report=["summary"],
+            on_exit=on_exit,
+        ),
+    )
+    assert capsys.readouterr().out == "Path coverage within decisions: 2 / 6 (33.33%)\n"
+
+
+def test_e5a70c10(tmp_path, capsys):
+    """Example: groups flows and policies, report summary and html, once
+    as groups=, once as PATH_COVERAGE_GROUPS
+    The summary prints each group as a heading, its totals indented under
+    it, with no total over every group.
+    The JSON report's totals hold each group's own totals too.
+    The index page has a tab per group after All files, and no Ungrouped
+    tab, as every file is in a group."""
+    project = PROJECTS / "never_imported"
+    starts = [
+        lambda on_exit: path_coverage.start(
+            root=project,
+            cover=["src/*.py"],
+            coverage_dir=tmp_path,
+            report=["summary", "html"],
+            groups={"flows": ["src/*_flows.py"], "policies": ["src/*_policies.py"]},
+            on_exit=on_exit,
+        ),
+        lambda on_exit: path_coverage.start_from_env(
+            {
+                "PATH_COVERAGE_ROOT": str(project),
+                "PATH_COVERAGE_COVER": "src/*.py",
+                "PATH_COVERAGE_DIR": str(tmp_path),
+                "PATH_COVERAGE_REPORT": "summary,html",
+                "PATH_COVERAGE_GROUPS": "flows:src/*_flows.py,policies:src/*_policies.py",
+            },
+            on_exit=on_exit,
+        ),
+    ]
+    for start in starts:
+        _is_public_twice(project, start)
+        assert capsys.readouterr().out == (
+            "flows:\n"
+            "  Path coverage within decisions: 2 / 3 (66.67%)\n"
+            "policies:\n"
+            "  Path coverage within decisions: 0 / 3 (0.00%)\n"
+        )
+        report = json.loads((tmp_path / "path_coverage.json").read_text())
+        assert report["totals"] == {
+            "decisions": [2, 6],
+            "groups": {"flows": {"decisions": [2, 3]}, "policies": {"decisions": [0, 3]}},
+        }
+        index = (tmp_path / "index.html").read_text()
+        tabs = re.findall(r'<button type="button" role="tab"[^>]*>([^<]*)</button>', index)
+        assert tabs == ["All files", "flows", "policies"]
+
+
+def test_e5a70c11(tmp_path):
+    """Example: measure=["decisions", "methods"], groups shop and none,
+    fee called once
+    Each group's JSON totals have a methods total too.
+    none matches no file, so its totals are all 0 / 0."""
+    project = PROJECTS / "two_decisions"
+    exits = []
+    path_coverage.start(
+        root=project,
+        cover=["src/*.py"],
+        coverage_dir=tmp_path,
+        report=[],
+        measure=["decisions", "methods"],
+        groups={"shop": ["src/*_shop.py"], "none": ["lib/*.py"]},
+        on_exit=exits.append,
+    )
+    try:
+        assert _imported(project, "two_decisions_shop").fee(True, False) == 95
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert report["totals"]["groups"] == {
+        "shop": {"decisions": [2, 4], "methods": [1, 4]},
+        "none": {"decisions": [0, 0], "methods": [0, 0]},
+    }
 
 
 def test_e5a70c03():

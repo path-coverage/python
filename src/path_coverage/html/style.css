@@ -50,6 +50,12 @@ td:first-child { font-family: var(--font-code); }
    head, so it reads as a sum, not as one more file. */
 tfoot td { background: var(--panel); font-weight: 600; border-top: 1px solid var(--fg); }
 tfoot td:first-child { font-family: inherit; }
+/* The index page's tabs, one per group of files; the selected
+   one framed as the table's headings are. */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+.tabs [role="tab"] { font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.tabs [role="tab"][aria-selected="true"] { background: var(--panel); color: var(--fg); border-color: var(--fg); font-weight: 600; }
+.tabs [role="tab"]:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .num, td:not(:first-child) { text-align: right; }
 th button {
   font: 600 13px var(--font-body); color: var(--fg); background: none; border: 0;

@@ -24,7 +24,7 @@ no test took.
 The first `if` can go three ways: member and paid, member and not paid, not
 a member. A member who has not paid may never have been tried.
 
-## Across a function's decisions
+## Within each method
 
 The two `if`s can go four ways together. A paying member with a small order
 may never have been tried.
@@ -39,25 +39,37 @@ import path_coverage
 path_coverage.start(
     root="/app",                       # cover globs and site names are relative to it
     cover=["src/**/*.py"],             # each matching module is instrumented as it is imported
+    skip=["src/migrations/**/*.py"],   # except these, though a cover glob matches them
     coverage_dir="/tmp/coverage",      # where path_coverage.json is written
     measure=["decisions", "methods"],  # decisions alone unless methods is named
-    report=["gaps", "html"],           # the reporters run at exit (default ["gaps"])
+    report=["gaps", "html", "summary"],  # the reporters run at exit (default ["gaps"])
+    groups={                           # optional: each group's own tab, summary and totals
+        "models": ["src/models/**/*.py"],
+        "routes": ["src/routes/**/*.py"],
+    },
 )
 ```
 
 An unknown reporter or measure is refused by name, with the list of the ones
-there are.
+there are. A file matching any `skip` glob is neither instrumented nor
+reported. A group's globs are relative to `root`, as cover globs are; a file
+can be in several groups, or in none.
 
 With pytest, from the environment alone:
 
 ```sh
 export PATH_COVERAGE_ROOT=/app
 export PATH_COVERAGE_COVER=src/**/*.py,lib/*.py   # comma-separated
+export PATH_COVERAGE_SKIP=src/migrations/**/*.py  # optional, comma-separated
 export PATH_COVERAGE_DIR=/tmp/coverage
 export PATH_COVERAGE_MEASURE=decisions,methods    # optional, default decisions
-export PATH_COVERAGE_REPORT=gaps,html             # optional, default gaps
+export PATH_COVERAGE_REPORT=gaps,html,summary     # optional, default gaps
+export PATH_COVERAGE_GROUPS=models:src/models/**/*.py,routes:src/routes/**/*.py
 python -m pytest -p path_coverage.pytest_plugin test/
 ```
+
+`PATH_COVERAGE_GROUPS` is optional: comma-separated `name:glob` pairs, a
+name given twice getting both globs.
 
 The plugin starts before any conftest is imported, and does nothing when
 `PATH_COVERAGE_COVER` is not set. Under pytest-xdist each worker writes a
@@ -110,7 +122,8 @@ As the process exits (or, under the pytest plugin, as pytest finishes):
   site's possible paths with their counts and each leaf's `line:col` span
   (`paths`), each function's taken paths (`method_paths`), and the two
   totals as [taken, possible] paths (`totals`, `methods` only when
-  measured):
+  measured), with, when groups are configured, each group's own two
+  totals under `totals.groups`:
 
 ```json
 "paths": {
@@ -123,7 +136,13 @@ As the process exits (or, under the pytest plugin, as pytest finishes):
     ]
   }
 },
-"totals": { "decisions": [41, 52], "methods": [9, 16] }
+"totals": {
+  "decisions": [41, 52], "methods": [9, 16],
+  "groups": {
+    "models": { "decisions": [30, 36], "methods": [7, 12] },
+    "routes": { "decisions": [11, 16], "methods": [2, 4] }
+  }
+}
 ```
 
 - `gaps` prints one line per path never taken, in manifest order: a site's
@@ -202,10 +221,13 @@ or `raise`) ends the path there.
 
 - `html` writes `index.html` to `coverage_dir`: the covered files with their
   sites and their paths taken of all possible, within each decision and,
-  when `methods` is measured, across a function's decisions (eg
-  `9 / 28 (32%)`, or `-` for a file with no function of two or more
-  decisions), each column sortable, and a Total row for every file
-  together. Each file name opens `files/<path>.html`, the file's source. On
+  when `methods` is measured, within each method (eg `9 / 28 (32%)`, or
+  `-` for a file with no method of two or more decisions), each column
+  sortable, and a Total row for every file together. With groups
+  configured, a tab bar heads the table: All files, then each group, then
+  Ungrouped for the files in no group (only when there are any), each tab
+  showing a table of its own files with its own Total row, each sorted on
+  its own. Each file name opens `files/<path>.html`, the file's source. On
   a line holding a site the line number is a button that opens a grid of
   the site's paths: its rows are the site's tree (its operators, nested as
   Python groups them, a conditional expression's arms marked `?` and `:`,
@@ -213,6 +235,26 @@ or `raise`) ends the path there.
   never taken first, each headed by its count. When `methods` is measured, a
   grid of each function's paths sits beside its `def`.
 - `gaps` prints the gap lines, as above.
+- `summary` prints the totals, as coverage tools print theirs; a total
+  with no path possible shows `(-)`:
+
+```text
+Path coverage within decisions: 41 / 52 (78.85%)
+Path coverage within methods: 9 / 16 (56.25%)
+```
+
+  With groups configured, each group is a heading with its own totals
+  indented under it, and there is no total over every group:
+
+```text
+models:
+  Path coverage within decisions: 30 / 36 (83.33%)
+  Path coverage within methods: 7 / 12 (58.33%)
+routes:
+  Path coverage within decisions: 11 / 16 (68.75%)
+  Path coverage within methods: 2 / 4 (50.00%)
+```
+
 - `post` sends the JSON report to the collector, never through a proxy,
   and gives up in silence on a collector it cannot reach within a second,
   so the run's own output and exit status stay as they are.
@@ -273,4 +315,32 @@ writes the bytecode cache, and no file on disk changes.
 
 `bin/test.sh` runs the tests with the python in a sibling `server` repo's
 `.venv_fast_test` (override with `PYTHON=...`), writing nothing into this
-repo. The collector's tests bind local ports.
+repo but its self-coverage report. The collector's tests bind local ports.
+
+Every run measures path_coverage's own `src/` and `test/` with
+path_coverage. The code measured and the tool measuring are the same
+package in one process, so `test/self_coverage.py`, a pytest plugin that
+`bin/test.sh` loads with `-p` before any test module is imported, copies
+`src/path_coverage` into a temporary dir as `path_coverage_self`, renaming
+the names its rewritten code calls (`__path_coverage_self__`,
+`__path_coverage_self_path__`), and starts the copy, with groups `code`
+(`src/**`) and `test` (`test/**`), skipping `test/projects/**`. The tests
+start and stop `path_coverage` as they always do, its finder in front of
+the copy's while they run. The copy's finder sits in front of pytest's
+assertion rewriting, so the copy's loader rewrites a test module's asserts
+as pytest would, after its own rewrite; an assert holding a condition
+shows the inserted calls in its failure message.
+
+The report is written to `reports/paths/index.html` (gitignored). A full
+run, with no arguments, ends by printing each group's totals and where the
+report is:
+
+```text
+code:
+  Path coverage within decisions: 260 / 325 (80.00%)
+  Path coverage within methods: 32 / 62 (51.61%)
+test:
+  Path coverage within decisions: 7 / 8 (87.50%)
+  Path coverage within methods: 0 / 0 (-)
+Path coverage report: .../path_coverage/reports/paths/index.html
+```
