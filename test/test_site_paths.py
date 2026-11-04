@@ -71,6 +71,62 @@ def test_7b3d9107():
     assert possible(_only_site(source)) == [[True, True], [True, False], [False, None]]
 
 
+def test_7b3d9108():
+    """Example: [u for u in users if u.active and u.admin]
+    The filter keeps an item on true and drops it on false.
+    Its arms hold no condition, so its paths are its predicate's."""
+    source = "def admins(users):\n    return [u for u in users if u.active and u.admin]\n"
+    assert possible(_only_site(source)) == [[True, True], [True, False], [False, None]]
+
+
+def test_7b3d9109():
+    """Example: match order.kind: case "gold" if order.big: ... case
+    "silver": ..., then the same with case _ in place of "silver"
+    A guard is reached only when its pattern matches.
+    A later case is reached only when no earlier one held.
+    With no case holding, nothing matched, a path of its own.
+    The _ pattern always matches, so no path has nothing matched."""
+    source = (
+        "def fee(order):\n"
+        "    match order.kind:\n"
+        '        case "gold" if order.big:\n'
+        "            return 1\n"
+        '        case "silver":\n'
+        "            return 2\n"
+    )
+    assert possible(_only_site(source)) == [
+        [True, True, None],
+        [True, False, True],
+        [True, False, False],
+        [False, None, True],
+        [False, None, False],
+    ]
+    wildcard = source.replace('case "silver"', "case _")
+    assert possible(_only_site(wildcard)) == [
+        [True, True, None],
+        [True, False, True],
+        [False, None, True],
+    ]
+
+
+def test_7b3d910a():
+    """Example: any(o.late for o in orders)
+    Its items leaf is how many items the generator gave: 0, 1 or 2+.
+    Its answer leaf is the last answer, where any stopped.
+    With 0 items there is no answer.
+    all has the same paths, as it too stops at the answer deciding it."""
+    late = "def late(orders):\n    return any(o.late for o in orders)\n"
+    paths = [
+        ["0 items", None],
+        ["1 item", True],
+        ["1 item", False],
+        ["2+ items", True],
+        ["2+ items", False],
+    ]
+    assert possible(_only_site(late)) == paths
+    assert possible(_only_site(late.replace("any(", "all("))) == paths
+
+
 def test_7b3d9104():
     """Example: options.get("tags") or []
     [] can only be falsy, so a path needing it true is impossible.

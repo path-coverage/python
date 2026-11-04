@@ -1,8 +1,7 @@
 # path_coverage
 
 Path coverage for Python, to run alongside coverage.py's line and branch
-coverage. A Python mirror of the Ruby gem of the same name
-(https://rubygems.org/gems/path_coverage).
+coverage.
 
 ```python
 def fee(user, order):
@@ -104,6 +103,10 @@ path_coverage.render(
 )
 ```
 
+Each JSON report names the kinds of condition it measured. A version
+that measures other kinds lists a site's paths differently. So `render`
+refuses a run whose kinds differ from those of the installed version.
+
 - A report is saved before it is answered 200, so a 200 means it is on
   disk. A report cut short, eg by a sender dying mid-send, is answered 400
   and not saved. One that cannot be saved is answered 500.
@@ -176,9 +179,10 @@ of it, nested conditions included:
 ok(id) and new(id) and len(id) == 6       # one `and` site, leaves 0 1 2
 ok(id) and (new(id) or len(id) == 6)      # an `or` nested in an `and` site, 0 1 2
 ok(id) and new(id) or len(id) == 6        # an `and` nested in an `or` site, 0 1 2
-any(k and k.ok for k in ids) and ok(id)   # two sites: the generator's is its own
+any(k and k.ok for k in ids) and ok(id)   # three sites: the and, the any, and k and k.ok
 "ok" if ok(id) else "no"                  # a conditional expression site, its predicate leaf 0
 new(id) or big(id) if ok(id) else "no"    # one site: predicate 0, then arm 1 2
+[u for u in us if ok(u) and new(u)]       # a filter site, named at its if: 0 1
 ```
 
 A conditional expression is a site even when its predicate is a single
@@ -192,6 +196,36 @@ An `if` statement is a site too, even when its predicate is a single leaf,
 named at its keyword: its predicate nests in it, an `and` there being no
 site of its own, and its arms are plain, as they are statements. An `elif`
 is a site of its own, named at its keyword.
+
+A comprehension's filter is a site too, named at its `if` keyword. Its test
+nests in it, as an `if` statement's predicate does. True keeps the item and
+false drops it, so the HTML names its arms keep and drop.
+
+A `match` statement is a site, named at its keyword. Each case's pattern is
+a leaf, true when it matches. A guard is reached only when its pattern
+matches, and its leaves follow the pattern's. A later case is reached only
+when no earlier case was taken. When no case is taken, every pattern
+reached is false, and that is a path of its own. A last case of `_`, or of
+a bare name, matches anything, so no path ends with nothing matched.
+
+```python
+match order.kind:
+    case "gold" if order.big:   # leaf 0 the pattern, leaf 1 the guard
+        return 1
+    case "silver":              # leaf 2
+        return 2
+```
+
+A call of `any` or `all` with a generator is a site, named where the call
+starts. Its first leaf is how many items the generator gave: 0, 1 or 2+.
+Its second is the generator's last answer, where the call stopped. So
+`any(o.late for o in orders)` has five paths. With 0 items there is no
+answer. With 1 item or with 2+, the last answer is true on one path and
+false on the other. Nothing else is evaluated, not even `len(orders)`.
+
+A module can bind `any` or `all` itself, eg with `from flags import any`.
+A call of a name the module binds is a leaf only, as it may not be the
+builtin. So is `any(flags)`, whose items have no answer to note.
 
 A leaf whose form allows one outcome only needs only to be evaluated: a path
 needing its other outcome is impossible, not a gap. `None`, `False`, `0`,
@@ -221,9 +255,10 @@ or `raise`) ends the path there.
 
 - `html` writes `index.html` to `coverage_dir`: the covered files with their
   sites and their paths taken of all possible, within each decision and,
-  when `methods` is measured, within each method (eg `9 / 28 (32%)`, or
-  `-` for a file with no method of two or more decisions), each column
-  sortable, and a Total row for every file together. With groups
+  when `methods` is measured, within each method. Each total reads like
+  `9 / 28 32%`, its three numbers in columns of their own. Each column
+  is sortable. A file with no method of two or more decisions shows `-`
+  as its methods percent. A Total row adds up every file. With groups
   configured, a tab bar heads the table: All files, then each group, then
   Ungrouped for the files in no group (only when there are any), each tab
   showing a table of its own files with its own Total row, each sorted on
@@ -283,6 +318,14 @@ short-circuiting and the value of the expression are preserved. Only an
 `methods` measured, each call's path starts just before a function's first
 decision, and each decision's predicate is wrapped in a `decide` call.
 
+A `match` statement's patterns are not expressions, so they cannot be
+wrapped. Instead the site is entered just before the statement. Each case
+gets a guard, a `matched` call, which notes that its pattern matched and
+returns the case's own guard, or True when it has none. Unless the last
+case matches anything, a case is added after it. Its guard, an `unmatched`
+call, notes that no case was taken and returns False, so the added case is
+never taken itself.
+
 Each inserted node takes the location of the code it wraps, so line numbers
 in tracebacks, and coverage.py's line and branch figures, are those of the
 file as written. The rewrite happens in memory: the loader neither reads nor
@@ -290,12 +333,9 @@ writes the bytecode cache, and no file on disk changes.
 
 ## Roadmap
 
-- `match` statements: its patterns are not expressions, so they need
-  instrumenting differently from Ruby's `case`/`when`.
-- `any()` and `all()` over a generator, and comprehension filters, as Ruby's
-  block methods are (`any?`, `select` and the like), noting each item's
-  answer without evaluating anything the program would not; `any` and `all`
-  can be shadowed, so a site must know it is the builtin.
+- `next()` with a generator and a default, eg
+  `next((o for o in orders if o.late), None)`: whether it found an item or
+  gave the default.
 - `while` loop conditions, and assert statements.
 - Conditions and arms located in the HTML grid's source highlighting (only
   leaves are, so far).

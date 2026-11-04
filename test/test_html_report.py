@@ -94,6 +94,28 @@ def test_4f08d207():
     ) in html
 
 
+def test_4f08d20c():
+    """Example: any(o.late for o in orders) with paths of 0 items, 1 item
+    and 2+ items
+    The items leaf's cells show 0, 1 and * for 2+."""
+    lines = [{"number": 2, "text": "    return any(o.late for o in orders)", "status": "gaps", "span": (2, 2)}]
+    trees = {
+        2: [
+            {
+                "operator": "any",
+                "counts": [0, 1, 1],
+                "cells": [False, True, False],
+                "operands": [
+                    {"text": "orders", "cells": ["0 items", "1 item", "2+ items"]},
+                    {"text": "o.late", "cells": [None, True, False]},
+                ],
+            }
+        ]
+    }
+    html = listing(lines, trees)
+    assert f'<span class="text" data-text="">orders</span>{_cells("0", "1", "*")}' in html
+
+
 def test_4f08d208():
     """Example: fee with decisions on lines 4 and 7, called with True then
     False only
@@ -134,15 +156,20 @@ def test_4f08d208():
 def test_4f08d201():
     """Example: flow.py with decisions [3, 6] and methods [1, 4]
     Its row links the file to its own page.
-    It shows each total as taken / possible (percent).
-    Each cell has a data-sort value, the percent for a total."""
+    It shows each total in three cells: taken, / possible, percent.
+    So they read 3 / 6 50%.
+    Each cell has a data-sort value, its own number."""
     row = {"path": "src/model/flow.py", "sites": 2, "decisions": [3, 6], "methods": [1, 4]}
     assert index_row(row) == (
         "<tr>"
         '<td data-sort="src/model/flow.py"><a href="files/src/model/flow.py.html">src/model/flow.py</a></td>'
         '<td data-sort="2">2</td>'
-        '<td data-sort="50">3 / 6 (50%)</td>'
-        '<td data-sort="25">1 / 4 (25%)</td>'
+        '<td class="taken" data-sort="3">3</td>'
+        '<td class="of" data-sort="6">/ 6</td>'
+        '<td class="percent" data-sort="50">50%</td>'
+        '<td class="taken" data-sort="1">1</td>'
+        '<td class="of" data-sort="4">/ 4</td>'
+        '<td class="percent" data-sort="25">25%</td>'
         "</tr>"
     )
 
@@ -150,29 +177,69 @@ def test_4f08d201():
 def test_4f08d205():
     """Example: a methods total of [0, 0], then of None
     [0, 0]: the file has no method of two or more decisions.
-    So the cell shows -, titled with why, with an empty data-sort, which
-    sort.js keeps last whichever way the column is sorted.
-    None: methods are not measured, so the row has no methods cell."""
+    So the percent shows -, titled with why.
+    Its data-sort is empty, which sort.js keeps last either way.
+    None: methods are not measured, so the row has no methods cells."""
     row = {"path": "src/kata.py", "sites": 1, "decisions": [1, 2], "methods": [0, 0]}
     title = "no method with two or more decisions"
-    assert index_row(row).endswith(f'<td data-sort="" title="{title}">-</td></tr>')
-    assert index_row({**row, "methods": None}).count("<td") == 3
+    assert index_row(row).endswith(
+        '<td class="taken" data-sort="0">0</td>'
+        '<td class="of" data-sort="0">/ 0</td>'
+        f'<td class="percent" data-sort="" title="{title}">-</td></tr>'
+    )
+    assert index_row({**row, "methods": None}).count("<td") == 5
+
+
+def test_4f08d20b():
+    """Example: groups code and docs, no file in docs
+    The docs tab's Total within each decision is [0, 0].
+    So its percent shows -, titled no decisions."""
+    empty = {"sites": 0, "decisions": [0, 0], "methods": None}
+    groups = [["code", [KATA], {**KATA, "path": "Total"}], ["docs", [], empty]]
+    page = index_page([KATA], {**KATA, "path": "Total"}, groups)
+    assert (
+        '<td class="percent" data-sort="" title="no decisions">-</td></tr>\n</tfoot>'
+    ) in page
 
 
 def test_4f08d206():
     """Example: rows for kata.py and fee.py, methods measured
-    The page's table has a heading per column, the within each method one
-    included.
+    The table has two heading rows.
+    File and Sites span both.
+    Each total's name spans its taken, / of and % columns.
+    Every column is sortable, the within each method ones included.
     Its footer is the Total row, which sorting leaves last."""
     rows = [
         {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": [0, 0]},
         {"path": "src/fee.py", "sites": 3, "decisions": [2, 4], "methods": [1, 4]},
     ]
     page = index_page(rows, {"sites": 5, "decisions": [5, 10], "methods": [1, 4]})
-    assert 'data-column="3" data-type="number">Within each method</button></th>' in page
+
+    def heading(attrs, column, kind, label):
+        """A sortable th, as the page writes it."""
+        button = f'<button type="button" data-column="{column}" data-type="{kind}">'
+        return f'<th{attrs} aria-sort="none">{button}{label}</button></th>'
+
+    parts = [(' class="taken"', "taken"), (' class="of"', "/ of"), (' class="percent"', "%")]
+    top = [
+        heading(' rowspan="2"', 0, "text", "File"),
+        heading(' class="num" rowspan="2"', 1, "number", "Sites"),
+        '<th class="group" colspan="3">Within each decision</th>',
+        '<th class="group" colspan="3">Within each method</th>',
+    ]
+    bottom = [
+        heading(attrs, 2 + 3 * group + i, "number", label)
+        for group in range(2)
+        for i, (attrs, label) in enumerate(parts)
+    ]
+    head = "\n".join(f"<tr>\n{chr(10).join(row)}\n</tr>" for row in (top, bottom))
+    assert f"<thead>\n{head}\n</thead>" in page
     assert (
         '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="5">5</td>'
-        '<td data-sort="50">5 / 10 (50%)</td><td data-sort="25">1 / 4 (25%)</td></tr>\n'
+        '<td class="taken" data-sort="5">5</td><td class="of" data-sort="10">/ 10</td>'
+        '<td class="percent" data-sort="50">50%</td>'
+        '<td class="taken" data-sort="1">1</td><td class="of" data-sort="4">/ 4</td>'
+        '<td class="percent" data-sort="25">25%</td></tr>\n'
         "</tfoot>"
     ) in page
     unmeasured = index_page(rows[:1], {"sites": 2, "decisions": [3, 6], "methods": None})
@@ -211,7 +278,8 @@ def test_4f08d209():
     assert page.count("<tfoot>") == 3
     assert (
         '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="1">1</td>'
-        '<td data-sort="50">1 / 2 (50%)</td></tr>\n</tfoot>'
+        '<td class="taken" data-sort="1">1</td><td class="of" data-sort="2">/ 2</td>'
+        '<td class="percent" data-sort="50">50%</td></tr>\n</tfoot>'
     ) in page
     assert "Switches the index page's tabs" in page
 

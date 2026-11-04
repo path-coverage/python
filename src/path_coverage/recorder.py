@@ -3,6 +3,8 @@ evaluation of a site takes through its leaves."""
 
 import threading
 
+from .kinds.block import ITEMS
+
 
 class Trail:
     """One evaluation's way through its site: the outcome of each leaf,
@@ -74,6 +76,53 @@ class Recorder:
             path = tuple(trail.outcomes)
             paths[path] = paths.get(path, 0) + 1
         return value
+
+    def answer(self, site, at, value):
+        """Counts one more item given to the block call whose items are
+        site's leaf at, on its innermost trail, and records value, the
+        generator's answer for it, as leaf at + 1. Returns value unchanged,
+        so the builtin decides as before."""
+        outcomes = self._trails(site)[-1].outcomes
+        outcomes[at] = (outcomes[at] or 0) + 1
+        return self.record(site, at + 1, value)
+
+    def leave_items(self, trail, at, value):
+        """Notes on trail how many items its block call, whose items are
+        leaf at, was given, 0, 1 or 2+, counting the leaf true when there
+        were any; then leaves, returning value, the call's, unchanged."""
+        count = trail.outcomes[at] or 0
+        counts = self.counts.setdefault((trail.site, at), {"truthy": 0, "falsy": 0})
+        counts["truthy" if count else "falsy"] += 1
+        trail.outcomes[at] = ITEMS[min(count, 2)]
+        return self.leave(trail, value)
+
+    def matched(self, site, pattern, earlier, value=True):
+        """Notes, on a match statement site's innermost trail, its case's
+        pattern, leaf index pattern, as matched, and each of the earlier
+        cases' patterns not yet reached as not; then leaves the site when
+        value, the case's guard's (True for no guard), holds, as the case
+        is taken. Returns value, so the guard decides as before."""
+        self._unreached(site, earlier)
+        self.record(site, pattern, True)
+        if value:
+            self.leave(self._trails(site)[-1], value)
+        return value
+
+    def unmatched(self, site, patterns):
+        """Notes each of patterns, a match statement site's every case's
+        pattern, not yet reached as not matched, then leaves the site, as no
+        case was taken. Returns False, so the case it guards is never
+        taken."""
+        self._unreached(site, patterns)
+        return self.leave(self._trails(site)[-1], False)
+
+    def _unreached(self, site, patterns):
+        """Records each of patterns, leaf indexes, as not matched, unless
+        site's innermost trail has already reached it."""
+        outcomes = self._trails(site)[-1].outcomes
+        for index in patterns:
+            if outcomes[index] is None:
+                self.record(site, index, False)
 
     def record(self, site, index, value):
         """Counts value's outcome, notes it on site's innermost trail, and

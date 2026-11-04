@@ -13,7 +13,9 @@ Each inserted call takes the location of the code it wraps, so line numbers
 in tracebacks and in line coverage are those of the file as written."""
 
 import ast
+import importlib.util
 
+from .manifest import block_generator, builtin_blocks, if_keywords, keyword_before
 from .path_manifest import decision_ifs, exits_of
 
 RECORDER_NAME = "__path_coverage__"
@@ -33,6 +35,18 @@ def _call(method, args, at):
     return call
 
 
+def _unmatched_case(site, patterns, at):
+    """case _ if unmatched(site, patterns): pass, located at node at: the
+    case a match ends with to note that none of its cases was taken, its
+    guard always false, so it is never taken itself."""
+    wildcard = ast.MatchAs(pattern=None, name=None)
+    body = ast.Pass()
+    for part in (wildcard, body):
+        ast.copy_location(part, at)
+    guard = _call("unmatched", [ast.Constant(site), ast.Constant(tuple(patterns))], at)
+    return ast.match_case(pattern=wildcard, guard=guard, body=[body])
+
+
 PATH_NAME = "__path_coverage_path__"
 
 
@@ -41,11 +55,14 @@ class _Rewriter(ast.NodeTransformer):
     when methods are measured, every decision of each function whose paths
     are counted."""
 
-    def __init__(self, path, methods):
+    def __init__(self, path, methods, keywords, builtins):
         """Names sites after path; methods says whether functions' paths
-        are measured."""
+        are measured; keywords are where the source's if keywords are, and
+        builtins the block calls' names the module leaves as builtins."""
         self.path = path
         self.methods = methods
+        self.keywords = keywords
+        self.builtins = builtins
 
     def visit_FunctionDef(self, node):
         """node with its own sites rewritten and, when methods are measured
@@ -95,18 +112,86 @@ class _Rewriter(ast.NodeTransformer):
         recorded, since its path is decided there and its arms are
         statements that may return or raise; then its arms, an elif among
         them, rewritten as statements."""
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
-        counter = [0]
-        test = node.test
-        if isinstance(test, ast.BoolOp):
-            self._fold(test, site, counter)
-        else:
-            test = self._operand(test, site, counter)
-        enter = _call("enter", [ast.Constant(site), ast.Constant(counter[0])], node.test)
-        node.test = _call("leave", [enter, test], node.test)
+        node.test = self._predicate(node.test, (node.lineno, node.col_offset))
         node.body = [self.visit(statement) for statement in node.body]
         node.orelse = [self.visit(statement) for statement in node.orelse]
         return node
+
+    def visit_Call(self, node):
+        """A block call, eg any(o.late for o in orders), with its
+        generator's own sites rewritten and its element in an answer call,
+        as the value of a leave_items call whose first argument enters the
+        site before the builtin runs. Any other call with only its own
+        sites rewritten."""
+        generator = block_generator(node, self.builtins)
+        if generator is None:
+            return self.generic_visit(node)
+        site = f"{self.path}:{node.lineno}:{node.col_offset}"
+        self.visit(generator)
+        args = [ast.Constant(site), ast.Constant(0), generator.elt]
+        generator.elt = _call("answer", args, generator.elt)
+        enter = _call("enter", [ast.Constant(site), ast.Constant(2)], node)
+        return _call("leave_items", [enter, ast.Constant(0), node], node)
+
+    def visit_Match(self, node):
+        """node, preceded by an enter of its site, each case's guard (one
+        added where there was none) in a matched call noting its pattern
+        matched, numbering leaves as the manifest does: each case's
+        pattern, then its guard's. Unless the last case matches anything, a
+        case is added after it whose guard notes that none matched. The
+        added code takes the subject's location, so the lines a trace sees
+        run are the file's own."""
+        site = f"{self.path}:{node.lineno}:{node.col_offset}"
+        node.subject = self.visit(node.subject)
+        counter = [0]
+        patterns = []
+        for case in node.cases:
+            pattern = counter[0]
+            counter[0] += 1
+            args = [ast.Constant(site), ast.Constant(pattern), ast.Constant(tuple(patterns))]
+            if case.guard is not None:
+                args.append(self._guard(case.guard, site, counter))
+            case.guard = _call("matched", args, case.pattern)
+            patterns.append(pattern)
+            case.body = [self.visit(statement) for statement in case.body]
+        last = node.cases[-1].pattern
+        if not (isinstance(last, ast.MatchAs) and last.pattern is None):
+            node.cases.append(_unmatched_case(site, patterns, node.subject))
+        enter = ast.Expr(_call("enter", [ast.Constant(site), ast.Constant(counter[0])], node.subject))
+        ast.copy_location(enter, node.subject)
+        return [enter, node]
+
+    def _guard(self, guard, site, counter):
+        """A case's guard with its leaves recorded under site, numbered on
+        from counter, an `and`/`or` folded into the site as an if's
+        predicate is."""
+        if isinstance(guard, ast.BoolOp):
+            self._fold(guard, site, counter)
+            return guard
+        return self._operand(guard, site, counter)
+
+    def visit_comprehension(self, node):
+        """node with each filter's test entered and left, its leaves
+        recorded, under a site named at the filter's if keyword, as the
+        manifest names it."""
+        node.target = self.visit(node.target)
+        node.iter = self.visit(node.iter)
+        node.ifs = [self._predicate(test, keyword_before(self.keywords, test)) for test in node.ifs]
+        return node
+
+    def _predicate(self, test, at):
+        """test, an if's or a filter's, with its leaves recorded under the
+        site named at at, (line, col), as the value of a leave call whose
+        first argument enters the site before any leaf runs."""
+        site = f"{self.path}:{at[0]}:{at[1]}"
+        counter = [0]
+        wrapped = test
+        if isinstance(test, ast.BoolOp):
+            self._fold(test, site, counter)
+        else:
+            wrapped = self._operand(test, site, counter)
+        enter = _call("enter", [ast.Constant(site), ast.Constant(counter[0])], test)
+        return _call("leave", [enter, wrapped], test)
 
     def _fold(self, node, site, counter):
         """Wraps node's leaves in place, in the manifest's order: an
@@ -144,8 +229,12 @@ class _Rewriter(ast.NodeTransformer):
         return _call("record", [ast.Constant(site), ast.Constant(index), value], value)
 
 
-def rewrite(tree, path, methods=False):
+def rewrite(tree, path, *, source, methods=False):
     """tree, changed in place and returned, with every site entered and left
     around it and every leaf of it recorded, and, when methods is true,
-    every decision of each function with two or more decided."""
-    return _Rewriter(path, methods).visit(tree)
+    every decision of each function with two or more decided. source is
+    tree's source, str or the bytes a loader reads, where the if keywords
+    that name filters' sites are found."""
+    if isinstance(source, bytes):
+        source = importlib.util.decode_source(source)
+    return _Rewriter(path, methods, if_keywords(source), builtin_blocks(tree)).visit(tree)

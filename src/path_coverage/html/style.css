@@ -57,6 +57,15 @@ tfoot td:first-child { font-family: inherit; }
 .tabs [role="tab"][aria-selected="true"] { background: var(--panel); color: var(--fg); border-color: var(--fg); font-weight: 600; }
 .tabs [role="tab"]:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .num, td:not(:first-child) { text-align: right; }
+/* A total's taken, / of and % sit close, so a row still reads
+   3 / 4 75%; its name heads all three. The File column takes
+   the table's spare width, so it never spreads them apart. */
+table.files tr > :first-child { width: 100%; }
+table.files th, table.files td:not(:first-child) { white-space: nowrap; }
+th.group { text-align: center; padding-bottom: 0; }
+.taken { text-align: right; padding-left: 32px; padding-right: 4px; }
+td.of, th.of { text-align: left; padding-left: 0; padding-right: 6px; }
+.percent { text-align: right; padding-left: 6px; }
 th button {
   font: 600 13px var(--font-body); color: var(--fg); background: none; border: 0;
   padding: 4px 0; cursor: pointer;

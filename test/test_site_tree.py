@@ -11,6 +11,24 @@ def _tree(source, counts):
     return tree_of(source, condition, paths)
 
 
+def test_1a6c3e04():
+    """Example: any(o.late for o in orders), its 1 item true and 2+ items
+    true paths never taken
+    The items leaf shows how many items each path's generator gave.
+    The answer leaf shows the last answer, None with no items.
+    The value follows from both: any of no items is False."""
+    source = "def late(orders):\n    return any(o.late for o in orders)\n"
+    assert _tree(source, [1, 0, 1, 0, 1]) == {
+        "operator": "any",
+        "counts": [0, 0, 1, 1, 1],
+        "cells": [True, True, False, False, False],
+        "operands": [
+            {"text": "orders", "cells": ["1 item", "2+ items", "0 items", "1 item", "2+ items"]},
+            {"text": "o.late", "cells": [True, True, None, False, False]},
+        ],
+    }
+
+
 def test_1a6c3e01():
     """Example: ok(id) and id.startswith('N'), taken once each way but
     true then false

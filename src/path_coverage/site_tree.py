@@ -1,9 +1,10 @@
 """The tree shown under a site's line on its file's page: a grid whose
 columns are the site's paths, never taken first."""
 
+from . import kinds
+from .kinds.choice import THEN_ON
 from .manifest import Arm, Condition
 from .paths_report import segment
-from .site_paths import THEN_ON
 
 
 def tree_of(source, condition, paths):
@@ -38,14 +39,21 @@ def _node(source, condition, outcomes, leaves):
     ]
     predicate = operands[0]
     operands = [
-        _arm(source, operand, predicate["cells"], THEN_ON[condition.operator], outcomes, leaves)
+        _arm(
+            source,
+            operand,
+            predicate["cells"],
+            THEN_ON[condition.operator],
+            outcomes,
+            leaves,
+        )
         if isinstance(operand, Arm)
         else operand
         for operand in operands
     ]
     return {
         "operator": condition.operator,
-        "cells": _value(condition.operator, operands),
+        "cells": kinds.of(condition.operator).value(condition.operator, operands),
         "operands": operands,
     }
 
@@ -62,26 +70,6 @@ def _arm(source, arm, decided, then_on, outcomes, leaves):
         "cells": [outcome == picked for outcome in decided],
         "body": body or None,
     }
-
-
-def _value(operator, operands):
-    """A condition's value in each column: a choice's is its taken arm's
-    body's, None for a plain arm; a chain's is that of the last operand it
-    reached."""
-    if operator in THEN_ON:
-        arms = operands[1:]
-        return [
-            next(
-                (arm["body"]["cells"][column] if arm["body"] else None)
-                for arm in arms
-                if arm["cells"][column]
-            )
-            if any(arm["cells"][column] for arm in arms)
-            else None
-            for column in range(len(arms[0]["cells"]))
-        ]
-    columns = zip(*(operand["cells"] for operand in operands))
-    return [next((cell for cell in reversed(column) if cell is not None), None) for column in columns]
 
 
 def _leaf(source, leaf, outcomes, index):

@@ -23,9 +23,10 @@
           return state.ascending ? order : -order;
         });
         rows.forEach(function (row) { body.appendChild(row); });
-        table.querySelectorAll('thead th').forEach(function (th, i) {
-          var sort = state.ascending ? 'ascending' : 'descending';
-          th.setAttribute('aria-sort', i === column ? sort : 'none');
+        var sort = state.ascending ? 'ascending' : 'descending';
+        table.querySelectorAll('thead button').forEach(function (other) {
+          var mine = Number(other.dataset.column) === column;
+          other.parentNode.setAttribute('aria-sort', mine ? sort : 'none');
         });
       });
     });

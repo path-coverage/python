@@ -15,7 +15,7 @@ SITE = "src/model/flow.py:2:11"
 def _can_attest(recorder):
     """can_attest from SOURCE, rewritten and compiled, recording into
     recorder."""
-    tree = rewrite(ast.parse(SOURCE), "src/model/flow.py")
+    tree = rewrite(ast.parse(SOURCE), "src/model/flow.py", source=SOURCE)
     namespace = {RECORDER_NAME: recorder}
     exec(compile(tree, "src/model/flow.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     return namespace["can_attest"]
@@ -46,7 +46,7 @@ def test_7e40b303():
         "    return user.admin or flow.public if user.active else False\n"
     )
     recorder = Recorder()
-    tree = rewrite(ast.parse(source), "src/model/flow.py")
+    tree = rewrite(ast.parse(source), "src/model/flow.py", source=source)
     namespace = {RECORDER_NAME: recorder}
     exec(compile(tree, "src/model/flow.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     can_see = namespace["can_see"]
@@ -74,7 +74,8 @@ def test_7e40b304():
     )
     recorder = Recorder()
     namespace = {RECORDER_NAME: recorder}
-    exec(compile(rewrite(ast.parse(source), "k.py"), "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     fee = namespace["fee"]
     orders = [(True, True, False), (False, False, True), (True, False, False)]
     fees = [fee(SimpleNamespace(big=b, new=n, vip=v)) for b, n, v in orders]
@@ -83,6 +84,133 @@ def test_7e40b304():
         "k.py:2:4": {(True, True): 1, (False, None): 1, (True, False): 1},
         "k.py:4:4": {(True,): 1, (False,): 1},
     }
+
+
+def test_7e40b307():
+    """Example: [u.name for u in users if u.active and u.admin], over an
+    admin, an inactive user and an active non-admin
+    The filter is entered and left around its test, once per item.
+    So each item's path is counted under the filter's if keyword.
+    The names it keeps are unchanged."""
+    source = "def admins(users):\n    return [u.name for u in users if u.active and u.admin]\n"
+    recorder = Recorder()
+    namespace = {RECORDER_NAME: recorder}
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    users = [
+        SimpleNamespace(name="ann", active=True, admin=True),
+        SimpleNamespace(name="bob", active=False, admin=True),
+        SimpleNamespace(name="cat", active=True, admin=False),
+    ]
+    assert namespace["admins"](users) == ["ann"]
+    assert recorder.site_paths == {
+        "k.py:2:34": {(True, True): 1, (False, None): 1, (True, False): 1},
+    }
+
+
+MATCH = (
+    "def fee(order):\n"
+    "    match order.kind:\n"
+    '        case "gold" if order.big:\n'
+    "            return 1\n"
+    '        case "silver":\n'
+    "            return 2\n"
+)
+
+
+def _fee(source, recorder):
+    """fee from source, rewritten and compiled, recording into recorder."""
+    namespace = {RECORDER_NAME: recorder}
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    return namespace["fee"]
+
+
+def test_7e40b308():
+    """Example: match order.kind: case "gold" if order.big: return 1 /
+    case "silver": return 2, for a big gold, a small gold, a silver and a
+    bronze order
+    Each evaluation's path is counted under the match's keyword.
+    A small gold order matches gold, fails its guard, then matches nothing.
+    A bronze order matches nothing at all.
+    The fees are unchanged, None where no case is taken."""
+    recorder = Recorder()
+    fee = _fee(MATCH, recorder)
+    orders = [("gold", True), ("gold", False), ("silver", False), ("bronze", True)]
+    fees = [fee(SimpleNamespace(kind=kind, big=big)) for kind, big in orders]
+    assert fees == [1, None, 2, None]
+    assert recorder.site_paths == {
+        "k.py:2:4": {
+            (True, True, None): 1,
+            (True, False, False): 1,
+            (False, None, True): 1,
+            (False, None, False): 1,
+        }
+    }
+
+
+def test_7e40b309():
+    """Example: the same match with case _ in place of case "silver", for a
+    small gold order
+    The _ case must stay last, so nothing is added after it.
+    It is taken, so the path ends with its pattern matched."""
+    recorder = Recorder()
+    fee = _fee(MATCH.replace('case "silver"', "case _"), recorder)
+    assert fee(SimpleNamespace(kind="gold", big=False)) == 2
+    assert recorder.site_paths == {"k.py:2:4": {(True, False, True): 1}}
+
+
+def test_7e40b30a():
+    """Example: the gold and silver match, for a big gold, a small gold, a
+    silver and a bronze order
+    The rewritten fee runs exactly the lines the original does.
+    So the case it adds, and its enter, add no line to line coverage."""
+    for kind, big in [("gold", True), ("gold", False), ("silver", False), ("bronze", True)]:
+        order = SimpleNamespace(kind=kind, big=big)
+        assert _lines_run(MATCH, True, order) == _lines_run(MATCH, False, order)
+
+
+def _late(source, recorder):
+    """late from source, rewritten and compiled, recording into recorder."""
+    namespace = {RECORDER_NAME: recorder}
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    return namespace["late"]
+
+
+def test_7e40b30b():
+    """Example: any(o.late for o in orders), for no orders, two on time,
+    then one late
+    The call is entered and left around it, its items counted.
+    Each answer is noted, the last one where any stopped.
+    The values it returns are unchanged."""
+    recorder = Recorder()
+    late = _late("def late(orders):\n    return any(o.late for o in orders)\n", recorder)
+    on_time, overdue = SimpleNamespace(late=False), SimpleNamespace(late=True)
+    assert [late([]), late([on_time, on_time]), late([overdue])] == [False, False, True]
+    assert recorder.site_paths == {
+        "k.py:2:11": {("0 items", None): 1, ("2+ items", False): 1, ("1 item", True): 1},
+    }
+
+
+def test_7e40b30c():
+    """Example: any(o.late for o in orders) in a module defining its own
+    any, which counts late orders
+    That any may not be the builtin, so its call is left alone.
+    Only its own filter's paths are recorded.
+    It returns the module's own answer."""
+    source = (
+        "def any(answers):\n"
+        "    return sum(1 for answer in answers if answer)\n"
+        "\n"
+        "def late(orders):\n"
+        "    return any(o.late for o in orders)\n"
+    )
+    recorder = Recorder()
+    late = _late(source, recorder)
+    orders = [SimpleNamespace(late=True), SimpleNamespace(late=True)]
+    assert late(orders) == 2
+    assert list(recorder.site_paths) == ["k.py:2:39"]
 
 
 def test_7e40b305():
@@ -105,7 +233,7 @@ def test_7e40b305():
     )
     recorder = Recorder()
     namespace = {RECORDER_NAME: recorder}
-    tree = rewrite(ast.parse(source), "k.py", methods=True)
+    tree = rewrite(ast.parse(source), "k.py", source=source, methods=True)
     exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     fee = namespace["fee"]
     assert [fee([], True), fee([1], True), fee([1], False)] == [0, 95, 100]
@@ -119,7 +247,7 @@ def _lines_run(source, rewritten, *args):
     rewritten measuring methods or not, is called with args."""
     tree = ast.parse(source)
     if rewritten:
-        tree = rewrite(tree, "k.py", methods=True)
+        tree = rewrite(tree, "k.py", source=source, methods=True)
     namespace = {RECORDER_NAME: Recorder()}
     exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     seen = set()

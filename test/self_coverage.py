@@ -66,7 +66,9 @@ def _asserting_loader(kernel):
             path = self.get_filename(fullname)
             source = self.get_data(path)
             relative = self.config.relative(path)
-            tree = kernel.rewrite(ast.parse(source, path), relative, methods=self.config.methods)
+            tree = kernel.rewrite(
+                ast.parse(source, path), relative, source=source, methods=self.config.methods
+            )
             if Path(path).name.startswith("test_"):
                 rewrite_asserts(tree, source, path)
             return compile(tree, path, "exec", dont_inherit=True)

@@ -9,7 +9,8 @@ from html import escape
 from itertools import groupby
 from pathlib import Path
 
-from . import path_manifest, summary
+from . import kinds, path_manifest, summary
+from .kinds.block import ITEMS
 from .manifest import Arm, Condition
 from .path_gaps import possible
 from .site_tree import tree_of
@@ -18,12 +19,10 @@ from .source_lines import line_of, lines_of
 ASSETS = Path(__file__).parent / "html"
 JUMP_LISTS = {"covered": "Covered", "gaps": "Gaps"}
 TEE, ELBOW, BAR, DASH = "&#9500;", "&#9492;", "&#9474;", "&#9472;"
-OUTCOMES = {True: "T", False: "F", None: ""}
+# Each outcome's cell: a leaf's T or F, a block call's count of items.
+OUTCOMES = {True: "T", False: "F", None: "", **dict(zip(ITEMS, ("0", "1", "*")))}
 # A tick marks a path taking a plain arm.
 TAKEN = {True: "&#10003;", False: ""}
-# The choices whose arms are named by their kind, then or else, as their
-# text is statements.
-NAMED_ARMS = ("if",)
 
 
 def write(operands, files, coverage_dir, paths, methods=None, taken=None, groups=None):
@@ -75,22 +74,34 @@ def _fill(template, **values):
     return re.sub(r"\{\{(\w+)\}\}", lambda match: values[match.group(1)], template)
 
 
-# The heading of the methods column, there only when methods are measured.
-METHODS = (
-    '<th class="num" aria-sort="none"><button type="button" data-column="3"'
-    ' data-type="number">Within each method</button></th>'
-)
+# The class and label of each of a total's three columns.
+PARTS = (("taken", "taken"), ("of", "/ of"), ("percent", "%"))
 
 
-# The headings of the columns every files table has.
-HEAD = (
-    '<th aria-sort="none"><button type="button" data-column="0"'
-    ' data-type="text">File</button></th>\n'
-    '<th class="num" aria-sort="none"><button type="button" data-column="1"'
-    ' data-type="number">Sites</button></th>\n'
-    '<th class="num" aria-sort="none"><button type="button" data-column="2"'
-    ' data-type="number">Within each decision</button></th>'
-)
+def _head(methods):
+    """The two heading rows of a files table: File and Sites, each over
+    both rows, then each total's name over its taken, / of and % columns,
+    every column sortable; methods' total only when methods are
+    measured."""
+    names = ["Within each decision"] + (["Within each method"] if methods else [])
+    top = [
+        _heading(' rowspan="2"', 0, "text", "File"),
+        _heading(' class="num" rowspan="2"', 1, "number", "Sites"),
+        *(f'<th class="group" colspan="3">{name}</th>' for name in names),
+    ]
+    bottom = [
+        _heading(f' class="{css}"', 2 + 3 * group + i, "number", label)
+        for group in range(len(names))
+        for i, (css, label) in enumerate(PARTS)
+    ]
+    return "\n".join(f"<tr>\n{chr(10).join(row)}\n</tr>" for row in (top, bottom))
+
+
+def _heading(attrs, column, kind, label):
+    """A sortable heading, attrs its th's, sorting the column-th column as
+    kind, text or number, its button showing label."""
+    button = f'<button type="button" data-column="{column}" data-type="{kind}">{label}</button>'
+    return f'<th{attrs} aria-sort="none">{button}</th>'
 
 
 def index_page(rows, total, groups=()):
@@ -127,13 +138,13 @@ def _tab_bar(names):
 def _table(index, rows, total):
     """The index-th tab's table of rows, total as its footer; any but the
     first starts hidden."""
-    head = HEAD + (f"\n{METHODS}" if total["methods"] is not None else "")
+    head = _head(total["methods"] is not None)
     hidden = "" if index == 0 else ' hidden="hidden"'
     body = "\n".join(index_row(row) for row in rows)
     return "\n".join(
         [
             f'<table class="files" id="files-{index}" role="tabpanel"{hidden}>',
-            f"<thead>\n<tr>\n{head}\n</tr>\n</thead>",
+            f"<thead>\n{head}\n</thead>",
             f"<tbody>\n{body}\n</tbody>",
             f"<tfoot>\n{_counts_row(_cell('Total', 'Total'), total)}\n</tfoot>",
             "</table>",
@@ -151,29 +162,40 @@ def index_row(row):
 def _counts_row(first, row):
     """A row of first, then row's sites, its total within each decision,
     and, when methods are measured, its total within each method."""
-    cells = [first, _cell(row["sites"], row["sites"]), _paths_cell(row["decisions"])]
+    cells = [
+        first,
+        _cell(row["sites"], row["sites"]),
+        *_paths_cells(row["decisions"], "no decisions"),
+    ]
     if row["methods"] is not None:
-        cells.append(_paths_cell(row["methods"]))
+        cells.extend(_paths_cells(row["methods"], "no method with two or more decisions"))
     return f"<tr>{''.join(cells)}</tr>"
 
 
-def _paths_cell(pair):
-    """A cell showing [taken, possible] paths, eg 3 / 6 (50%), sorted by its
-    percent. With no paths to take, as in a file with no method of two or
-    more decisions, it shows -, titled with why, with an empty sort value,
-    which sort.js keeps last whichever way the column is sorted."""
+def _paths_cells(pair, none):
+    """Three cells showing [taken, possible] paths, eg 3, / 6 and 50%, each
+    sorted by its own number, so they read 3 / 6 50%. With no paths to
+    take, as in a group no file is in, or a file with no method of two or
+    more decisions, the percent shows -, titled with none, saying why,
+    with an empty sort value, which sort.js keeps last whichever way the
+    column is sorted."""
     taken, possible_count = pair
+    counts = [
+        _cell(taken, taken, css="taken"),
+        _cell(possible_count, f"/ {possible_count}", css="of"),
+    ]
     if possible_count == 0:
-        return _cell("", "-", "no method with two or more decisions")
+        return [*counts, _cell("", "-", none, css="percent")]
     percent = round(100 * taken / possible_count)
-    return _cell(percent, f"{taken} / {possible_count} ({percent}%)")
+    return [*counts, _cell(percent, f"{percent}%", css="percent")]
 
 
-def _cell(sort_value, content, title=None):
+def _cell(sort_value, content, title=None, css=None):
     """One table cell, sorted by sort_value, showing content, with title as
-    its hover text when there is one."""
+    its hover text and css as its class, each when there is one."""
     hover = f' title="{title}"' if title else ""
-    return f'<td data-sort="{sort_value}"{hover}>{content}</td>'
+    klass = f' class="{css}"' if css else ""
+    return f'<td{klass} data-sort="{sort_value}"{hover}>{content}</td>'
 
 
 def jumps(lines):
@@ -326,18 +348,10 @@ def _arm_rows(arm, branch, under, choice):
     marks the paths taking it."""
     body = arm["body"]
     values = _cells(body["cells"]) if body else _cells(arm["cells"], TAKEN)
-    lead = _branch(branch) + f'<span class="arm" data-label="">{escape(_arm_label(arm, choice))}</span>'
+    label = kinds.of(choice).arm_label(arm, choice)
+    lead = _branch(branch) + f'<span class="arm" data-label="">{escape(label)}</span>'
     row = _row(f' data-arm=""{_at(arm)}', lead, values)
     return [row, *_operand_rows(body, under)] if body else [row]
-
-
-def _arm_label(arm, choice):
-    """The name of an arm of a condition whose operator is choice."""
-    if choice in NAMED_ARMS:
-        return arm["arm"]
-    mark = "?" if arm["arm"] == "then" else ":"
-    body = arm["body"]
-    return f"{mark} {body['operator'] if body else arm['text']}"
 
 
 def _row(attrs, lead, values):

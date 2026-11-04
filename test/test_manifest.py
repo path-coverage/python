@@ -1,6 +1,142 @@
 from path_coverage.manifest import Arm, Condition, Leaf, sites
 
 
+def test_5c1e9a09():
+    """Example: [u for u in users if u.active]
+    A comprehension's filter is a site, named at its if keyword.
+    Its test is its predicate.
+    Its then arm keeps the item, its else arm drops it."""
+    source = "def active(users):\n    return [u for u in users if u.active]\n"
+    assert sites(source, "k.py") == {
+        "k.py:2:29": Condition(
+            operator="filter", operands=(Leaf(2, 32, 2, 40), Arm("then"), Arm("else"))
+        ),
+    }
+
+
+def test_5c1e9a0a():
+    """Example: a filter (u.active and u.admin) on a line of its own, after
+    a comment, then a second filter u.new
+    The filter is named at its if keyword, not at its test.
+    Its predicate's `and` nests in it, as no site of its own.
+    Each filter is a site of its own."""
+    source = (
+        "def admins(users):\n"
+        "    return [\n"
+        "        u for u in users\n"
+        "        if  # only some\n"
+        "        (u.active and u.admin)\n"
+        "        if u.new\n"
+        "    ]\n"
+    )
+    both = Condition(operator="and", operands=(Leaf(5, 9, 5, 17), Leaf(5, 22, 5, 29)))
+    arms = (Arm("then"), Arm("else"))
+    assert sites(source, "k.py") == {
+        "k.py:4:8": Condition(operator="filter", operands=(both, *arms)),
+        "k.py:6:8": Condition(operator="filter", operands=(Leaf(6, 11, 6, 16), *arms)),
+    }
+
+
+def test_5c1e9a0b():
+    """Example: match order.kind: case "gold" if order.big: ... case
+    "silver": ...
+    A match statement is a site, named at its keyword.
+    Each case's pattern is a leaf, true when it matches.
+    A guarded case is a `case` of its pattern and its guard, as both must
+    hold.
+    The cases chain as an `or` does, stopping at the first that holds."""
+    source = (
+        "def fee(order):\n"
+        "    match order.kind:\n"
+        '        case "gold" if order.big:\n'
+        "            return 1\n"
+        '        case "silver":\n'
+        "            return 2\n"
+    )
+    gold = Condition(operator="case", operands=(Leaf(3, 13, 3, 19), Leaf(3, 23, 3, 32)))
+    assert sites(source, "k.py") == {
+        "k.py:2:4": Condition(operator="match", operands=(gold, Leaf(5, 13, 5, 21))),
+    }
+
+
+def test_5c1e9a0c():
+    """Example: match code: case 200: ... case _: ...
+    The _ pattern matches anything.
+    So its leaf can only be true."""
+    source = (
+        "def label(code):\n"
+        "    match code:\n"
+        "        case 200:\n"
+        '            return "ok"\n'
+        "        case _:\n"
+        '            return "other"\n'
+    )
+    always = Leaf(5, 13, 5, 14, "truthy")
+    assert sites(source, "k.py") == {
+        "k.py:2:4": Condition(operator="match", operands=(Leaf(3, 13, 3, 16), always)),
+    }
+
+
+def test_5c1e9a0d():
+    """Example: any(o.late for o in orders)
+    An any() of a generator is a site, named where the call starts.
+    Its first leaf is the items it was given: orders.
+    Its second is the generator's answer for an item: o.late."""
+    source = "def late(orders):\n    return any(o.late for o in orders)\n"
+    assert sites(source, "k.py") == {
+        "k.py:2:11": Condition(operator="any", operands=(Leaf(2, 31, 2, 37), Leaf(2, 15, 2, 21))),
+    }
+
+
+def test_5c1e9a0e():
+    """Example: any(o.late for o in orders) or all(o.paid for o in orders),
+    in a module that imports its own any
+    That any may not be the builtin, so its call is a leaf only.
+    The all is the builtin, so its call is a site of its own."""
+    source = (
+        "from flags import any\n"
+        "\n"
+        "def late(orders):\n"
+        "    return any(o.late for o in orders) or all(o.paid for o in orders)\n"
+    )
+    assert sites(source, "k.py") == {
+        "k.py:4:11": Condition(operator="or", operands=(Leaf(4, 11, 4, 38), Leaf(4, 42, 4, 69))),
+        "k.py:4:42": Condition(operator="all", operands=(Leaf(4, 62, 4, 68), Leaf(4, 46, 4, 52))),
+    }
+
+
+def test_5c1e9a10():
+    """Example: any(o.late for o in orders) in modules that bind any by
+    def, class, assignment, parameter, except as, match captures, import
+    as and star import
+    Each binding may hide the builtin.
+    So in each module the call is no site, though a match binding it is."""
+    call = "any(o.late for o in orders)"
+    bindings = [
+        "def any(xs):\n    return xs\n",
+        "class any:\n    pass\n",
+        "any = None\n",
+        "def k(any):\n    return any\n",
+        "try:\n    pass\nexcept ValueError as any:\n    pass\n",
+        "match 1:\n    case any:\n        pass\n",
+        "match []:\n    case [*any]:\n        pass\n",
+        "match {}:\n    case {**any}:\n        pass\n",
+        "import flags as any\n",
+        "from flags import *\n",
+    ]
+    for binding in bindings:
+        source = f"{binding}\ndef late(orders):\n    return {call}\n"
+        operators = [condition.operator for condition in sites(source, "k.py").values()]
+        assert operators == (["match"] if binding.startswith("match") else []), binding
+
+
+def test_5c1e9a0f():
+    """Example: any(flags)
+    Its argument is no generator, so there is no answer to note.
+    So the call is no site."""
+    assert sites("def k(flags):\n    return any(flags)\n", "k.py") == {}
+
+
 def test_5c1e9a07():
     """Example: if order.big and order.new: ... else: ...
     An if statement is a site, named at its keyword, col 4.

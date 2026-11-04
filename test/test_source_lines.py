@@ -43,7 +43,7 @@ def test_0d9b5502():
     )
     operands = {
         "src/model/flow.py:2:11": [{"truthy": 3, "falsy": 1}, {"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
-        "src/model/flow.py:2:32": [{"truthy": 4, "falsy": 2}, {"truthy": 0, "falsy": 2}],
+        "src/model/flow.py:2:29": [{"truthy": 4, "falsy": 2}, {"truthy": 0, "falsy": 2}],
     }
     found = sites(source, "src/model/flow.py")
     assert [(line["status"], line["span"]) for line in lines_of(source, found, operands)] == [

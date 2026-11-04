@@ -13,6 +13,7 @@ from . import (
     console_summary,
     gaps,
     html_report,
+    kinds,
     manifest,
     path_gaps,
     path_manifest,
@@ -85,7 +86,9 @@ class _Loader(importlib.machinery.SourceFileLoader):
         path = self.get_filename(fullname)
         source = self.get_data(path)
         relative = self.config.relative(path)
-        tree = rewrite(ast.parse(source, path), relative, methods=self.config.methods)
+        tree = rewrite(
+            ast.parse(source, path), relative, source=source, methods=self.config.methods
+        )
         return compile(tree, path, "exec", dont_inherit=True)
 
     def exec_module(self, module):
@@ -227,15 +230,25 @@ def render(
     """Runs the reporters from the JSON reports at runs (eg those a collector
     saved), their counts added together, parsing each covered file afresh,
     so the report shows only the gaps that every run left. It writes the
-    merged JSON report into coverage_dir too."""
+    merged JSON report into coverage_dir too. A run that measured other
+    kinds is refused, as it lists a site's paths differently."""
     config = _config(root, cover, coverage_dir, report, measure, None, skip, groups)
     files = _files(config)
-    reports = [json.loads(Path(path).read_text()) for path in runs]
+    reports = [_same_kinds(path) for path in runs]
     sites = _sites(files)
     operands = merge([result.operands(sites, {}), *(each["sites"] for each in reports)])
     paths = merge_paths([result.paths(sites, {}), *(_taken(each) for each in reports)])
     method_paths = merge_paths([each.get("method_paths", {}) for each in reports])
     _finish(config, files, operands, paths, method_paths)
+
+
+def _same_kinds(path):
+    """The JSON report at path, when it measured the kinds this version
+    measures; ValueError naming path when not."""
+    report = json.loads(Path(path).read_text())
+    if report.get("kinds") != kinds.names():
+        raise ValueError(f"{path} measured other kinds")
+    return report
 
 
 def _report(config, recorder, part):
@@ -342,9 +355,11 @@ def _taken(report):
 
 def _report_json(operands, paths, files, method_paths):
     """The JSON report: {"sites": operands, "paths": {site: {"leaves":
-    [...], "taken": [...]}}, "method_paths": {site: [{"path", "count"}]}}."""
+    [...], "taken": [...]}}, "method_paths": {site: [{"path", "count"}]},
+    "kinds": [name, ...]}, the kinds naming what was measured."""
     return {
         "sites": operands,
         "paths": paths_report.of(paths, files),
         "method_paths": method_paths,
+        "kinds": kinds.names(),
     }

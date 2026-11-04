@@ -39,6 +39,7 @@ def test_e5a70c01(tmp_path, capsys):
     A covered module imported after start is instrumented.
     The report at exit writes every site's counts and paths as JSON.
     Each path has its count, and each leaf its line:col span.
+    It names the kinds measured, as runs measuring others differ.
     It prints the one path never taken: true, then false."""
     project = PROJECTS / "single_and"
     exits = []
@@ -66,6 +67,7 @@ def test_e5a70c01(tmp_path, capsys):
         },
         "paths": {site: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
         "method_paths": {},
+        "kinds": ["block", "case", "chain", "choice"],
         "totals": {"decisions": [2, 3]},
     }
     assert capsys.readouterr().out == (
@@ -354,6 +356,34 @@ def test_e5a70c0c(tmp_path, capsys):
     )
     report = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())
     assert report["totals"] == {"decisions": [3, 4], "methods": [2, 4]}
+
+
+def test_e5a70c12(tmp_path, capsys):
+    """Example: render of a run whose JSON names kinds chain, choice and
+    contains, as a version measuring contains would write it
+    Runs measuring other kinds list a site's paths differently.
+    So render refuses it, naming the run, and writes no report."""
+    project = PROJECTS / "single_and"
+    settings = {"root": project, "cover": ["src/**/*.py"]}
+    exits = []
+    path_coverage.start(**settings, coverage_dir=tmp_path / "run", on_exit=exits.append)
+    try:
+        _imported(project, "single_and_trails").is_new("T2", {})
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    capsys.readouterr()
+    run = tmp_path / "run" / "path_coverage.json"
+    report = json.loads(run.read_text())
+    report["kinds"] = ["chain", "choice", "contains"]
+    run.write_text(json.dumps(report))
+    try:
+        path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
+    except ValueError as error:
+        assert str(error) == f"{run} measured other kinds"
+    else:
+        raise AssertionError("render accepted a run measuring other kinds")
+    assert not (tmp_path / "merged").exists()
 
 
 def test_e5a70c0d(tmp_path):
