@@ -16,7 +16,7 @@ import ast
 import importlib.util
 
 from .manifest import block_generator, builtin_blocks, if_keywords, keyword_before
-from .path_manifest import decision_ifs, exits_of
+from .method_statements import reaches
 
 RECORDER_NAME = "__path_coverage__"
 
@@ -47,52 +47,44 @@ def _unmatched_case(site, patterns, at):
     return ast.match_case(pattern=wildcard, guard=guard, body=[body])
 
 
-PATH_NAME = "__path_coverage_path__"
+def _reach(name, statement):
+    """A reach call of the statement named name, as a statement of its own,
+    located at statement's start alone: given statement's whole span, a
+    compound statement's, it would cover its body, and a trace would report
+    the body's first line as run."""
+    at = ast.Pass()
+    at.lineno = at.end_lineno = statement.lineno
+    at.col_offset = at.end_col_offset = statement.col_offset
+    return ast.copy_location(ast.Expr(_call("reach", [ast.Constant(name)], at)), at)
 
 
 class _Rewriter(ast.NodeTransformer):
-    """Wraps every site, numbering its leaves as the manifest does, and,
-    when methods are measured, every decision of each function whose paths
-    are counted."""
+    """Wraps every site, numbering its leaves as the manifest does, and
+    precedes each function statement in reaches with a reach call."""
 
-    def __init__(self, path, methods, keywords, builtins):
-        """Names sites after path; methods says whether functions' paths
-        are measured; keywords are where the source's if keywords are, and
+    def __init__(self, path, reaches, keywords, builtins):
+        """Names sites after path; reaches holds the names of the function
+        statements whose runs are counted, as method_statements.reaches
+        gives them; keywords are where the source's if keywords are, and
         builtins the block calls' names the module leaves as builtins."""
         self.path = path
-        self.methods = methods
+        self.reaches = reaches
         self.keywords = keywords
         self.builtins = builtins
 
     def visit_FunctionDef(self, node):
-        """node with its own sites rewritten and, when methods are measured
-        and it has two or more decisions, each call's path started just
-        before its first decision, each decision's predicate in a decide
-        call, outside its site's leave."""
-        ifs = decision_ifs(node) if self.methods else []
-        exits = [exits_of(statement) for statement in ifs]
+        """node with its own sites rewritten and each statement of its body
+        in reaches preceded by a reach call naming it."""
         self.generic_visit(node)
-        if len(ifs) < 2:
-            return node
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
-        for index, (statement, outcome) in enumerate(zip(ifs, exits)):
-            path = ast.Name(id=PATH_NAME, ctx=ast.Load())
-            args = [path, ast.Constant(index), statement.test, ast.Constant(outcome)]
-            statement.test = _call("decide", args, statement.test)
-        # The start takes the location of the first predicate alone: given
-        # the whole if statement's, its span would cover the if's arms,
-        # and a trace would report an arm's first line as run.
-        at = ifs[0].test
-        start = ast.Assign(
-            targets=[ast.Name(id=PATH_NAME, ctx=ast.Store())],
-            value=_call("path", [ast.Constant(site), ast.Constant(len(ifs))], at),
-        )
-        ast.copy_location(start, at)
-        ast.copy_location(start.targets[0], at)
-        node.body.insert(node.body.index(ifs[0]), start)
+        node.body = [part for statement in node.body for part in self._reached(statement)]
         return node
 
     visit_AsyncFunctionDef = visit_FunctionDef
+
+    def _reached(self, statement):
+        """[statement], preceded by its reach call when it is in reaches."""
+        name = f"{self.path}:{statement.lineno}:{statement.col_offset}"
+        return [_reach(name, statement), statement] if name in self.reaches else [statement]
 
     def visit_BoolOp(self, node):
         """node, its leaves (nested conditions' and folded arms' included)
@@ -232,9 +224,10 @@ class _Rewriter(ast.NodeTransformer):
 def rewrite(tree, path, *, source, methods=False):
     """tree, changed in place and returned, with every site entered and left
     around it and every leaf of it recorded, and, when methods is true,
-    every decision of each function with two or more decided. source is
-    tree's source, str or the bytes a loader reads, where the if keywords
-    that name filters' sites are found."""
+    each run of every function statement that is no site counted. source
+    is tree's source, str or the bytes a loader reads, where the if
+    keywords that name filters' sites are found."""
     if isinstance(source, bytes):
         source = importlib.util.decode_source(source)
-    return _Rewriter(path, methods, if_keywords(source), builtin_blocks(tree)).visit(tree)
+    reached = set(reaches(source, path)) if methods else set()
+    return _Rewriter(path, reached, if_keywords(source), builtin_blocks(tree)).visit(tree)

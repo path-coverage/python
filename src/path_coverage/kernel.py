@@ -15,8 +15,7 @@ from . import (
     html_report,
     kinds,
     manifest,
-    path_gaps,
-    path_manifest,
+    method_statements,
     paths_report,
     post,
     result,
@@ -229,17 +228,32 @@ def render(
 ):
     """Runs the reporters from the JSON reports at runs (eg those a collector
     saved), their counts added together, parsing each covered file afresh,
-    so the report shows only the gaps that every run left. It writes the
-    merged JSON report into coverage_dir too. A run that measured other
-    kinds is refused, as it lists a site's paths differently."""
+    so the report shows only the gaps that every run left, and each
+    statement's reaches added up. It writes the merged JSON report into
+    coverage_dir too. A run that measured other kinds is refused, as it
+    lists a site's paths differently."""
     config = _config(root, cover, coverage_dir, report, measure, None, skip, groups)
     files = _files(config)
     reports = [_same_kinds(path) for path in runs]
     sites = _sites(files)
     operands = merge([result.operands(sites, {}), *(each["sites"] for each in reports)])
     paths = merge_paths([result.paths(sites, {}), *(_taken(each) for each in reports)])
-    method_paths = merge_paths([each.get("method_paths", {}) for each in reports])
-    _finish(config, files, operands, paths, method_paths)
+    _finish(config, files, operands, paths, _reached([each.get("reached") for each in reports]))
+
+
+def _reached(runs):
+    """runs' reaches, each {name: runs} or None for a run that counted
+    none, with each statement's added up; None when no run counted any, so
+    a report cannot say what was reached. Example: {"k.py:2:4": 2} and
+    {"k.py:2:4": 1} give {"k.py:2:4": 3}."""
+    counted = [run for run in runs if run is not None]
+    if not counted:
+        return None
+    total = {}
+    for run in counted:
+        for name, count in run.items():
+            total[name] = total.get(name, 0) + count
+    return total
 
 
 def _same_kinds(path):
@@ -259,47 +273,40 @@ def _report(config, recorder, part):
     sites = _sites(files)
     operands = result.operands(sites, recorder.counts)
     paths = result.paths(sites, recorder.site_paths)
-    method_paths = _listed(recorder.paths)
+    reached = recorder.reached if config.methods else None
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     if part is not None:
         part_file = config.coverage_dir / f"path_coverage.{part}.json"
-        part_file.write_text(json.dumps(_report_json(operands, paths, files, method_paths), indent=2))
+        part_file.write_text(json.dumps(_report_json(operands, paths, files, reached), indent=2))
         return
     parts = [json.loads(path.read_text()) for path in _parts(config)]
     operands = merge([operands, *(each["sites"] for each in parts)])
     paths = merge_paths([paths, *(_taken(each) for each in parts)])
-    method_paths = merge_paths([method_paths, *(each.get("method_paths", {}) for each in parts)])
-    _finish(config, files, operands, paths, method_paths)
+    reached = _reached([reached, *(each.get("reached") for each in parts)])
+    _finish(config, files, operands, paths, reached)
 
 
-def _finish(config, files, operands, paths, method_paths):
+def _finish(config, files, operands, paths, reached):
     """Writes the JSON report, with its totals, into coverage_dir, then runs
-    the chosen reporters."""
-    taken = {
-        site: {tuple(each["path"]): each["count"] for each in listed}
-        for site, listed in method_paths.items()
-    }
-    methods = _methods(files) if config.methods else None
-    report = _report_json(operands, paths, files, method_paths)
-    report["totals"] = console_summary.totals(paths, methods, taken)
+    the chosen reporters. reached is each statement's runs, None when not
+    known."""
+    cards = method_statements.cards(files, paths, reached) if config.methods else None
+    report = _report_json(operands, paths, files, reached)
+    report["totals"] = console_summary.totals(paths, cards)
     if config.groups:
-        report["totals"]["groups"] = console_summary.group_totals(
-            paths, methods, taken, config.groups
-        )
+        report["totals"]["groups"] = console_summary.group_totals(paths, cards, config.groups)
     text = json.dumps(report, indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)
     if "gaps" in config.report:
         for line in gaps.lines(operands, paths, paths_report.texts(files)):
             print(line)
-        for line in path_gaps.lines(methods or {}, taken):
-            print(line)
     if "html" in config.report:
         html_report.write(
-            operands, files, config.coverage_dir, paths, methods, taken, config.groups
+            operands, files, config.coverage_dir, paths, cards, reached, config.groups
         )
     if "summary" in config.report:
-        for line in console_summary.lines(paths, methods, taken, config.groups):
+        for line in console_summary.lines(paths, cards, config.groups):
             print(line)
     if "post" in config.report:
         post.deliver(text, config.collector)
@@ -324,25 +331,6 @@ def _sites(files):
     return {site: c for _, file_sites in files.values() for site, c in file_sites.items()}
 
 
-def _methods(files):
-    """The functions whose paths are counted, of every covered file, in one
-    manifest."""
-    return {
-        site: method
-        for relative, (source, _) in files.items()
-        for site, method in path_manifest.methods(source, relative).items()
-    }
-
-
-def _listed(paths):
-    """The recorder's {site: {(outcome, ...): n}} as {site: [{"path": [...],
-    "count": n}]}, the form JSON holds and merge_paths adds."""
-    return {
-        site: [{"path": list(path), "count": count} for path, count in taken.items()]
-        for site, taken in paths.items()
-    }
-
-
 def _parts(config):
     """The part files in coverage_dir, in name order."""
     return sorted(config.coverage_dir.glob("path_coverage.*.json"))
@@ -353,13 +341,12 @@ def _taken(report):
     return {site: each["taken"] for site, each in report.get("paths", {}).items()}
 
 
-def _report_json(operands, paths, files, method_paths):
+def _report_json(operands, paths, files, reached):
     """The JSON report: {"sites": operands, "paths": {site: {"leaves":
-    [...], "taken": [...]}}, "method_paths": {site: [{"path", "count"}]},
-    "kinds": [name, ...]}, the kinds naming what was measured."""
-    return {
-        "sites": operands,
-        "paths": paths_report.of(paths, files),
-        "method_paths": method_paths,
-        "kinds": kinds.names(),
-    }
+    [...], "taken": [...]}}, "kinds": [name, ...]}, the kinds naming what
+    was measured, and "reached": {name: runs} when reached is known, even
+    empty, as a run that reached no statement says so."""
+    report = {"sites": operands, "paths": paths_report.of(paths, files), "kinds": kinds.names()}
+    if reached is not None:
+        report["reached"] = reached
+    return report

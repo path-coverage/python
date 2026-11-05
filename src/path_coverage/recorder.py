@@ -23,30 +23,18 @@ class Recorder:
     entered and left so far."""
 
     def __init__(self):
-        """Starts with no outcomes or paths counted. paths is {function site:
-        {(outcome, ...): calls}} for every path taken all the way through a
-        function's decisions so far."""
+        """Starts with no outcomes, paths or reaches counted. reached is
+        {name: runs} of each statement reached so far, by its name, eg
+        {"k.py:3:4": 2}; one never reached has none."""
         self.counts = {}
         self.site_paths = {}
-        self.paths = {}
+        self.reached = {}
         self._local = threading.local()
 
-    def path(self, site, size):
-        """A new call's path through the function at site, which has size
-        decisions."""
-        return Trail(site, size)
-
-    def decide(self, path, index, value, exits=None):
-        """Notes value's outcome as path's index-th decision, counts path
-        once that is its last, or once it is exits, the outcome whose arm
-        leaves the function, and returns value unchanged."""
-        outcome = bool(value)
-        path.outcomes[index] = outcome
-        if index == len(path.outcomes) - 1 or outcome == exits:
-            taken = self.paths.setdefault(path.site, {})
-            key = tuple(path.outcomes[: index + 1])
-            taken[key] = taken.get(key, 0) + 1
-        return value
+    def reach(self, name):
+        """Counts a run of the statement named name; returns None, as the
+        statement call rewritten code makes is a statement of its own."""
+        self.reached[name] = self.reached.get(name, 0) + 1
 
     def _trails(self, site):
         """The stack of site's evaluations under way in the current thread,

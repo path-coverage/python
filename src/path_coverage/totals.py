@@ -1,7 +1,5 @@
 """The two coverage totals, each [taken, possible] paths over every covered
-file. They count the very paths the gap lines list as never taken."""
-
-from .path_gaps import possible
+file."""
 
 
 def decisions(paths):
@@ -12,13 +10,8 @@ def decisions(paths):
     return [sum(1 for each in every if each["count"] > 0), len(every)]
 
 
-def methods(found, taken):
-    """Paths within each method, through its decisions: found, as
-    path_manifest.methods gives them, each with every path through its
-    decisions; taken, as the recorder counts them, holds the ones taken."""
-    seen = possible_count = 0
-    for site, method in found.items():
-        every = possible(method.decisions)
-        possible_count += len(every)
-        seen += sum(1 for path in every if tuple(path) in taken.get(site, {}))
-    return [seen, possible_count]
+def methods(cards):
+    """Paths within each function: cards is {def site: [taken, size]}, each
+    function's card's paths taken of its size. Example: cards [4, 6] and
+    [17, 21] give [21, 27]."""
+    return [sum(taken for taken, _ in cards.values()), sum(size for _, size in cards.values())]

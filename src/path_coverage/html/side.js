@@ -1,9 +1,9 @@
 // SPIKE: puts a file page's trees in a rail to the left of the
-// code, each level with its site, and its path grids in a rail
-// to the right. Each method whose paths are counted gets a bar
-// on the code's right edge, from its def to its end, that opens
-// its grid. One tree or grid is open at a time; opening one
-// widens its rail, sliding the code away from it.
+// code, each level with its site, and its function cards in a
+// rail to the right. Each function gets a bar on the code's
+// right edge, from its def to its end, that opens its card. One
+// tree or card is open at a time; opening one widens its rail,
+// sliding the code away from it.
 (function () {
   var code = document.querySelector('.code');
   if (!code) { return; }
@@ -313,7 +313,7 @@
   }
 
   pcRail.addEventListener('mouseover', function (event) {
-    var cell = event.target.closest('.pathgrid .pcell');
+    var cell = event.target.closest('.pathgrid:not(.statements) .pcell');
     if (!cell) { return; }
     var column = columnOf(cell);
     show(column.grid, column.col);
@@ -444,10 +444,20 @@
     unmarkChars();
   });
 
+  // A click on a site's row in a function card opens the tree of
+  // the block holding its line, as that block's button does.
+  pcRail.addEventListener('click', function (event) {
+    var row = event.target.closest('.statements .prow.site');
+    if (!row) { return; }
+    var block = lineno(row.getAttribute('data-line')).closest('.block');
+    var button = block && block.querySelector('button.lnum[aria-controls]');
+    if (button) { openOnly(document.getElementById(button.getAttribute('aria-controls'))); }
+  });
+
   // A click on a cell pins its column, or unpins it when it is
   // the one pinned.
   pcRail.addEventListener('click', function (event) {
-    var cell = event.target.closest('.pathgrid .pcell');
+    var cell = event.target.closest('.pathgrid:not(.statements) .pcell');
     if (!cell) { return; }
     var column = columnOf(cell);
     var same = pinned && pinned.grid === column.grid && pinned.col === column.col;

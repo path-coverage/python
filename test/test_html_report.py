@@ -1,5 +1,10 @@
-from path_coverage.html_report import grids, index_page, index_row, jumps, listing
-from path_coverage.path_manifest import Decision, PathMethod
+from path_coverage.html_report import (
+    index_page,
+    index_row,
+    jumps,
+    listing,
+    method_cards,
+)
 
 LINES = [
     {"number": 1, "text": "def can_attest(user, flow):", "status": None, "span": None},
@@ -117,40 +122,31 @@ def test_4f08d20c():
 
 
 def test_4f08d208():
-    """Example: fee with decisions on lines 4 and 7, called with True then
-    False only
-    Its grid is hidden in the page until side.js moves it into the rail.
-    Its calls row, level with the def, says 1/4 paths taken and counts
-    each path's calls, the never-taken paths first.
-    Each decision's row shows T or F for each path, never-taken ones
-    marked."""
-    fee = PathMethod(name="fee", decisions=(Decision(line=4), Decision(line=7)))
+    """Example: fee, a write, if member and a return, called with member,
+    and pack, a call
+    Each function's card is hidden in the page until side.js moves it
+    into the rail, one after another.
+    fee's taken comes from its if's paths and its reaches: 3 of 4.
+    pack was never reached, so it has a gap too."""
     source = (
-        "def fee(member, big):\n"
+        "def fee(member):\n"
         "    total = 100\n"
-        "\n"
         "    if member:\n"
         "        total -= 5\n"
-        "\n"
-        "    if big:\n"
-        "        total -= 10\n"
         "    return total\n"
+        "\n"
+        "def pack(box):\n"
+        "    box.close()\n"
     )
-    html = grids(source, {"k.py:1:0": fee}, {"k.py:1:0": {(True, False): 1}})
-    assert html.startswith(
-        '<div class="pathgrid" id="paths-1" data-first="1" data-col="0"'
-        ' data-last="9" data-status="gaps" hidden="hidden">'
-        '<div class="prow calls" data-line="1" title="fee: 1 of 4 paths taken">'
-        '<span class="plabel">1/4</span>'
-        '<span class="pcell never">0</span><span class="pcell never">0</span>'
-        '<span class="pcell never">0</span><span class="pcell taken">1</span></div>'
-    )
-    assert (
-        '<div class="prow" data-line="7" data-head="7,7" data-then="8,8" data-else="" data-end="">'
-        '<span class="plabel">7</span>'
-        '<span class="pcell true never">T</span><span class="pcell true never">T</span>'
-        '<span class="pcell false never">F</span><span class="pcell false">F</span></div>'
-    ) in html
+    paths = {"k.py:3:4": [{"path": [True], "count": 1}, {"path": [False], "count": 0}]}
+    reached = {"k.py:2:4": 1, "k.py:5:4": 1}
+    html = method_cards(source, "k.py", paths, reached)
+    fee, pack = html.split("\n")
+    assert fee.startswith('<div class="pathgrid statements" id="paths-1"')
+    assert '<span class="plabel">fee</span><span class="pcell">*2</span>' in fee
+    assert '<span class="pcell">4</span><span class="pcell">3</span></div>' in fee
+    assert pack.startswith('<div class="pathgrid statements" id="paths-7"')
+    assert 'data-status="gaps"' in pack
 
 
 def test_4f08d201():

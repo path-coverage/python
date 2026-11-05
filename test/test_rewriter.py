@@ -214,12 +214,12 @@ def test_7e40b30c():
 
 
 def test_7e40b305():
-    """Example: fee with a docstring, then if not rates: return 0 and
-    if member: total -= 5, called three ways, measuring methods
-    Each call's path starts just before the first decision, after the
-    docstring, which stays the docstring.
-    Each decision's outcome is noted, outside its site's leave.
-    The early return ends its path at [True].
+    """Example: fee with a docstring, then if not rates: return 0, a
+    write, if member: total -= 5 and a return, called three ways,
+    measuring methods
+    Each top-level statement that is no site is reached, by its name.
+    The early return skips the write and the last return.
+    The docstring stays the docstring.
     The fees are unchanged."""
     source = (
         "def fee(rates, member):\n"
@@ -238,7 +238,7 @@ def test_7e40b305():
     fee = namespace["fee"]
     assert [fee([], True), fee([1], True), fee([1], False)] == [0, 95, 100]
     assert fee.__doc__ == "The fee."
-    assert recorder.paths == {"k.py:1:0": {(True,): 1, (False, True): 1, (False, False): 1}}
+    assert recorder.reached == {"k.py:5:4": 2, "k.py:8:4": 2}
     assert recorder.site_paths["k.py:6:4"] == {(True,): 1, (False,): 1}
 
 

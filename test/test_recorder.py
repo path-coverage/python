@@ -89,20 +89,14 @@ def test_a91d2e02():
 
 
 def test_a91d2e04():
-    """Example: fee with two decisions, called with member and not big,
-    then with an early return at its first decision
-    path starts one call's path through the function's 2 decisions.
-    decide notes each decision's outcome and returns its value unchanged.
-    The path is counted once its last decision is made.
-    A decision taking its exits outcome ends and counts the path early."""
+    """Example: ship's write reached twice, its return once
+    reach counts a run of the statement it names, returning None.
+    reached holds each statement's runs; one never reached has none."""
     recorder = Recorder()
-    site = "src/fee.py:1:0"
-    path = recorder.path(site, 2)
-    assert recorder.decide(path, 0, "member") == "member"
-    assert recorder.decide(path, 1, 0) == 0
-    early = recorder.path(site, 2)
-    recorder.decide(early, 0, True, exits=True)
-    assert recorder.paths == {site: {(True, False): 1, (True,): 1}}
+    assert recorder.reach("src/ship.py:3:4") is None
+    recorder.reach("src/ship.py:3:4")
+    recorder.reach("src/ship.py:5:4")
+    assert recorder.reached == {"src/ship.py:3:4": 2, "src/ship.py:5:4": 1}
 
 
 def test_a91d2e03():

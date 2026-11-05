@@ -7,12 +7,11 @@ from pathlib import PurePosixPath
 from . import totals
 
 
-def files(paths, methods=None, taken=None):
+def files(paths, cards=None):
     """One row per file that has sites in paths (as result.paths gives
     them), in path order: its sites, and its decisions total. Its methods
-    total is None unless methods (as path_manifest.methods gives them) are
-    given, as they are when methods are measured, with taken, the paths the
-    recorder counted."""
+    total is None unless cards, {def site: [taken, size]}, are given, as
+    they are when methods are measured."""
     by_path = {}
     for site, site_paths in paths.items():
         by_path.setdefault(path_of(site), {})[site] = site_paths
@@ -21,17 +20,16 @@ def files(paths, methods=None, taken=None):
             "path": path,
             "sites": len(sites),
             "decisions": totals.decisions(sites),
-            "methods": None if methods is None else _methods_of(path, methods, taken),
+            "methods": None if cards is None else _methods_of(path, cards),
         }
         for path, sites in sorted(by_path.items())
     ]
 
 
-def _methods_of(path, methods, taken):
-    """The methods total of the file at path; [0, 0] for a file with no
-    function of two or more decisions."""
-    own = {site: method for site, method in methods.items() if path_of(site) == path}
-    return totals.methods(own, taken or {})
+def _methods_of(path, cards):
+    """The methods total of the file at path, its functions' cards added
+    up; [0, 0] for a file with no function."""
+    return totals.methods({site: card for site, card in cards.items() if path_of(site) == path})
 
 
 def total(rows):

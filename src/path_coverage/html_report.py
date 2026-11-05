@@ -1,18 +1,17 @@
 """The HTML report: index.html, one sortable row per covered file, and
 files/<path>.html for each, its source with each site's line number a button
-that opens the site's grid of paths, and, when methods are measured, a grid
-of each function's paths beside it."""
+that opens the site's grid of paths, and, when methods are measured, a card
+of each function's statements beside it."""
 
-import ast
 import re
 from html import escape
 from itertools import groupby
 from pathlib import Path
 
-from . import kinds, path_manifest, summary
+from . import kinds, method_statements, summary
+from .html_statements import card
 from .kinds.block import ITEMS
 from .manifest import Arm, Condition
-from .path_gaps import possible
 from .site_tree import tree_of
 from .source_lines import line_of, lines_of
 
@@ -25,24 +24,36 @@ OUTCOMES = {True: "T", False: "F", None: "", **dict(zip(ITEMS, ("0", "1", "*")))
 TAKEN = {True: "&#10003;", False: ""}
 
 
-def write(operands, files, coverage_dir, paths, methods=None, taken=None, groups=None):
+def write(operands, files, coverage_dir, paths, cards=None, reached=None, groups=None):
     """Writes index.html and files/<path>.html into coverage_dir. operands
     and paths are as result.operands and result.paths give them; files is
-    {path relative to root: (source, sites)} for each covered file; methods
-    and taken, the functions whose paths are counted and the paths they
-    took, are given when methods are measured; groups, {name: [glob, ...]},
-    each get a tab of the index page."""
-    rows = summary.files(paths, methods, taken)
+    {path relative to root: (source, sites)} for each covered file; cards,
+    {def site: [taken, size]}, are given when methods are measured, with
+    reached, each statement's runs, None when not known; groups, {name:
+    [glob, ...]}, each get a tab of the index page."""
+    rows = summary.files(paths, cards)
     tabs = summary.groups(rows, groups) if groups else []
     (coverage_dir / "index.html").write_text(index_page(rows, summary.total(rows), tabs))
     for path, (source, sites) in files.items():
         out = coverage_dir / "files" / f"{path}.html"
         out.parent.mkdir(parents=True, exist_ok=True)
-        own = None if methods is None else path_manifest.methods(source, path)
-        out.write_text(_file_page(path, source, sites, operands, paths, own, taken))
+        own = "" if cards is None else method_cards(source, path, paths, reached)
+        out.write_text(_file_page(path, source, sites, operands, paths, own))
 
 
-def _file_page(path, source, sites, operands, paths, methods, taken):
+def method_cards(source, path, paths, reached):
+    """The hidden cards of every function in source, at path, from paths,
+    as result.paths gives them, and reached, each statement's runs;
+    side.js moves each into the rail beside its def."""
+    names = method_statements.names(source, path)
+    lasts = method_statements.lasts(source, path)
+    return "\n".join(
+        card(site, names[site], rows, method_statements.taken(rows, paths, reached), lasts[site])
+        for site, rows in method_statements.of(source, path).items()
+    )
+
+
+def _file_page(path, source, sites, operands, paths, cards):
     """The whole page of the covered file at path, written at
     files/<path>.html, so it links back to the index one folder up for each
     folder in that."""
@@ -60,7 +71,7 @@ def _file_page(path, source, sites, operands, paths, methods, taken):
         script=_asset("toggle.js") + _asset("side.js"),
         jumps=jumps(lines),
         listing=listing(lines, trees),
-        grids=grids(source, methods, taken or {}) if methods else "",
+        grids=cards,
     )
 
 
@@ -405,109 +416,3 @@ def _position(source, line, col, end_line, end_col):
         end_line,
         len(lines[end_line - 1][:end_col].decode()),
     ]
-
-
-def grids(source, methods, taken):
-    """The hidden grids of every function in methods, as
-    path_manifest.methods gives them, from the paths taken, as the recorder
-    counts them; side.js moves each into the rail beside its def."""
-    tree = ast.parse(source)
-    ends = {
-        node.lineno: node.end_lineno
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    arms = {
-        node.lineno: _if_parts(source, node) for node in ast.walk(tree) if isinstance(node, ast.If)
-    }
-    return "\n".join(
-        _grid(site, method, taken.get(site, {}), ends, arms) for site, method in methods.items()
-    )
-
-
-def _if_parts(source, node):
-    """The lines of an if's parts: head, its if and predicate; then, its
-    then arm; else, its else (or elif) through its arm. Each is [first,
-    last], None when absent. Python has no end keyword, so no end."""
-    start = node.lineno
-    then_arm = [node.body[0].lineno, node.body[-1].end_lineno]
-    else_part = None
-    if node.orelse:
-        first = node.orelse[0]
-        if isinstance(first, ast.If) and len(node.orelse) == 1:
-            else_part = [first.lineno, node.end_lineno]
-        else:
-            else_part = [_else_line(source, first.lineno), node.orelse[-1].end_lineno]
-    body = min(then_arm[0], else_part[0] if else_part else then_arm[0])
-    return {"head": [start, max(start, body - 1)], "then": then_arm, "else": else_part, "end": None}
-
-
-def _else_line(source, first):
-    """The line of the else keyword before the statement on line first."""
-    lines = source.splitlines()
-    number = first - 1
-    while number > 1 and not lines[number - 1].strip().startswith("else"):
-        number -= 1
-    return number
-
-
-def _grid(site, method, taken, ends, arms):
-    """One function's grid: its calls row, level with its def, then a row
-    per decision, level with that decision's line."""
-    first = int(site.split(":")[-2])
-    every = possible(method.decisions)
-    ordered = [
-        path
-        for _, path in sorted(
-            enumerate(every), key=lambda item: (1 if tuple(item[1]) in taken else 0, item[0])
-        )
-    ]
-    missing = sum(1 for path in every if tuple(path) not in taken)
-    rows = [_calls_row(first, ordered, taken, method, len(every) - missing)]
-    rows += [
-        _decision_row(decision, index, ordered, taken, arms)
-        for index, decision in enumerate(method.decisions)
-    ]
-    status = "covered" if missing == 0 else "gaps"
-    attrs = (
-        f'id="paths-{first}" data-first="{first}" data-col="{site.split(":")[-1]}"'
-        f' data-last="{ends.get(first, first)}" data-status="{status}"'
-    )
-    return f'<div class="pathgrid" {attrs} hidden="hidden">{"".join(rows)}</div>'
-
-
-def _calls_row(first, ordered, taken, method, seen):
-    """The row level with the def: how many calls took each path,
-    never-taken ones marked."""
-    cells = "".join(
-        f'<span class="{"pcell never" if taken.get(tuple(path), 0) == 0 else "pcell taken"}">'
-        f"{taken.get(tuple(path), 0)}</span>"
-        for path in ordered
-    )
-    name = escape(method.name)
-    label = f'<span class="plabel">{seen}/{len(ordered)}</span>'
-    title = f' title="{name}: {seen} of {len(ordered)} paths taken"'
-    return f'<div class="prow calls" data-line="{first}"{title}>{label}{cells}</div>'
-
-
-def _decision_row(decision, index, ordered, taken, arms):
-    """The row level with a decision: T or F for each path that makes it,
-    those of never-taken paths marked, blank for a path that ended before
-    it."""
-    cells = []
-    for path in ordered:
-        if index >= len(path):
-            cells.append('<span class="pcell ended"></span>')
-            continue
-        outcome = path[index]
-        never = "" if tuple(path) in taken else " never"
-        cells.append(
-            f'<span class="pcell {str(outcome).lower()}{never}">{"T" if outcome else "F"}</span>'
-        )
-    arm = arms.get(decision.line, {})
-    parts = " ".join(
-        f'data-{part}="{",".join(str(n) for n in arm[part]) if arm.get(part) else ""}"'
-        for part in ("head", "then", "else", "end")
-    )
-    label = f'<span class="plabel">{decision.line}</span>'
-    return f'<div class="prow" data-line="{decision.line}" {parts}>{label}{"".join(cells)}</div>'

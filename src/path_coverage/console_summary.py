@@ -7,14 +7,13 @@ from . import totals as path_totals
 from .summary import matches, path_of
 
 
-def lines(paths, methods=None, taken=None, groups=None):
+def lines(paths, cards=None, groups=None):
     """The summary lines of paths (as result.paths gives them) and, when
-    methods (as path_manifest.methods gives them) are given, as they are
-    when methods are measured, of methods, with taken the paths the
-    recorder counted; groups is {name: [glob, ...]}."""
+    cards, {def site: [taken, size]}, are given, as they are when methods
+    are measured, of cards; groups is {name: [glob, ...]}."""
     if not groups:
-        return _totals_lines(totals(paths, methods, taken))
-    return grouped_lines(group_totals(paths, methods, taken, groups))
+        return _totals_lines(totals(paths, cards))
+    return grouped_lines(group_totals(paths, cards, groups))
 
 
 def grouped_lines(named):
@@ -28,19 +27,19 @@ def grouped_lines(named):
     return out
 
 
-def totals(paths, methods, taken):
+def totals(paths, cards):
     """{"decisions": [taken, possible]} of paths, with "methods": [taken,
-    possible] of methods when methods are given."""
+    possible] of cards when cards are given."""
     result = {"decisions": path_totals.decisions(paths)}
-    if methods is not None:
-        result["methods"] = path_totals.methods(methods, taken or {})
+    if cards is not None:
+        result["methods"] = path_totals.methods(cards)
     return result
 
 
-def group_totals(paths, methods, taken, groups):
-    """{group name: totals} of each group's own sites and methods alone."""
+def group_totals(paths, cards, groups):
+    """{group name: totals} of each group's own sites and cards alone."""
     return {
-        name: totals(_own(paths, globs), None if methods is None else _own(methods, globs), taken)
+        name: totals(_own(paths, globs), None if cards is None else _own(cards, globs))
         for name, globs in groups.items()
     }
 

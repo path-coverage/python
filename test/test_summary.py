@@ -1,4 +1,3 @@
-from path_coverage.path_manifest import Decision, PathMethod
 from path_coverage.summary import files, groups, total
 
 
@@ -25,22 +24,20 @@ def test_1a6f0c01():
 
 
 def test_1a6f0c02():
-    """Example: fee.py's fee with two decisions, called with True then
-    False only, and kata.py with no function of two decisions
+    """Example: fee.py's cards, fee's 3 of 6 paths taken and tax's 2 of
+    3, and kata.py with no function
     Methods are measured, so each row has a methods total.
-    fee.py's is [1, 4], one of fee's four paths.
-    kata.py's is [0, 0], as it has no function's paths."""
+    fee.py's is its cards added up, [5, 9].
+    kata.py's is [0, 0], as it has no card."""
     paths = {
         "src/fee.py:7:4": _paths(1, 0),
         "src/fee.py:9:4": _paths(0, 1),
         "src/kata.py:3:11": _paths(1, 1),
     }
-    fee = PathMethod(name="fee", decisions=(Decision(line=7), Decision(line=9)))
-    methods = {"src/fee.py:4:0": fee}
-    taken = {"src/fee.py:4:0": {(True, False): 1}}
-    rows = files(paths, methods, taken)
+    cards = {"src/fee.py:4:0": [3, 6], "src/fee.py:12:0": [2, 3]}
+    rows = files(paths, cards)
     assert {row["path"]: row["methods"] for row in rows} == {
-        "src/fee.py": [1, 4],
+        "src/fee.py": [5, 9],
         "src/kata.py": [0, 0],
     }
 

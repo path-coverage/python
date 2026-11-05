@@ -1,5 +1,4 @@
 from path_coverage.console_summary import group_totals, grouped_lines, lines
-from path_coverage.path_manifest import Decision, PathMethod
 
 GROUPS = {"code": ["src/**/*.py"], "test": ["test/**/*.py"]}
 
@@ -43,14 +42,12 @@ def test_7c3d9102():
 
 
 def test_7c3d9103():
-    """Example: fee in src/fee.py with two decisions, called with True then
-    False only, and groups code and test
+    """Example: fee's card in src/fee.py, 1 of its 4 paths taken, and
+    groups code and test
     Each group has a methods line too: code has fee's 1 / 4.
-    test, with no method of two decisions, has 0 / 0, shown as -."""
-    fee = PathMethod(name="fee", decisions=(Decision(line=4), Decision(line=7)))
-    methods = {"src/fee.py:1:0": fee}
-    taken = {"src/fee.py:1:0": {(True, False): 1}}
-    assert lines({}, methods, taken, GROUPS) == [
+    test, with no function, has 0 / 0, shown as -."""
+    cards = {"src/fee.py:1:0": [1, 4]}
+    assert lines({}, cards, GROUPS) == [
         "code:",
         "  Path coverage within decisions: 0 / 0 (-)",
         "  Path coverage within methods: 1 / 4 (25.00%)",
@@ -65,7 +62,7 @@ def test_7c3d9104():
     code totals both sites' paths; test totals none."""
     taken_once = {"path": [True], "count": 1}
     paths = {"src/a.py:1:0": [taken_once], "src/b.py:1:0": [taken_once]}
-    assert group_totals(paths, None, None, GROUPS) == {
+    assert group_totals(paths, None, GROUPS) == {
         "code": {"decisions": [2, 2]},
         "test": {"decisions": [0, 0]},
     }
