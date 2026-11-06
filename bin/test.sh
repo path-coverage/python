@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the tests with the Python in server's .venv_fast_test, writing nothing
+# Runs the tests with the Python in the repo's .venv, writing nothing
 # into the repo (no .pytest_cache, no __pycache__) but the self-coverage
 # report in reports/paths.
 set -Eeu
@@ -8,7 +8,7 @@ if [ "${1:-}" = "-h" ]; then
   cat <<'EOF'
 Usage: bin/test.sh [PYTEST_ARGS...]
 
-Runs the tests in test/ against src/, using server's .venv_fast_test python
+Runs the tests in test/ against src/, using the repo's .venv python
 (override with PYTHON=...), with path_coverage measuring its own src/ and
 test/ (a renamed copy of src/path_coverage, test/self_coverage.py, does the
 measuring), its report written to reports/paths/index.html.
@@ -28,7 +28,7 @@ EOF
 fi
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly PYTHON="${PYTHON:-${ROOT}/../server/.venv_fast_test/bin/python}"
+readonly PYTHON="${PYTHON:-${ROOT}/.venv/bin/python}"
 cd "${ROOT}"
 export PYTHONDONTWRITEBYTECODE=1
 PYTHONPATH="${ROOT}/src:${ROOT}/test" \

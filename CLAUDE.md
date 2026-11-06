@@ -1,7 +1,9 @@
 # path_coverage
 
 - `bin/test.sh` runs the tests and self-coverage. The collector's tests
-  bind local ports. A full run ends with each group's totals.
+  bind local ports. A full run ends with each group's totals. It uses
+  the repo's `.venv`: `python3 -m venv .venv` then
+  `.venv/bin/pip install pytest`.
 - The file page's panel is a *card*. Never call it a popout.
 - Every site in src and test must be a card row or a top row; test
   b47e3a30 checks it.

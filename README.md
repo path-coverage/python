@@ -392,9 +392,15 @@ writes the bytecode cache, and no file on disk changes.
 
 ## Development
 
-`bin/test.sh` runs the tests with the python in a sibling `server` repo's
-`.venv_fast_test` (override with `PYTHON=...`), writing nothing into this
-repo but its self-coverage report. The collector's tests bind local ports.
+`bin/test.sh` runs the tests with the python in the repo's `.venv`
+(override with `PYTHON=...`), writing nothing into this repo but its
+self-coverage report. The collector's tests bind local ports. Make the
+`.venv` once with:
+
+```
+python3 -m venv .venv
+.venv/bin/pip install pytest
+```
 
 Every run measures path_coverage's own `src/` and `test/` with
 path_coverage. The code measured and the tool measuring are the same
