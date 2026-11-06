@@ -118,7 +118,9 @@ class _SiteFinder(ast.NodeVisitor):
             if case.guard is None:
                 clauses.append(pattern)
             else:
-                clauses.append(Condition("case", (pattern, self._leaf(case.guard))))
+                guard = case.guard
+                extent = (pattern.line, pattern.col, guard.end_lineno, guard.end_col_offset)
+                clauses.append(Condition("case", (pattern, self._leaf(guard)), extent))
         self.sites[site] = Condition("match", tuple(clauses), _extent(node))
         for case in node.cases:
             for statement in case.body:

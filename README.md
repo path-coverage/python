@@ -5,8 +5,12 @@ coverage.
 
 Status: sites cover `and`, `or`, the conditional expression,
 `if`/`elif`/`else`, `match`, comprehension filters, and `any` and `all`
-called with a generator. Each function's card has a row for every
-statement in it.
+called with a generator. Each function's card has a row for every site
+in it, and for each return and raise, as each cuts a path short.
+
+Demo: https://path-coverage.github.io/python/ shows the HTML report for
+the mock source tree in `demo/`. `bin/build_demo.sh` builds the same
+report locally, into `site/`.
 
 ## Overview
 
