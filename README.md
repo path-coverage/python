@@ -1,12 +1,20 @@
 # <img src="https://avatars.githubusercontent.com/u/353243247?v=4" alt="" width="32" height="32"> path-coverage/python
 
+- [Overview](#overview)
+- [Reading the HTML](#reading-the-html)
+- [Getting started](#getting-started)
+- [Use when you cannot edit the code!](#use-when-you-cannot-edit-the-code)
+- [What a run reports](#what-a-run-reports)
+  - [Decisions](#decisions)
+  - [Methods](#methods)
+  - [Reporters](#reporters)
+- [How it works](#how-it-works)
+- [Roadmap](#roadmap)
+- [Constraints](#constraints)
+- [Development](#development)
+
 Path coverage for Python, to run alongside coverage.py's line and branch
 coverage.
-
-Status: decisions cover `and`, `or`, the conditional expression,
-`if`/`elif`/`else`, `match`, comprehension filters, and `any` and `all`
-called with a generator. Each function's card has a row for every decision
-in it, and for each return and raise, as each cuts a path short.
 
 Demo: https://path-coverage.github.io/python/ shows the HTML report for
 the mock source tree in `demo/`. `make demo` builds and opens the same
@@ -14,16 +22,17 @@ report locally.
 
 ## Overview
 
-A *decision* is one decision in your code: an `and`, `or`, `if`, conditional
-expression, `match`, filter, or an `any` or `all` of a generator. Each way
-it can go is a *path*. For example
+A *decision* is a choice in your code, eg an `and`, `or`, `if` or
+`match`. Each way it can go is a *path*. For example
 
 ```python
-len(name) > 2 and name.isascii()
+def discount(member, coupon):
+    return 10 if member or coupon else 0
 ```
 
-has three paths: true then true, true then false, and false alone, as
-`and` then skips its right side.
+has three paths: a member, a non-member with a coupon, and neither. Tests
+calling `discount(True, None)` and `discount(False, None)` cover every line
+and both branches of the conditional, yet no test ever tried a coupon.
 
 Line and branch coverage can be 100% while a path was never taken.
 path_coverage counts how often each path was taken: alone, each decision's
@@ -52,11 +61,12 @@ its counts of paths not taken and taken. Code outside every function gets
 a card too, titled by the class holding it, or `file`.
 
 Clicking a decision's row opens it:
-- on the left is the decision's code, as a tree.
+- on the left are the decision's parts, one per row: its operator, eg
+  `and`, then each operand it tests, nested operators indented under it.
 - on the right is one column for each possible path through it.
   - the column's head is `0` for a path never taken, and `*` for one
     taken (hover for its count). Look for zeros!
-  - the marks in a column line up with the tree's rows, as below.
+  - the marks in a column line up with those rows, as below.
 
 ### Boolean: `T` `F`
 
@@ -101,7 +111,7 @@ path_coverage.start(
     skip=["src/migrations/**/*.py"],   # except these, though a cover glob matches them
     coverage_dir="/tmp/coverage",      # where path_coverage.json is written
     report=["gaps", "summary"],        # the reporters run at exit (default ["gaps"])
-    groups={                           # optional: each group's own tab, summary and totals
+    groups={                           # optional: each group's own summary and totals
         "models": ["src/models/**/*.py"],
         "routes": ["src/routes/**/*.py"],
     },
@@ -382,6 +392,13 @@ file as written. The rewrite happens in memory: the loader neither reads nor
 writes the bytecode cache, and no file on disk changes.
 
 ## Roadmap
+
+Decisions covered now: `and`, `or`, the conditional expression,
+`if`/`elif`/`else`, `match`, comprehension filters, and `any` and `all`
+called with a generator. Each function's card has a row for every decision
+in it, and for each return and raise, as each cuts a path short.
+
+Next:
 
 - `next()` with a generator and a default, eg
   `next((o for o in orders if o.late), None)`: whether it found an item or
