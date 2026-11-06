@@ -191,37 +191,9 @@ a run whose kinds differ from those of the installed version.
 
 As the process exits (or, under the pytest plugin, as pytest finishes):
 
-- `path_coverage.json` is written to `coverage_dir`: every decision of every
-  covered file, with each leaf's true and false counts under `decisions`, each
-  decision's paths under `paths`, each card under `cards`, the statements
-  reached under `reached`, and the paths taken of all possible under
-  `totals`, as [taken, possible]: `alone`, `combined`, and, with groups,
-  each group's own under `groups`. It also names the kinds of decision
-  measured under `kinds`.
-- `path_coverage.source.json` is written beside it: each covered file's
-  lines and their coloured tokens, and where each decision is and its fold's
-  rows, so html-reporter can draw the pages without parsing Python.
-
-```json
-"paths": {
-  "src/kata.py:3:11": {
-    "leaves": [["3:11", "3:17"], ["3:22", "3:30"]],
-    "taken": [
-      { "path": [true, true], "count": 2 },
-      { "path": [true, false], "count": 0 },
-      { "path": [false, null], "count": 1 }
-    ]
-  }
-},
-"totals": {
-  "alone": [41, 52], "combined": [90, 116],
-  "groups": {
-    "models": { "alone": [30, 36], "combined": [70, 82] },
-    "routes": { "alone": [11, 16], "combined": [20, 34] }
-  }
-}
-```
-
+- `path_coverage.json` and `path_coverage.source.json` are written to
+  `coverage_dir`. Their keys, with examples, are in
+  [path-coverage/schemas](https://github.com/path-coverage/schemas#path_coveragejson).
 - `gaps` prints one line per decision path never taken, in manifest order,
   naming the outcome of each leaf on it:
 
@@ -314,27 +286,17 @@ tags = record.get("tags") or []   # leaf 1: never evaluated, or no gap
 ### Methods
 
 Each function has a card, named by the `path:line:column` of its `def`,
-with a row per statement, in the order written: its body's, and those of
-each arm, loop, `with`, `try` and class inside it. A nested `def` is one
-row, as its body runs only when called; it has a card of its own. A row
-that is a decision counts its paths; any other row is one path, taken when the
-statement is reached. A function's total adds up its rows. A file's decisions
-outside every function get a card for each span of their lines.
+with a row for each statement that shapes its paths: each decision, and
+each `return` or `raise`, which ends a path. Any other statement, eg
+`x = 1`, runs exactly when what holds it does, so is no row. A nested
+`def` has a card of its own, as its body runs only when called. A
+decision's row counts its paths; a `return` or `raise` row is one path,
+taken when it is reached. A function's total adds up its rows. A file's
+decisions outside every function get a card for each span of their
+lines.
 
-The JSON report's `cards` hold each card's rows:
-
-```json
-"cards": {
-  "label.py:1:0": {
-    "name": "label", "first": 1, "last": 4,
-    "rows": [
-      { "at": "2:04", "top": "if", "paths": 2, "taken": 1, "decision": "label.py:2:4" },
-      { "at": "3:08", "top": "return", "paths": 1, "taken": 1, "decision": null },
-      { "at": "4:04", "top": "return", "paths": 1, "taken": 0, "decision": null }
-    ]
-  }
-}
-```
+The JSON report's `cards` hold each card's rows, its `ways` and its
+`calls`, and its `tree` says how those rows nest.
 
 ### Reporters
 
