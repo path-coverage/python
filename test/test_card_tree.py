@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from path_coverage import card_tree, manifest, site_paths
+from path_coverage import card_tree, manifest, decision_paths
 
 TOP = (None, None, None, None, None)
 
@@ -16,7 +16,7 @@ def _places(source):
 def test_5be7c001():
     """Example: pick, an if of a and b holding an if of b, each arm of
     which returns.
-    Each row names its parent, the site whose arm it is in, that arm, and
+    Each row names its parent, the decision whose arm it is in, that arm, and
     on, the parent's possible paths it runs on, by index: the inner if runs
     only on the outer's one path that takes its then arm. A row at the top
     of the function has none of these. The and, the outer if's predicate,
@@ -76,7 +76,7 @@ def test_5be7c003():
 def test_5be7c004():
     """Example: each_if, an and of a and a conditional expression of b
     whose else arm is an any.
-    A row inside an arm of a site runs only on that site's paths that take
+    A row inside an arm of a decision runs only on that decision's paths that take
     the arm: the any runs where b was false. The conditional expression
     itself is a row, the whole of the and's second leaf, giving it a value
     not known on each of its paths, as neither arm's truthiness is noted;
@@ -91,7 +91,7 @@ def test_5be7c004():
 
 def test_5be7c006():
     """Example: size, a conditional expression whose else arm is another.
-    The inner conditional expression is a site of its own, not part of the
+    The inner conditional expression is a decision of its own, not part of the
     outer one's, so it is a row of its own, placed in the outer's else arm,
     on its false path."""
     source = 'def size(n, big):\n    return "big" if big else ("some" if n > 1 else "none")\n'
@@ -131,13 +131,13 @@ def _misplaced(source):
     """Each misfit of every card of source, as if it were k.py: a parent
     that is no row of its card, a row on no path, a path its parent does
     not have, and a row that is its own ancestor."""
-    sites = manifest.sites(source, "k.py")
+    decisions = manifest.decisions(source, "k.py")
     found = []
     for rows in card_tree.of(source, "k.py").values():
         inner = [place for place in rows.values() if place["parent"]]
         for place in inner:
             parent = place["parent"]
-            possible = range(len(site_paths.possible(sites[f"k.py:{parent}"])))
+            possible = range(len(decision_paths.possible(decisions[f"k.py:{parent}"])))
             found += sorted({parent} - set(rows))
             found += ["no path"] * (place["on"] == [])
             found += sorted(set(place["on"]) - set(possible))

@@ -14,7 +14,7 @@ from path_coverage import collector
 from path_coverage.collector import serve
 from path_coverage.post import deliver
 
-REPORT = {"sites": {"src/kata.py:3:11": [{"truthy": 1, "falsy": 1}]}}
+REPORT = {"decisions": {"src/kata.py:3:11": [{"truthy": 1, "falsy": 1}]}}
 SRC = str(Path(__file__).parent.parent / "src")
 
 
@@ -53,7 +53,7 @@ def test_6c2b8e01(tmp_path):
     they arrive, ready to be merged once every run is done."""
     server, port, stop, thread = _serving(tmp_path)
     assert deliver(json.dumps(REPORT), f"http://127.0.0.1:{port}/runs") == 200
-    assert deliver(json.dumps({"sites": {}}), f"http://127.0.0.1:{port}/runs") == 200
+    assert deliver(json.dumps({"decisions": {}}), f"http://127.0.0.1:{port}/runs") == 200
     _stopped(server, stop, thread)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["run-0001.json", "run-0002.json"]
     assert json.loads((tmp_path / "run-0001.json").read_text()) == REPORT
@@ -74,7 +74,7 @@ def test_6c2b8e03(tmp_path):
     The body is not a whole report, so nothing is saved.
     The reply is 400."""
     server, port, stop, thread = _serving(tmp_path)
-    reply = _exchange(port, b'POST /runs HTTP/1.1\r\nContent-Length: 120\r\n\r\n{"sites":{')
+    reply = _exchange(port, b'POST /runs HTTP/1.1\r\nContent-Length: 120\r\n\r\n{"decisions":{')
     _stopped(server, stop, thread)
     assert reply == "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
     assert list(tmp_path.iterdir()) == []

@@ -30,5 +30,5 @@ def test_4b7a2e03():
 def test_4b7a2e02():
     """Example: the kinds measured
     Their names, in order, are a report's fingerprint.
-    Runs measuring different kinds list a site's paths differently."""
+    Runs measuring different kinds list a decision's paths differently."""
     assert kinds.names() == ["block", "case", "chain", "choice"]

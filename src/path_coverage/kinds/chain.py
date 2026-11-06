@@ -1,6 +1,6 @@
 """A chain of one operator, eg a and b and c."""
 
-from .. import site_paths
+from .. import decision_paths
 
 # The outcome of an operand on which each operator goes on to its next
 # operand; any other outcome ends the chain there. A case goes on to its
@@ -21,13 +21,13 @@ class Chain:
         goes on with."""
         first, *rest = node.operands
         goes_on = CONTINUES_ON[node.operator]
-        ways = site_paths.walk(first)
+        ways = decision_paths.walk(first)
         for operand in rest:
             ways = [
                 way
                 for outcomes, value in ways
                 for way in (
-                    [({**outcomes, **more}, after) for more, after in site_paths.walk(operand)]
+                    [({**outcomes, **more}, after) for more, after in decision_paths.walk(operand)]
                     if value == goes_on
                     else [(outcomes, value)]
                 )

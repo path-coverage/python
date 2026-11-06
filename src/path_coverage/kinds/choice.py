@@ -1,7 +1,7 @@
 """A condition whose predicate picks an arm: a ternary, an if or a
 comprehension's filter."""
 
-from .. import site_paths
+from .. import decision_paths
 
 # The predicate outcome on which each choice takes its then arm.
 THEN_ON = {"ternary": True, "if": True, "filter": True}
@@ -29,13 +29,13 @@ class Choice:
         predicate, then_arm, *rest = node.operands
         else_arm = rest[0] if rest else None
         ways = []
-        for outcomes, value in site_paths.walk(predicate):
+        for outcomes, value in decision_paths.walk(predicate):
             arm = then_arm if value == THEN_ON[node.operator] else else_arm
             body = arm.body if arm else None
             if body is None:
                 ways.append((outcomes, None))
                 continue
-            ways.extend(({**outcomes, **more}, None) for more, _ in site_paths.walk(body))
+            ways.extend(({**outcomes, **more}, None) for more, _ in decision_paths.walk(body))
         return ways
 
     def arm_label(self, arm, choice):

@@ -2,7 +2,7 @@
 counts, worked out from its source, so it can draw the file's page without
 parsing the source itself."""
 
-from . import code_tokens, fold_rows, site_locations, site_tree, summary
+from . import code_tokens, fold_rows, decision_locations, decision_tree, summary
 
 # The version of the source report's shape.
 SCHEMA = 1
@@ -11,12 +11,12 @@ SCHEMA = 1
 def of(files, paths, cards, groups):
     """The source report of a run: no operators ignored, the covered files
     of each of groups, {name: [glob, ...]} or None, each top of the rows of
-    cards, {card site: card}, coloured, and each of files', {path: (source,
-    sites)}, lines and sites, each site's paths as paths has them, its fold
+    cards, {card decision: card}, coloured, and each of files', {path: (source,
+    decisions)}, lines and decisions, each decision's paths as paths has them, its fold
     headed by its row's top."""
     rows = [row for card in cards.values() for row in card["rows"]]
-    tops = {row["site"]: row["top"] for row in rows}
-    shown = {path: _file(source, sites, paths, tops) for path, (source, sites) in files.items()}
+    tops = {row["decision"]: row["top"] for row in rows}
+    shown = {path: _file(source, decisions, paths, tops) for path, (source, decisions) in files.items()}
     return {
         "schema": SCHEMA,
         "ignored": [],
@@ -26,10 +26,10 @@ def of(files, paths, cards, groups):
     }
 
 
-def _file(source, sites, paths, tops):
-    """One file's lines and sites."""
-    shown = {name: site(source, sites, name, paths[name], tops[name]) for name in sites}
-    return {"lines": lines(source), "sites": shown}
+def _file(source, decisions, paths, tops):
+    """One file's lines and decisions."""
+    shown = {name: decision(source, decisions, name, paths[name], tops[name]) for name in decisions}
+    return {"lines": lines(source), "decisions": shown}
 
 
 def lines(source):
@@ -39,22 +39,22 @@ def lines(source):
     return [{"text": text, "tokens": tokens.get(number, [])} for number, text in enumerate(source.splitlines(), start=1)]
 
 
-def site(source, sites, name, paths, top):
+def decision(source, decisions, name, paths, top):
     """Example: ok(id) and new(id) on line 2 gives span [2, 2].
-    The site named name, of sites, {name: Condition}, in source: the
+    The decision named name, of decisions, {name: Condition}, in source: the
     [first, last] lines it spans, from the line its code starts on, and its
     fold's rows, headed by top, its row's top, a column for each of paths,
     [{"path", "count"}], in their order, with no counts."""
-    condition = sites[name]
+    condition = decisions[name]
     span = [condition.extent[0], condition.leaves()[-1].end_line]
     return {"span": span, "fold": _fold(source, condition, paths, top)}
 
 
 def _fold(source, condition, paths, top):
-    """The rows of condition's fold, headed by top, its site row with no
+    """The rows of condition's fold, headed by top, its decision row with no
     counts."""
-    tree = site_tree.node(source, condition, [taken["path"] for taken in paths])
-    located = site_locations.located(source, condition, tree)
-    else_at = site_locations.else_at(source, condition)
+    tree = decision_tree.node(source, condition, [taken["path"] for taken in paths])
+    located = decision_locations.located(source, condition, tree)
+    else_at = decision_locations.else_at(source, condition)
     own, *rest = fold_rows.rows({**located, "counts": None, "else_at": else_at, "label": top})
     return [{key: value for key, value in own.items() if key != "counts"}, *rest]

@@ -37,7 +37,7 @@ def of(source):
 
 
 def code(text):
-    """text, a fragment of code on one line, eg a site tree's operand or a
+    """text, a fragment of code on one line, eg a decision tree's operand or a
     card's top, as page data holds it: its text and the [from, to, class]
     of each range coloured as the code it is part of. Example: "if" gives
     {"text": "if", "tokens": [[0, 2, "k"]]}."""

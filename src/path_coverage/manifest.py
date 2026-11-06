@@ -1,4 +1,4 @@
-"""Finds every condition site in source without running it: each outermost
+"""Finds every condition decision in source without running it: each outermost
 `and` or `or`, with the conditions nested in it."""
 
 import ast
@@ -26,7 +26,7 @@ class Leaf:
 @dataclass(frozen=True)
 class Arm:
     """One arm of a choice: kind is "then" or "else", and body the Condition
-    it holds, which is part of the choice's site, or None for a plain arm."""
+    it holds, which is part of the choice's decision, or None for a plain arm."""
 
     kind: str
     body: object = None
@@ -47,7 +47,7 @@ class Arm:
 
 @dataclass(frozen=True)
 class Condition:
-    """One site's condition: its operator as written and its operands. A
+    """One decision's condition: its operator as written and its operands. A
     ternary's operands are its predicate, then its then and else Arms."""
 
     operator: str
@@ -67,17 +67,17 @@ class Condition:
         ]
 
 
-# The nodes a choice's arm may hold as part of the choice's own site. A
-# conditional expression in an arm is a site of its own, so each row of a
+# The nodes a choice's arm may hold as part of the choice's own decision. A
+# conditional expression in an arm is a decision of its own, so each row of a
 # card is one choice, nested in the arm it runs in.
 FOLDABLE = (ast.BoolOp,)
 
 
-class _SiteFinder(ast.NodeVisitor):
-    """Collects each site, in source order, and its Condition."""
+class _DecisionFinder(ast.NodeVisitor):
+    """Collects each decision, in source order, and its Condition."""
 
     def __init__(self, path, keywords, builtins, operators):
-        """Starts with no sites found, naming sites after path; keywords are
+        """Starts with no decisions found, naming decisions after path; keywords are
         where the source's if keywords are, as if_keywords gives them,
         builtins the block calls' names the module leaves as builtins, and
         operators where its and, or and if keywords are, as
@@ -86,31 +86,31 @@ class _SiteFinder(ast.NodeVisitor):
         self.keywords = keywords
         self.builtins = builtins
         self.operators = operators
-        self.sites = {}
+        self.decisions = {}
 
     def visit_Call(self, node):
-        """Notes a block call, eg any(o.late for o in orders), as a site,
+        """Notes a block call, eg any(o.late for o in orders), as a decision,
         named where the call starts: its items, the iterable of its
         generator's first for, then its answer, the generator's element.
-        The sites inside the generator follow it. Any other call is no
-        site, though the sites inside it are."""
+        The decisions inside the generator follow it. Any other call is no
+        decision, though the decisions inside it are."""
         generator = block_generator(node, self.builtins)
         if generator is None:
             self.generic_visit(node)
             return
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
-        self.sites[site] = None
+        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        self.decisions[decision] = None
         self.visit(generator)
         operands = (_leaf(generator.generators[0].iter), _leaf(generator.elt))
-        self.sites[site] = Condition(node.func.id, operands, _extent(node))
+        self.decisions[decision] = Condition(node.func.id, operands, _extent(node))
 
     def visit_Match(self, node):
-        """Notes a match statement as a site, named at its keyword: its
+        """Notes a match statement as a decision, named at its keyword: its
         cases, in order, each its pattern's leaf, true when it matches, and,
-        when guarded, a `case` of that leaf and its guard. The sites inside
+        when guarded, a `case` of that leaf and its guard. The decisions inside
         its subject and its cases' bodies follow it."""
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
-        self.sites[site] = None
+        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        self.decisions[decision] = None
         self.visit(node.subject)
         clauses = []
         for case in node.cases:
@@ -121,47 +121,47 @@ class _SiteFinder(ast.NodeVisitor):
                 guard = case.guard
                 extent = (pattern.line, pattern.col, guard.end_lineno, guard.end_col_offset)
                 clauses.append(Condition("case", (pattern, self._leaf(guard)), extent))
-        self.sites[site] = Condition("match", tuple(clauses), _extent(node))
+        self.decisions[decision] = Condition("match", tuple(clauses), _extent(node))
         for case in node.cases:
             for statement in case.body:
                 self.visit(statement)
 
     def visit_comprehension(self, node):
-        """Notes each filter of a comprehension's for as a site, named at
+        """Notes each filter of a comprehension's for as a decision, named at
         its if keyword, ast giving no place for it: its test, then its then
         arm, which keeps the item, and its else arm, which drops it."""
         self.visit(node.target)
         self.visit(node.iter)
         for test in node.ifs:
             line, col = keyword_before(self.keywords, test)
-            site = f"{self.path}:{line}:{col}"
-            self.sites[site] = None
+            decision = f"{self.path}:{line}:{col}"
+            self.decisions[decision] = None
             predicate = self._leaf(test)
             extent = (line, col, test.end_lineno, test.end_col_offset)
             operands = (predicate, Arm("then"), Arm("else"))
-            self.sites[site] = Condition("filter", operands, extent)
+            self.decisions[decision] = Condition("filter", operands, extent)
 
     def visit_BoolOp(self, node):
-        """Notes node as a site, named where site_at says. It claims its
-        place first, so a site found inside one of its leaves follows it."""
-        line, col = site_at(self.operators, node)
-        site = f"{self.path}:{line}:{col}"
-        self.sites[site] = None
-        self.sites[site] = self._condition(node)
+        """Notes node as a decision, named where decision_at says. It claims its
+        place first, so a decision found inside one of its leaves follows it."""
+        line, col = decision_at(self.operators, node)
+        decision = f"{self.path}:{line}:{col}"
+        self.decisions[decision] = None
+        self.decisions[decision] = self._condition(node)
 
     visit_IfExp = visit_BoolOp
 
     def visit_If(self, node):
-        """Notes an if or elif statement as a site, named at its keyword: its
+        """Notes an if or elif statement as a decision, named at its keyword: its
         predicate, then its then arm, then its else arm when it has one (an
         elif being the else arm of the if before it). Its arms are plain, as
-        they are statements; the sites inside them follow it."""
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
-        self.sites[site] = None
+        they are statements; the decisions inside them follow it."""
+        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        self.decisions[decision] = None
         predicate = self._leaf(node.test)
         then = Arm("then", extent=_statements_extent(node.body))
         arms = (then, Arm("else", extent=_statements_extent(node.orelse))) if node.orelse else (then,)
-        self.sites[site] = Condition("if", (predicate, *arms), _extent(node))
+        self.decisions[decision] = Condition("if", (predicate, *arms), _extent(node))
         for statement in node.body + node.orelse:
             self.visit(statement)
 
@@ -188,7 +188,7 @@ class _SiteFinder(ast.NodeVisitor):
 
     def _arm(self, kind, node):
         """An Arm holding node's condition when node is one a choice folds
-        into its site, else a plain Arm, once any site inside node is
+        into its decision, else a plain Arm, once any decision inside node is
         noted."""
         at = _extent(node)
         if isinstance(node, FOLDABLE):
@@ -198,22 +198,22 @@ class _SiteFinder(ast.NodeVisitor):
 
     def _operand(self, node):
         """node as a nested Condition when it is an `and`/`or`, else a Leaf,
-        once any site inside the leaf is noted too."""
+        once any decision inside the leaf is noted too."""
         if isinstance(node, ast.BoolOp):
             return self._condition(node)
         return self._leaf(node)
 
     def _leaf(self, node):
-        """node as one Leaf, once any site in it is noted, node itself
+        """node as one Leaf, once any decision in it is noted, node itself
         included: a choice's predicate, so an `and`/`or` that is the whole of
-        it is a site of its own, each row of a card one decision."""
+        it is a decision of its own, each row of a card one decision."""
         self.visit(node)
         return Leaf(
             node.lineno, node.col_offset, node.end_lineno, node.end_col_offset, _only(node)
         )
 
 
-# The builtins whose call of a generator is a site: each stops early, at
+# The builtins whose call of a generator is a decision: each stops early, at
 # the first item whose answer decides it.
 BLOCK_CALLS = ("any", "all")
 
@@ -316,14 +316,14 @@ def _display(items, plain):
     return "truthy" if any(plain) else None
 
 
-def sites(source, path):
-    """{site: Condition} for each site in source, each site named
-    "path:line:col" of where site_at places it."""
+def decisions(source, path):
+    """{decision: Condition} for each decision in source, each decision named
+    "path:line:col" of where decision_at places it."""
     tree = ast.parse(source)
     operators = operator_keywords(source)
-    finder = _SiteFinder(path, if_keywords(source), builtin_blocks(tree), operators)
+    finder = _DecisionFinder(path, if_keywords(source), builtin_blocks(tree), operators)
     finder.visit(tree)
-    return finder.sites
+    return finder.decisions
 
 
 def if_keywords(source):
@@ -339,8 +339,8 @@ def if_keywords(source):
 
 def operator_keywords(source):
     """[(line, col), ...] of every and, or and if keyword in source, in
-    order, columns counted as if_keywords counts them: where site_at names
-    the operators' sites."""
+    order, columns counted as if_keywords counts them: where decision_at names
+    the operators' decisions."""
     lines = source.splitlines(keepends=True)
     return [
         (line, len(lines[line - 1][:col].encode()))
@@ -349,11 +349,11 @@ def operator_keywords(source):
     ]
 
 
-def site_at(operators, node):
-    """The (line, col) that names node's site, an and, an or or a
+def decision_at(operators, node):
+    """The (line, col) that names node's decision, an and, an or or a
     conditional expression, operators being where operator_keywords finds
     them: an and or an or at its first keyword, after its first operand; a
-    conditional expression at its if, after its then value. So no two sites
+    conditional expression at its if, after its then value. So no two decisions
     share a name, eg any(...) or b, whose any starts where the or does.
     Example: a or b at line 2, col 4 gives (2, 6)."""
     first = node.values[0] if isinstance(node, ast.BoolOp) else node.body

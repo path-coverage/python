@@ -9,17 +9,17 @@ from .source_lines import lines_of
 
 
 def of(files, operands, paths, reached):
-    """{card site: card} of every card in files, {path relative to root:
-    (source, sites)}: each function's, by its def's site, then each top
+    """{card decision: card} of every card in files, {path relative to root:
+    (source, decisions)}: each function's, by its def's decision, then each top
     card's, by its first line, as card gives them; operands and paths as
     result gives them, reached each statement's runs, None when not known.
     Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3, "ways":
     2, "calls": 1, "rows": [...]}}."""
     listed = {}
-    for path, (source, sites) in files.items():
-        listed.update(function_cards(source, (path, sites), paths, reached))
-        lines = lines_of(source, sites, operands)
-        listed.update(top_cards(source, (path, sites), lines, paths))
+    for path, (source, decisions) in files.items():
+        listed.update(function_cards(source, (path, decisions), paths, reached))
+        lines = lines_of(source, decisions, operands)
+        listed.update(top_cards(source, (path, decisions), lines, paths))
     return listed
 
 
@@ -28,42 +28,42 @@ def tree(files, operands):
     files, as of lists them, each row placed as card_tree places it: how
     the rows of each card nest. operands as result gives them."""
     nested = {}
-    for path, (source, sites) in files.items():
-        cards = {site: rows for site, rows in card_tree.of(source, path, sites).items()}
-        lines = lines_of(source, sites, operands)
+    for path, (source, decisions) in files.items():
+        cards = {decision: rows for decision, rows in card_tree.of(source, path, decisions).items()}
+        lines = lines_of(source, decisions, operands)
         for (first, _), rows in spans(source, path, lines).items():
-            cards[f"{path}:{first}:0"] = card_tree.nested(source, sites, rows)
-        nested[path] = {":".join(site.split(":")[-2:]): rows for site, rows in cards.items()}
+            cards[f"{path}:{first}:0"] = card_tree.nested(source, decisions, rows)
+        nested[path] = {":".join(decision.split(":")[-2:]): rows for decision, rows in cards.items()}
     return nested
 
 
 def function_cards(source, at, paths, reached):
-    """The cards of each function in source, at being its (path, sites), as
+    """The cards of each function in source, at being its (path, decisions), as
     of gives them: each counting its calls, its entry's runs, 0 when never
     called, None when not known."""
-    path, sites = at
+    path, decisions = at
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
     cards = {}
-    for site, rows in method_statements.of(source, path).items():
-        calls = None if reached is None else reached.get(site, 0)
-        title = (names[site], lasts[site], card_ways.card(source, sites, rows), calls)
-        cards[site] = card(site, title, rows, method_statements.taken(rows, paths, reached))
+    for decision, rows in method_statements.of(source, path).items():
+        calls = None if reached is None else reached.get(decision, 0)
+        title = (names[decision], lasts[decision], card_ways.card(source, decisions, rows), calls)
+        cards[decision] = card(decision, title, rows, method_statements.taken(rows, paths, reached))
     return cards
 
 
 def top_cards(source, at, lines, paths):
-    """The top cards of source, at being its (path, sites), its lines as
+    """The top cards of source, at being its (path, decisions), its lines as
     source_lines.lines_of gives them: one for each span of lines holding
-    sites outside every function, named for its first line's start, titled
+    decisions outside every function, named for its first line's start, titled
     by its scope, its calls None, as no call runs it."""
-    path, sites = at
+    path, decisions = at
     scope = scopes(source)
     found = {}
     for (first, last), rows in spans(source, path, lines).items():
-        site = f"{path}:{first}:0"
-        title = (scope(first), last, card_ways.card(source, sites, rows), None)
-        found[site] = card(site, title, rows, method_statements.taken(rows, paths))
+        decision = f"{path}:{first}:0"
+        title = (scope(first), last, card_ways.card(source, decisions, rows), None)
+        found[decision] = card(decision, title, rows, method_statements.taken(rows, paths))
     return found
 
 
@@ -93,27 +93,27 @@ def scopes(source):
     return scope
 
 
-def card(site, title, rows, taken):
-    """The card at site, its title (name, last, ways, calls): titled name,
-    its first line from site, ending on line last, ways the ways one call
+def card(decision, title, rows, taken):
+    """The card at decision, its title (name, last, ways, calls): titled name,
+    its first line from decision, ending on line last, ways the ways one call
     can go through it, as card_ways counts them, calls how many times it
     was called, None for a top card or when not known; and a row for each
     of rows, Statements, with its taken, as method_statements.taken gives
     them."""
     name, last, ways, calls = title
-    first = int(site.split(":")[-2])
+    first = int(decision.split(":")[-2])
     listed = [_row(statement, count) for statement, count in zip(rows, taken)]
     return {"name": name, "first": first, "last": last, "ways": ways, "calls": calls, "rows": listed}
 
 
 def _row(statement, count):
     """A card's row: statement's line:column, as its page labels it, its
-    top, its paths, count, how many were taken, and its site, None for a
-    statement that is no site."""
+    top, its paths, count, how many were taken, and its decision, None for a
+    statement that is no decision."""
     return {
         "at": method_statements.label(statement),
         "top": statement.top,
         "paths": statement.paths,
         "taken": count,
-        "site": statement.site,
+        "decision": statement.decision,
     }

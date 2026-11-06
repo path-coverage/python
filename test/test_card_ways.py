@@ -6,7 +6,7 @@ def test_3e0b9d01():
     two, two conditional expressions one after another; led, an or of an
     any whose generator's element is an and.
     The ways through a card fold its tree: rows one after another
-    multiply, and a site adds up its paths, each times the ways of the rows
+    multiply, and a decision adds up its paths, each times the ways of the rows
     it runs on that path; a row that is the whole of a leaf counts only its
     paths that give the leaf the outcome the path has.
     fee: then 3, else 1, so 4. two: 2 times 2, so 4. led: the or's true

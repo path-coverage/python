@@ -15,6 +15,6 @@ def can_edit(member):
 
 
 def is_led(members):
-    """True when some member is an active owner, or there are none: a site
+    """True when some member is an active owner, or there are none: a decision
     inside a generator, inside an or of its own."""
     return any(member.owner and member.active for member in members) or not members

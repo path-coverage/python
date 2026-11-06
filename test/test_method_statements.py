@@ -4,13 +4,13 @@ from path_coverage import manifest, method_statements
 
 
 def _statements(source):
-    """{def site: its statements' rows} for source, as if it were k.py."""
+    """{def decision: its statements' rows} for source, as if it were k.py."""
     return method_statements.of(source, "k.py")
 
 
-def _placed(source, site="k.py:1:0"):
-    """The (line, column, top) of each row of the def at site in source."""
-    return [(row.line, row.column, row.top) for row in _statements(source)[site]]
+def _placed(source, decision="k.py:1:0"):
+    """The (line, column, top) of each row of the def at decision in source."""
+    return [(row.line, row.column, row.top) for row in _statements(source)[decision]]
 
 
 SHIP = (
@@ -35,7 +35,7 @@ def test_b47e3a02():
         "def first(items):\n"
         "    return items[0]\n"
     )
-    tops = {site: [row.top for row in rows] for site, rows in _statements(source).items()}
+    tops = {decision: [row.top for row in rows] for decision, rows in _statements(source).items()}
     assert tops == {"k.py:1:0": ["raise"], "k.py:5:0": ["return"]}
 
 
@@ -52,7 +52,7 @@ def test_b47e3a03():
 
 def test_b47e3a04():
     """Example: ship, an if statement then a return
-    The if is a site, so its row is named by its operator, if.
+    The if is a decision, so its row is named by its operator, if.
     It is at the if keyword, as decision mode names it.
     Its then's statement, a call, is no row."""
     source = (
@@ -100,7 +100,7 @@ def test_b47e3a07():
 
 def test_b47e3a08():
     """Example: ship, writing an and, an if, then a return
-    A site's row has as many paths as decision mode gives it.
+    A decision's row has as many paths as decision mode gives it.
     An and of two operands has 3, an if 2.
     A return has 1."""
     source = (
@@ -139,9 +139,9 @@ def test_b47e3a09():
 
 def test_b47e3a10():
     """Example: ship, an if then a return, its then taken twice
-    A site's row names its site.
-    Its taken is how many of the site's paths were taken: 1 of 2.
-    The return names no site.
+    A decision's row names its decision.
+    Its taken is how many of the decision's paths were taken: 1 of 2.
+    The return names no decision.
     Its taken is None, not known, without reaches."""
     source = (
         "def ship(order):\n"
@@ -151,7 +151,7 @@ def test_b47e3a10():
     )
     rows = _statements(source)["k.py:1:0"]
     paths = {"k.py:2:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
-    assert [row.site for row in rows] == ["k.py:2:4", None]
+    assert [row.decision for row in rows] == ["k.py:2:4", None]
     assert method_statements.taken(rows, paths) == [1, None]
 
 
@@ -160,7 +160,7 @@ def test_b47e3a11():
     A comprehension's element runs once for each item.
     The ternary in it is a row, though the write holding it is none.
     A for loop's body runs once for each item too.
-    So tally's for is no row, but each site in its body is one."""
+    So tally's for is no row, but each decision in its body is one."""
     source = (
         "def labels(items):\n"
         "    names = ['sale' if i.sale else 'full' for i in items]\n"
@@ -177,7 +177,7 @@ def test_b47e3a11():
 
 def test_b47e3a12():
     """Example: load, reading a file in a try, rescuing a missing one
-    The try is no row, nor is its write, but a site in any of its parts
+    The try is no row, nor is its write, but a decision in any of its parts
     is one: its handler's too, as a raise runs them."""
     source = (
         "def load(path, fallback):\n"
@@ -192,7 +192,7 @@ def test_b47e3a12():
 
 def test_b47e3a14():
     """Example: a class with __init__ and an async ship
-    Each def's name, by its site, for its card's title."""
+    Each def's name, by its decision, for its card's title."""
     source = (
         "class Shop:\n"
         "    def __init__(self):\n"
@@ -209,10 +209,10 @@ def test_b47e3a14():
 
 def test_b47e3a15():
     """Example: ship, a write, a ternary, then a return
-    ship's entry is reached, named by its def's site, so its calls are
-    counted. Each row that is no site, the return, is reached where its
+    ship's entry is reached, named by its def's decision, so its calls are
+    counted. Each row that is no decision, the return, is reached where its
     statement starts. The write is no row, so not reached; the ternary is
-    a site, its paths already counted."""
+    a decision, its paths already counted."""
     assert method_statements.reaches(SHIP, "k.py") == ["k.py:1:0", "k.py:5:4"]
 
 
@@ -235,7 +235,7 @@ def test_b47e3a17():
     """Example: ship, a write, a ternary, then a return, the return
     reached twice, the ternary's then taken
     Each row is named by where it is.
-    A row that is no site is taken when its statement was reached.
+    A row that is no decision is taken when its statement was reached.
     So the ternary's taken is 1, of 2, and the return's 1; never reached,
     the return's is 0."""
     rows = _statements(SHIP)["k.py:1:0"]
@@ -260,7 +260,7 @@ def test_b47e3a18():
 
 def test_b47e3a20():
     """Example: a class with __init__, on two lines, and ship, on four
-    Each def's last line, by its site, where its card ends."""
+    Each def's last line, by its decision, where its card ends."""
     source = (
         "class Shop:\n"
         "    def __init__(self):\n"
@@ -278,10 +278,10 @@ def test_b47e3a21():
     """Example: drain, a while, a with, a match, an any, a class and
     a lambda
     A while's test is looked through, so its row is the and.
-    A with, a class and a pass are no rows, but each site in a body is one.
-    A match is a site, its row at its keyword.
+    A with, a class and a pass are no rows, but each decision in a body is one.
+    A match is a decision, its row at its keyword.
     Each body, and each case's, gives rows after its statement.
-    A lambda's body gives a row for each site in it, after its return."""
+    A lambda's body gives a row for each decision in it, after its return."""
     source = (
         "def drain(queue, path):\n"
         "    while queue.size and queue.open:\n"
@@ -341,7 +341,7 @@ def test_b47e3a24():
 def test_b47e3a25():
     """Example: ready, an and holding a ternary, and ship, an if whose
     predicate holds one
-    A site inside a site's leaf is a site of its own.
+    A decision inside a decision's leaf is a decision of its own.
     So it is a row too. Rows on one line are in the order they are named:
     the ternary, at its if, before the and, at its keyword."""
     source = (
@@ -358,7 +358,7 @@ def test_b47e3a25():
 
 def test_b47e3a26():
     """Example: ship, an if returning a paid order packed, then a return
-    A row in an arm that is no site, the first return, is reached where it
+    A row in an arm that is no decision, the first return, is reached where it
     starts too, after ship's entry."""
     source = (
         "def ship(order):\n"
@@ -380,7 +380,7 @@ SHOP = (
 
 def test_b47e3a27():
     """Example: a ternary at the top, ship, and one in class Shop
-    A site outside every function is on no function's card.
+    A decision outside every function is on no function's card.
     Each is a top row, for the card of its own lines, in order.
     ship's and is on its card, so it is no top row."""
     rows = method_statements.top_rows(SHOP, "k.py")
@@ -388,7 +388,7 @@ def test_b47e3a27():
         (1, 9, "ternary", 2),
         (5, 13, "ternary", 2),
     ]
-    assert [row.site for row in rows] == ["k.py:1:9", "k.py:5:13"]
+    assert [row.decision for row in rows] == ["k.py:1:9", "k.py:5:13"]
 
 
 def _then_taken(count):
@@ -417,23 +417,23 @@ def test_b47e3a28():
 def test_b47e3a29():
     """Example: SHOP's cards
     Each file's top level has a total too, named for line 0.
-    No function is on line 0, so every site is in some total."""
-    files = {"k.py": (SHOP, manifest.sites(SHOP, "k.py"))}
+    No function is on line 0, so every decision is in some total."""
+    files = {"k.py": (SHOP, manifest.decisions(SHOP, "k.py"))}
     cards = method_statements.cards(files, SHOP_PATHS, None)
     assert cards == {"k.py:2:0": [1, 3], "k.py:0:0": [1, 4]}
 
 
 def test_b47e3a30():
     """Example: every file of this repo's src and test
-    Each site is a row of a function's card, or a top row."""
+    Each decision is a row of a function's card, or a top row."""
     root = Path(__file__).parent.parent
     missed = {}
     for file in sorted([*root.glob("src/**/*.py"), *root.glob("test/**/*.py")]):
         source = file.read_text()
         path = file.relative_to(root).as_posix()
-        carded = {row.site for rows in method_statements.of(source, path).values() for row in rows}
-        tops = {row.site for row in method_statements.top_rows(source, path)}
-        missed[path] = sorted(set(manifest.sites(source, path)) - carded - tops)
+        carded = {row.decision for rows in method_statements.of(source, path).values() for row in rows}
+        tops = {row.decision for row in method_statements.top_rows(source, path)}
+        missed[path] = sorted(set(manifest.decisions(source, path)) - carded - tops)
     assert missed == {path: [] for path in missed}
 
 
@@ -449,7 +449,7 @@ def test_b47e3a33():
 def test_b47e3a31():
     """Example: ship, a write, a for over its items, a call, an if with an
     else, a return, and a raise in the else
-    A row that is no site and has one path tells the reader nothing, so a
+    A row that is no decision and has one path tells the reader nothing, so a
     card has no row for it: the write, the for and the call are dropped,
     though the for's body still gives rows. A return or a raise stays, as it
     cuts a path short. An if with an else is labelled if/else."""
@@ -469,8 +469,8 @@ def test_b47e3a31():
 def test_b47e3a32():
     """Example: ship, a write then an if returning early, and RATE outside
     every function
-    Each row that is no site, a return here, is reached where it starts,
-    and so is each function's entry, named by its def's site, where its
+    Each row that is no decision, a return here, is reached where it starts,
+    and so is each function's entry, named by its def's decision, where its
     body starts, so its calls can be counted."""
     source = (
         "RATE = 2\n"

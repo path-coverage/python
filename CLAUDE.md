@@ -9,7 +9,7 @@
   `path_coverage.source.json` (`source_report`); the image
   `ghcr.io/path-coverage/html-reporter`, from `../html-reporter`, draws
   the pages from those two. Change the pages there.
-- Every site in src and test must be a card row or a top row; test
+- Every decision in src and test must be a card row or a top row; test
   b47e3a30 checks it.
 - Test ids are 8 hex digits, a file's tests sharing the first 6. Grep a
   new id before using it.

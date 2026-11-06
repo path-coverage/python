@@ -1,4 +1,4 @@
-"""Where in its source each part of a site's tree is, as [line, col,
+"""Where in its source each part of a decision's tree is, as [line, col,
 end_line, end_col], so a page can light the code a fold row stands for."""
 
 import re
@@ -29,7 +29,7 @@ def else_at(source, condition):
     """[line, col, line, col] of the else keyword of condition, an if, in
     source, so hovering it can open its fold, as hovering its if does; None
     for any other condition, an if with no else, or one whose else arm is an
-    elif, as an elif is a site of its own."""
+    elif, as an elif is a decision of its own."""
     arms = [operand for operand in condition.operands if isinstance(operand, Arm) and operand.kind == "else"]
     if condition.operator != "if" or not arms:
         return None

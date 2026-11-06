@@ -1,5 +1,5 @@
-"""The tree shown under a site's line on its file's page: a grid whose
-columns are the site's paths, never taken first."""
+"""The tree shown under a decision's line on its file's page: a grid whose
+columns are the decision's paths, never taken first."""
 
 from . import kinds
 from .kinds.choice import THEN_ON
@@ -8,7 +8,7 @@ from .paths_report import segment
 
 
 def tree_of(source, condition, paths):
-    """{"operator", "counts", "cells", "operands"} for one site, from its
+    """{"operator", "counts", "cells", "operands"} for one decision, from its
     paths, [{"path", "count"}, ...]. counts are the columns' counts. Every
     node has cells, one per column: a leaf {"text", "cells"} its outcome,
     None where unreached; a condition {"operator", "cells", "operands"} its
@@ -27,7 +27,7 @@ def tree_of(source, condition, paths):
 
 def node(source, condition, outcomes):
     """The tree of condition, as tree_of builds it, over the paths of
-    outcomes, each a path's leaf outcomes, eg site_paths.possible's."""
+    outcomes, each a path's leaf outcomes, eg decision_paths.possible's."""
     return _node(source, condition, outcomes, iter(range(len(condition.leaves()))))
 
 

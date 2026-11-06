@@ -9,7 +9,7 @@ from .summary import matches, path_of
 
 def lines(paths, cards=None, groups=None):
     """The summary lines of paths (as result.paths gives them) and, when
-    cards, {def site: [taken, size]}, are given, as they are when methods
+    cards, {def decision: [taken, size]}, are given, as they are when methods
     are measured, of cards; groups is {name: [glob, ...]}."""
     if not groups:
         return _totals_lines(totals(paths, cards))
@@ -37,17 +37,17 @@ def totals(paths, cards):
 
 
 def group_totals(paths, cards, groups):
-    """{group name: totals} of each group's own sites and cards alone."""
+    """{group name: totals} of each group's own decisions and cards alone."""
     return {
         name: totals(_own(paths, globs), None if cards is None else _own(cards, globs))
         for name, globs in groups.items()
     }
 
 
-def _own(sites, globs):
-    """The entries of sites, keyed by site name, in a file matching any of
+def _own(decisions, globs):
+    """The entries of decisions, keyed by decision name, in a file matching any of
     globs."""
-    return {site: value for site, value in sites.items() if matches(path_of(site), globs)}
+    return {decision: value for decision, value in decisions.items() if matches(path_of(decision), globs)}
 
 
 def _totals_lines(named):

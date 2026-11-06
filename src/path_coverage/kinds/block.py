@@ -39,7 +39,7 @@ class Block:
 
     def value(self, operator, operands):
         """Its value in each column, from its count of items and its last
-        answer there. Its tree is always its own site's, so every column
+        answer there. Its tree is always its own decision's, so every column
         has a count of items."""
         items, answer = operands
         return [self.path_value(operator, count, last) for count, last in zip(items["cells"], answer["cells"])]

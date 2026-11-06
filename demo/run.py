@@ -51,7 +51,7 @@ editor = SimpleNamespace(owner=False, editor=True, invite_open=False, active=Tru
 team.can_edit(owner)
 team.can_edit(editor)
 
-# A site inside a generator, inside an or site of its own.
+# A decision inside a generator, inside an or decision of its own.
 team.is_led([owner])
 team.is_led([])
 

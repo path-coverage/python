@@ -1,10 +1,10 @@
-from path_coverage.manifest import sites
-from path_coverage.site_paths import possible
+from path_coverage.manifest import decisions
+from path_coverage.decision_paths import possible
 
 
-def _only_site(source):
-    """The Condition of the one site in source."""
-    [condition] = sites(source, "k.py").values()
+def _only_decision(source):
+    """The Condition of the one decision in source."""
+    [condition] = decisions(source, "k.py").values()
     return condition
 
 
@@ -13,7 +13,7 @@ def test_7b3d9101():
     An `and` goes on to its next leaf only when a leaf is true.
     So its paths are [True, True], [True, False] and [False, None].
     None marks a leaf the path never reaches."""
-    condition = _only_site("def k(id):\n    return ok(id) and new(id)\n")
+    condition = _only_decision("def k(id):\n    return ok(id) and new(id)\n")
     assert possible(condition) == [[True, True], [True, False], [False, None]]
 
 
@@ -21,7 +21,7 @@ def test_7b3d9102():
     """Example: cached(id) or fetch(id)
     An `or` goes on to its next leaf only when a leaf is false.
     So its paths are [True, None], [False, True] and [False, False]."""
-    condition = _only_site("def k(id):\n    return cached(id) or fetch(id)\n")
+    condition = _only_decision("def k(id):\n    return cached(id) or fetch(id)\n")
     assert possible(condition) == [[True, None], [False, True], [False, False]]
 
 
@@ -30,7 +30,7 @@ def test_7b3d9103():
     The nested `or` is walked inside the `and`.
     Its leaves follow ok(id), numbered left to right."""
     source = "def k(id):\n    return ok(id) and (new(id) or len(id) == 6)\n"
-    assert possible(_only_site(source)) == [
+    assert possible(_only_decision(source)) == [
         [True, True, None],
         [True, False, True],
         [True, False, False],
@@ -43,7 +43,7 @@ def test_7b3d9105():
     Both arms are plain values.
     So the paths are just the predicate's: [True] and [False]."""
     source = 'def k(user):\n    return "admin" if user.admin else "guest"\n'
-    assert possible(_only_site(source)) == [[True], [False]]
+    assert possible(_only_decision(source)) == [[True], [False]]
 
 
 def test_7b3d9106():
@@ -54,7 +54,7 @@ def test_7b3d9106():
         "def k(user, flow):\n"
         "    return user.admin or flow.public if user.active else False\n"
     )
-    assert possible(_only_site(source)) == [
+    assert possible(_only_decision(source)) == [
         [True, True, None],
         [True, False, True],
         [True, False, False],
@@ -65,20 +65,20 @@ def test_7b3d9106():
 def test_7b3d9107():
     """Example: if order.big and order.new: return 5, with no else
     An if's arms are statements, so they add no paths of their own.
-    Its paths are its predicate's, one leaf, as the and is a site of its
+    Its paths are its predicate's, one leaf, as the and is a decision of its
     own: true and false.
     It has no else arm, yet still has a false path."""
     source = "def fee(order):\n    if order.big and order.new:\n        return 5\n    return 7\n"
-    assert possible(sites(source, "k.py")["k.py:2:4"]) == [[True], [False]]
+    assert possible(decisions(source, "k.py")["k.py:2:4"]) == [[True], [False]]
 
 
 def test_7b3d9108():
     """Example: [u for u in users if u.active and u.admin]
     The filter keeps an item on true and drops it on false.
     Its arms hold no condition, so its paths are its predicate's, one leaf,
-    as the and is a site of its own."""
+    as the and is a decision of its own."""
     source = "def admins(users):\n    return [u for u in users if u.active and u.admin]\n"
-    assert possible(sites(source, "k.py")["k.py:2:29"]) == [[True], [False]]
+    assert possible(decisions(source, "k.py")["k.py:2:29"]) == [[True], [False]]
 
 
 def test_7b3d9109():
@@ -96,7 +96,7 @@ def test_7b3d9109():
         '        case "silver":\n'
         "            return 2\n"
     )
-    assert possible(_only_site(source)) == [
+    assert possible(_only_decision(source)) == [
         [True, True, None],
         [True, False, True],
         [True, False, False],
@@ -104,7 +104,7 @@ def test_7b3d9109():
         [False, None, False],
     ]
     wildcard = source.replace('case "silver"', "case _")
-    assert possible(_only_site(wildcard)) == [
+    assert possible(_only_decision(wildcard)) == [
         [True, True, None],
         [True, False, True],
         [False, None, True],
@@ -125,8 +125,8 @@ def test_7b3d910a():
         ["2+ items", True],
         ["2+ items", False],
     ]
-    assert possible(_only_site(late)) == paths
-    assert possible(_only_site(late.replace("any(", "all("))) == paths
+    assert possible(_only_decision(late)) == paths
+    assert possible(_only_decision(late.replace("any(", "all("))) == paths
 
 
 def test_7b3d9104():
@@ -134,4 +134,4 @@ def test_7b3d9104():
     [] can only be falsy, so a path needing it true is impossible.
     The paths are [True, None] and [False, False]."""
     source = 'def k(options):\n    return options.get("tags") or []\n'
-    assert possible(_only_site(source)) == [[True, None], [False, False]]
+    assert possible(_only_decision(source)) == [[True, None], [False, False]]

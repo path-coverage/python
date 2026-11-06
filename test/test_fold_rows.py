@@ -15,7 +15,7 @@ def _of_kind(rows, kind):
 def test_a91f2b01():
     """Example: user.active and user.admin, a path never taken, then two
     taken, once and 1284 times
-    The site's row has each path's count, how many times it was taken.
+    The decision's row has each path's count, how many times it was taken.
     Each operand row shows T or F per path, blank where not reached, each
     branching from the and: a tee, then an ell to the last."""
     tree = {
@@ -29,7 +29,7 @@ def test_a91f2b01():
     }
     rows = fold_rows.rows(tree)
     assert [rows[0]["kind"], rows[0]["label"], rows[0]["counts"]] == [
-        "site",
+        "decision",
         {"text": "and", "tokens": [[0, 3, "k"]]},
         [0, 1, 1284],
     ]

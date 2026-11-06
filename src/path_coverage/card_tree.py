@@ -1,23 +1,23 @@
-"""How the rows of each card nest: for each row, the site it runs inside,
-the arm of that site it is in, and the paths of that site on which it runs,
+"""How the rows of each card nest: for each row, the decision it runs inside,
+the arm of that decision it is in, and the paths of that decision on which it runs,
 so a reader can tell which paths reach a row."""
 
 from dataclasses import dataclass
 
-from . import method_statements, site_paths, site_tree
+from . import method_statements, decision_paths, decision_tree
 from .manifest import Arm, Condition
-from .manifest import sites as find_sites
+from .manifest import decisions as find_decisions
 
-# The place of a row inside no other row's site.
+# The place of a row inside no other row's decision.
 TOP = {"parent": None, "in": None, "on": None, "leaf": None, "gives": None}
 
 
 @dataclass(frozen=True)
 class Region:
-    """Part of a site's code that a row can be inside: an arm of code, or a
-    leaf. owner is the key of the site's row; begin and end its bytes, end
+    """Part of a decision's code that a row can be inside: an arm of code, or a
+    leaf. owner is the key of the decision's row; begin and end its bytes, end
     exclusive; arm its arm's kind, None for a leaf; on the indices of the
-    site's possible paths that run it; leaf a leaf's index among the site's
+    decision's possible paths that run it; leaf a leaf's index among the decision's
     leaves, None for an arm."""
 
     owner: str
@@ -28,43 +28,43 @@ class Region:
     leaf: int | None
 
 
-def of(source, path, sites=None):
-    """{def site: {"line:col": place}} for each function in source, as
+def of(source, path, decisions=None):
+    """{def decision: {"line:col": place}} for each function in source, as
     nested places its rows. Example: def f(a): if a: x = 1 gives the write
     the if as its parent, in its then arm, on its path 0."""
-    sites = find_sites(source, path) if sites is None else sites
+    decisions = find_decisions(source, path) if decisions is None else decisions
     return {
-        site: nested(source, sites, rows) for site, rows in method_statements.of(source, path).items()
+        decision: nested(source, decisions, rows) for decision, rows in method_statements.of(source, path).items()
     }
 
 
-def nested(source, sites, rows):
-    """{"line:col": place} of each of rows, a card's, sites being {site:
-    Condition}: each placed in the innermost region of another row's site
-    holding all of its own site's code, or, for a row that is no site, where
-    it starts. A place is {"parent": the "line:col" of that site, "in": its
-    arm's kind, "on": the indices of that site's possible paths, as
-    site_paths.possible orders them, that run the row, "leaf": the index of
+def nested(source, decisions, rows):
+    """{"line:col": place} of each of rows, a card's, decisions being {decision:
+    Condition}: each placed in the innermost region of another row's decision
+    holding all of its own decision's code, or, for a row that is no decision, where
+    it starts. A place is {"parent": the "line:col" of that decision, "in": its
+    arm's kind, "on": the indices of that decision's possible paths, as
+    decision_paths.possible orders them, that run the row, "leaf": the index of
     the leaf holding it, "gives": None}; TOP for a row in no region."""
     starts = _line_starts(source)
     regions = [
         region
         for row in rows
-        if row.site
-        for region in _regions(source, starts, key_of(row), sites[row.site])
+        if row.decision
+        for region in _regions(source, starts, key_of(row), decisions[row.decision])
     ]
     places = {}
     for row in rows:
         at = starts[row.line - 1] + row.column
-        site = sites[row.site] if row.site else None
-        span = _span(starts, site.extent) if site else (at, at + 1)
-        places[key_of(row)] = _placed(key_of(row), span, regions, site)
+        decision = decisions[row.decision] if row.decision else None
+        span = _span(starts, decision.extent) if decision else (at, at + 1)
+        places[key_of(row)] = _placed(key_of(row), span, regions, decision)
     return places
 
 
-def _placed(key, span, regions, site):
-    """The place of the row keyed key, its code the bytes span, site its
-    Condition, None for a row that is no site: in the site owning the
+def _placed(key, span, regions, decision):
+    """The place of the row keyed key, its code the bytes span, decision its
+    Condition, None for a row that is no decision: in the decision owning the
     smallest region of another row holding span; TOP for none."""
     holding = [
         region
@@ -77,14 +77,14 @@ def _placed(key, span, regions, site):
     own = [region for region in holding if region.owner == owner]
     arm = _smallest([region for region in own if region.arm])
     on = sorted(set.intersection(*(set(region.on) for region in own)))
-    leaf = _smallest([region for region in own if region.arm is None]) if site else None
+    leaf = _smallest([region for region in own if region.arm is None]) if decision else None
     whole = leaf is not None and (leaf.begin, leaf.end) == span
     return {
         "parent": owner,
         "in": arm.arm if arm else None,
         "on": on,
         "leaf": leaf.leaf if leaf else None,
-        "gives": site_paths.values(site) if whole else None,
+        "gives": decision_paths.values(decision) if whole else None,
     }
 
 
@@ -94,7 +94,7 @@ def _smallest(regions):
 
 
 def regions_of(source, owner, condition):
-    """The regions of condition, the site of the row keyed owner, in
+    """The regions of condition, the decision of the row keyed owner, in
     source, as nested finds them."""
     return _regions(source, _line_starts(source), owner, condition)
 
@@ -105,10 +105,10 @@ def text_of(source, region):
 
 
 def _regions(source, starts, owner, condition):
-    """The regions of condition, the site of the row keyed owner: its
+    """The regions of condition, the decision of the row keyed owner: its
     arms', then its leaves'."""
-    possible = site_paths.possible(condition)
-    node = site_tree.node(source, condition, possible)
+    possible = decision_paths.possible(condition)
+    node = decision_tree.node(source, condition, possible)
     return _arm_regions(starts, owner, condition, node) + _leaf_regions(
         starts, owner, condition, possible
     )

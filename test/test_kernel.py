@@ -26,7 +26,7 @@ LEAVES = [["6:11", "6:29"], ["6:34", "6:57"]]
 
 
 def _taken(tt, tf, f):
-    """single_and_trails' site's paths, taken tt, tf and f times."""
+    """single_and_trails' decision's paths, taken tt, tf and f times."""
     return [
         {"path": [True, True], "count": tt},
         {"path": [True, False], "count": tf},
@@ -38,13 +38,13 @@ def test_e5a70c01(tmp_path, capsys):
     """Example: trail_id in trails and trails[trail_id]["new"], called
     with a new trail, then with no trails
     A covered module imported after start is instrumented.
-    The report at exit writes every site's counts and paths as JSON.
+    The report at exit writes every decision's counts and paths as JSON.
     Each path has its count, and each leaf its line:col span.
     It names the kinds measured, as runs measuring others differ.
     It lists each card, is_new's here, a row for its and, its 3 ways and
     its 2 calls, and how each card's rows nest: the and at the top, inside
-    no other site.
-    is_new's entry is reached on each call; it has no row that is no site.
+    no other decision.
+    is_new's entry is reached on each call; it has no row that is no decision.
     It prints the one path never taken: true, then false."""
     project = PROJECTS / "single_and"
     exits = []
@@ -62,15 +62,15 @@ def test_e5a70c01(tmp_path, capsys):
         path_coverage.stop()
     [report] = exits
     report()
-    site = "src/single_and_trails.py:6:30"
+    decision = "src/single_and_trails.py:6:30"
     assert json.loads((tmp_path / "path_coverage.json").read_text()) == {
-        "sites": {
-            site: [
+        "decisions": {
+            decision: [
                 {"truthy": 1, "falsy": 1},
                 {"truthy": 1, "falsy": 0},
             ]
         },
-        "paths": {site: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
+        "paths": {decision: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
         "kinds": ["block", "case", "chain", "choice"],
         "reached": {"src/single_and_trails.py:4:0": 2},
         "totals": {"alone": [2, 3], "combined": [2, 3]},
@@ -81,7 +81,7 @@ def test_e5a70c01(tmp_path, capsys):
                 "last": 6,
                 "ways": 3,
                 "calls": 2,
-                "rows": [{"at": "6:30", "top": "and", "paths": 3, "taken": 2, "site": site}],
+                "rows": [{"at": "6:30", "top": "and", "paths": 3, "taken": 2, "decision": decision}],
             }
         },
         "tree": {
@@ -93,7 +93,7 @@ def test_e5a70c01(tmp_path, capsys):
         },
     }
     assert capsys.readouterr().out == (
-        f"{site} path never taken: `trail_id in trails` true, {NEW} false\n"
+        f"{decision} path never taken: `trail_id in trails` true, {NEW} false\n"
     )
 
 
@@ -102,7 +102,7 @@ def test_e5a70c17(tmp_path, capsys):
     with a new trail
     The report at exit writes the source report beside the JSON report:
     each covered file's lines, all 6 of single_and_trails.py's, and its
-    sites, and each card row's top coloured, and here."""
+    decisions, and each card row's top coloured, and here."""
     project = PROJECTS / "single_and"
     exits = []
     path_coverage.start(root=project, cover=["src/**/*.py"], coverage_dir=tmp_path, on_exit=exits.append)
@@ -117,7 +117,7 @@ def test_e5a70c17(tmp_path, capsys):
     source = json.loads((tmp_path / "path_coverage.source.json").read_text())
     file = source["files"]["src/single_and_trails.py"]
     assert len(file["lines"]) == 6
-    assert list(file["sites"]) == ["src/single_and_trails.py:6:30"]
+    assert list(file["decisions"]) == ["src/single_and_trails.py:6:30"]
     assert source["labels"] == {"and": {"text": "and", "tokens": [[0, 3, "k"]]}}
 
 
@@ -142,12 +142,12 @@ def test_e5a70c02(tmp_path, capsys):
     assert started is True
     [report] = exits
     report()
-    site = "src/single_and_trails.py:6:30"
+    decision = "src/single_and_trails.py:6:30"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    assert report["paths"][site]["taken"] == _taken(0, 1, 0)
+    assert report["paths"][decision]["taken"] == _taken(0, 1, 0)
     assert capsys.readouterr().out == (
-        f"{site} path never taken: `trail_id in trails` true, {NEW} true\n"
-        f"{site} path never taken: `trail_id in trails` false\n"
+        f"{decision} path never taken: `trail_id in trails` true, {NEW} true\n"
+        f"{decision} path never taken: `trail_id in trails` false\n"
     )
 
 
@@ -161,7 +161,7 @@ def test_e5a70c04(tmp_path, capsys):
     project = PROJECTS / "single_and"
     stale = tmp_path / "path_coverage.gw7.json"
     stale.parent.mkdir(exist_ok=True)
-    stale.write_text('{"sites": {}}')
+    stale.write_text('{"decisions": {}}')
     settings = {"root": project, "cover": ["src/**/*.py"], "coverage_dir": tmp_path}
     main_exits, worker_exits = [], []
     path_coverage.start(**settings, on_exit=main_exits.append)
@@ -178,17 +178,17 @@ def test_e5a70c04(tmp_path, capsys):
     assert capsys.readouterr().out == ""
     assert sorted(p.name for p in tmp_path.iterdir()) == ["path_coverage.gw0.json"]
     main_exits[0]()
-    site = "src/single_and_trails.py:6:30"
+    decision = "src/single_and_trails.py:6:30"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    assert report["sites"] == {
-        site: [
+    assert report["decisions"] == {
+        decision: [
             {"truthy": 2, "falsy": 0},
             {"truthy": 1, "falsy": 1},
         ]
     }
-    assert report["paths"][site]["taken"] == _taken(1, 1, 0)
+    assert report["paths"][decision]["taken"] == _taken(1, 1, 0)
     assert capsys.readouterr().out == (
-        f"{site} path never taken: `trail_id in trails` false\n"
+        f"{decision} path never taken: `trail_id in trails` false\n"
     )
 
 
@@ -212,7 +212,7 @@ def test_e5a70c05(tmp_path, capsys):
 
 
 def test_e5a70c06(tmp_path, capsys):
-    """A covered file the run never imported is still reported, every site
+    """A covered file the run never imported is still reported, every decision
     in it as never reached."""
     project = PROJECTS / "never_imported"
     exits = []
@@ -235,7 +235,7 @@ def test_e5a70c06(tmp_path, capsys):
 
 def test_e5a70c07(tmp_path, capsys):
     """report=[] writes the JSON report and the source report, and prints
-    nothing. The source report has each site's tree folded under it,
+    nothing. The source report has each decision's tree folded under it,
     coloured as code."""
     project = PROJECTS / "single_and"
     exits = []
@@ -254,8 +254,8 @@ def test_e5a70c07(tmp_path, capsys):
     exits[0]()
     assert capsys.readouterr().out == ""
     source = json.loads((tmp_path / "path_coverage.source.json").read_text())
-    sites = source["files"]["src/single_and_trails.py"]["sites"]
-    leaf = sites["src/single_and_trails.py:6:30"]["fold"][2]["label"]
+    decisions = source["files"]["src/single_and_trails.py"]["decisions"]
+    leaf = decisions["src/single_and_trails.py:6:30"]["fold"][2]["label"]
     assert leaf == {"text": 'trails[trail_id]["new"]', "tokens": [[17, 22, "s"]]}
 
 
@@ -299,8 +299,8 @@ def test_e5a70c0a(tmp_path, capsys):
     """Example: fee, a write, if member, if big and a return, called once
     with member and not big
     Each call of fee is counted, as its entry reached, and each run of a
-    row that is no site, its return; its writes are no rows.
-    The report prints each if's own path never taken, as a site.
+    row that is no decision, its return; its writes are no rows.
+    The report prints each if's own path never taken, as a decision.
     The JSON totals are [taken, possible]: alone [2, 4], one of each if's
     two paths, and combined [3, 5], fee's card: 1+1+1 of 2+2+1."""
     project = PROJECTS / "two_decisions"
@@ -401,7 +401,7 @@ def test_e5a70c0c(tmp_path, capsys):
 def test_e5a70c12(tmp_path, capsys):
     """Example: render of a run whose JSON names kinds chain, choice and
     contains, as a version measuring contains would write it
-    Runs measuring other kinds list a site's paths differently.
+    Runs measuring other kinds list a decision's paths differently.
     So render refuses it, naming the run, and writes no report."""
     project = PROJECTS / "single_and"
     settings = {"root": project, "cover": ["src/**/*.py"]}
@@ -612,7 +612,7 @@ def test_e5a70c14(tmp_path):
     """Example: fee called with member and not big, its report's reached
     then dropped, as a run that counted no statement writes it, then
     render of that report
-    So render cannot say fee's return, a row that is no site, was reached.
+    So render cannot say fee's return, a row that is no decision, was reached.
     It counts as not taken: combined [2, 5], never more than ran.
     Its merged report has no reached either."""
     project = PROJECTS / "two_decisions"

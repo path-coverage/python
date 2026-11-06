@@ -1,4 +1,4 @@
-"""The paths an evaluation of a site can take, worked out from its condition
+"""The paths an evaluation of a decision can take, worked out from its condition
 alone: the outcome of each leaf, in leaf order, None for a leaf that
 evaluation never reaches."""
 

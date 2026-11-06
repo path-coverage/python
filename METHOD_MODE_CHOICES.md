@@ -1,8 +1,8 @@
 # Cards: choices awaiting confirmation
 
 Each function's card has a row per statement in it, flat, in the order
-written. A statement that holds sites is replaced by the outermost sites
-in it, each followed by the sites inside it. The choices below are
+written. A statement that holds decisions is replaced by the outermost decisions
+in it, each followed by the decisions inside it. The choices below are
 provisional. Each one is pinned by the test named, in
 test/test_method_statements.py unless stated.
 
@@ -17,37 +17,37 @@ test/test_method_statements.py unless stated.
    statements are rows after the match, case by case. (b47e3a04,
    b47e3a23, b47e3a24)
 
-3. A for loop is a row, `for`, or its header's sites; a while loop's row
-   is its test's sites, or `while`. Then a row for each statement of the
+3. A for loop is a row, `for`, or its header's decisions; a while loop's row
+   is its test's decisions, or `while`. Then a row for each statement of the
    body and of the loop's else. (b47e3a11, b47e3a21)
 
 4. A try is a row, `try`, then a row for each statement of its body, each
    handler, its else and its finally. A with is a row, `with`, or its
-   items' sites, then its body's rows. A class inside a function is a row,
+   items' decisions, then its body's rows. A class inside a function is a row,
    `class`, then its body's rows. (b47e3a12, b47e3a21)
 
 5. A nested def is one row, `def`: its body runs only when it is called,
    and it has its own card. (b47e3a16)
 
-6. A lambda's body and a comprehension's parts give a row for each site in
+6. A lambda's body and a comprehension's parts give a row for each decision in
    them, after the statement holding them, but no row of their own, as no
    reach call can sit inside an expression. (b47e3a11, b47e3a21)
 
-7. A site inside a site's leaf, eg a ternary in a call inside an and, is
-   a row of its own after the site holding it. (b47e3a25)
+7. A decision inside a decision's leaf, eg a ternary in a call inside an and, is
+   a row of its own after the decision holding it. (b47e3a25)
 
-8. A site outside every function is a top row, on the card of its span of
+8. A decision outside every function is a top row, on the card of its span of
    lines, titled by the innermost class holding it, or `file`. Each file's
-   top rows are totalled as `path:0:0`, so every site is in some total.
+   top rows are totalled as `path:0:0`, so every decision is in some total.
    (b47e3a27 to b47e3a29; test/test_listed_cards.py d3c9a101)
 
-9. Every site of this repo's src and test is a card row or a top row.
+9. Every decision of this repo's src and test is a card row or a top row.
    (b47e3a30)
 
 ## Tops (the row's label)
 
-10. A site row is named by its operator: if, and, or, ternary, match,
-    filter, any, all; an elif's is `elif`. It sits where its site is
+10. A decision row is named by its operator: if, and, or, ternary, match,
+    filter, any, all; an elif's is `elif`. It sits where its decision is
     named: an if or match at its keyword, a ternary at its own column.
     (b47e3a04, b47e3a05, b47e3a21, b47e3a23)
 
@@ -62,7 +62,7 @@ test/test_method_statements.py unless stated.
 
 ## Counting
 
-12. A row that is not a site is counted by a reach call. The rewriter
+12. A row that is not a decision is counted by a reach call. The rewriter
     inserts `__path_coverage__.reach("path:line:col")` as a statement just
     before it, in whichever list of statements holds it. The call is
     placed at that statement's start with no width, so line traces are

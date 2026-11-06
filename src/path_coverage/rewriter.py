@@ -1,4 +1,4 @@
-"""Rewrites a module's AST so each site's evaluation is entered and left
+"""Rewrites a module's AST so each decision's evaluation is entered and left
 around it, and each of its leaf operands is passed through a record call,
 which returns it unchanged:
 
@@ -21,7 +21,7 @@ from .manifest import (
     if_keywords,
     keyword_before,
     operator_keywords,
-    site_at,
+    decision_at,
 )
 from .method_statements import reaches
 
@@ -51,15 +51,15 @@ def _constant(statement):
     return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
-def _unmatched_case(site, patterns, at):
-    """case _ if unmatched(site, patterns): pass, located at node at: the
+def _unmatched_case(decision, patterns, at):
+    """case _ if unmatched(decision, patterns): pass, located at node at: the
     case a match ends with to note that none of its cases was taken, its
     guard always false, so it is never taken itself."""
     wildcard = ast.MatchAs(pattern=None, name=None)
     body = ast.Pass()
     for part in (wildcard, body):
         ast.copy_location(part, at)
-    guard = _call("unmatched", [ast.Constant(site), ast.Constant(tuple(patterns))], at)
+    guard = _call("unmatched", [ast.Constant(decision), ast.Constant(tuple(patterns))], at)
     return ast.match_case(pattern=wildcard, guard=guard, body=[body])
 
 
@@ -75,16 +75,16 @@ def _reach(name, statement):
 
 
 class _Rewriter(ast.NodeTransformer):
-    """Wraps every site, numbering its leaves as the manifest does, and
+    """Wraps every decision, numbering its leaves as the manifest does, and
     precedes each function statement in reaches with a reach call."""
 
     def __init__(self, path, reaches, keywords, builtins, operators):
-        """Names sites after path; reaches holds the names of the function
+        """Names decisions after path; reaches holds the names of the function
         statements whose runs are counted, as method_statements.reaches
         gives them; keywords are where the source's if keywords are,
         builtins the block calls' names the module leaves as builtins, and
         operators where its and, or and if keywords are, as
-        operator_keywords gives them, so sites are named as the manifest
+        operator_keywords gives them, so decisions are named as the manifest
         names them."""
         self.path = path
         self.reaches = reaches
@@ -96,7 +96,7 @@ class _Rewriter(ast.NodeTransformer):
         """tree with each statement in reaches, in any list of statements,
         a body, an else or a finally, preceded by a reach call naming it,
         and each function in reaches entered with one, so its calls are
-        counted. Run once every site is rewritten, as a match's rewrite adds
+        counted. Run once every decision is rewritten, as a match's rewrite adds
         a statement before it."""
         for node in list(ast.walk(tree)):
             for field in ("body", "orelse", "finalbody"):
@@ -116,7 +116,7 @@ class _Rewriter(ast.NodeTransformer):
         return [_reach(name, statement), statement]
 
     def _entered(self, function):
-        """function with a reach call naming it, by its def's site, which
+        """function with a reach call naming it, by its def's decision, which
         reaches always holds, in its body after its first statement when
         that is a constant, so a docstring stays its docstring, even one
         that is the whole body; else first. Each call is counted."""
@@ -127,14 +127,14 @@ class _Rewriter(ast.NodeTransformer):
 
     def visit_BoolOp(self, node):
         """node, its leaves (nested conditions' and folded arms' included)
-        each wrapped in a record call under this site, as the value of a
-        leave call whose first argument enters the site before any leaf
-        runs. It is named where site_at says, as the manifest names it."""
-        line, col = site_at(self.operators, node)
-        site = f"{self.path}:{line}:{col}"
+        each wrapped in a record call under this decision, as the value of a
+        leave call whose first argument enters the decision before any leaf
+        runs. It is named where decision_at says, as the manifest names it."""
+        line, col = decision_at(self.operators, node)
+        decision = f"{self.path}:{line}:{col}"
         counter = [0]
-        self._fold(node, site, counter)
-        enter = _call("enter", [ast.Constant(site), ast.Constant(counter[0])], node)
+        self._fold(node, decision, counter)
+        enter = _call("enter", [ast.Constant(decision), ast.Constant(counter[0])], node)
         return _call("leave", [enter, node], node)
 
     visit_IfExp = visit_BoolOp
@@ -151,57 +151,57 @@ class _Rewriter(ast.NodeTransformer):
 
     def visit_Call(self, node):
         """A block call, eg any(o.late for o in orders), with its
-        generator's own sites rewritten and its element in an answer call,
+        generator's own decisions rewritten and its element in an answer call,
         as the value of a leave_items call whose first argument enters the
-        site before the builtin runs. Any other call with only its own
-        sites rewritten."""
+        decision before the builtin runs. Any other call with only its own
+        decisions rewritten."""
         generator = block_generator(node, self.builtins)
         if generator is None:
             return self.generic_visit(node)
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
         self.visit(generator)
-        args = [ast.Constant(site), ast.Constant(0), generator.elt]
+        args = [ast.Constant(decision), ast.Constant(0), generator.elt]
         generator.elt = _call("answer", args, generator.elt)
-        enter = _call("enter", [ast.Constant(site), ast.Constant(2)], node)
+        enter = _call("enter", [ast.Constant(decision), ast.Constant(2)], node)
         return _call("leave_items", [enter, ast.Constant(0), node], node)
 
     def visit_Match(self, node):
-        """node, preceded by an enter of its site, each case's guard (one
+        """node, preceded by an enter of its decision, each case's guard (one
         added where there was none) in a matched call noting its pattern
         matched, numbering leaves as the manifest does: each case's
         pattern, then its guard's. Unless the last case matches anything, a
         case is added after it whose guard notes that none matched. The
         added code takes the subject's location, so the lines a trace sees
         run are the file's own."""
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
         node.subject = self.visit(node.subject)
         counter = [0]
         patterns = []
         for case in node.cases:
             pattern = counter[0]
             counter[0] += 1
-            args = [ast.Constant(site), ast.Constant(pattern), ast.Constant(tuple(patterns))]
+            args = [ast.Constant(decision), ast.Constant(pattern), ast.Constant(tuple(patterns))]
             if case.guard is not None:
-                args.append(self._guard(case.guard, site, counter))
+                args.append(self._guard(case.guard, decision, counter))
             case.guard = _call("matched", args, case.pattern)
             patterns.append(pattern)
             case.body = [self.visit(statement) for statement in case.body]
         last = node.cases[-1].pattern
         if not (isinstance(last, ast.MatchAs) and last.pattern is None):
-            node.cases.append(_unmatched_case(site, patterns, node.subject))
-        enter = ast.Expr(_call("enter", [ast.Constant(site), ast.Constant(counter[0])], node.subject))
+            node.cases.append(_unmatched_case(decision, patterns, node.subject))
+        enter = ast.Expr(_call("enter", [ast.Constant(decision), ast.Constant(counter[0])], node.subject))
         ast.copy_location(enter, node.subject)
         return [enter, node]
 
-    def _guard(self, guard, site, counter):
-        """A case's guard recorded as one leaf under site, numbered on from
-        counter, an `and`/`or` in it a site of its own, as an if's predicate
+    def _guard(self, guard, decision, counter):
+        """A case's guard recorded as one leaf under decision, numbered on from
+        counter, an `and`/`or` in it a decision of its own, as an if's predicate
         is."""
-        return self._leaf(guard, site, counter)
+        return self._leaf(guard, decision, counter)
 
     def visit_comprehension(self, node):
         """node with each filter's test entered and left, its leaves
-        recorded, under a site named at the filter's if keyword, as the
+        recorded, under a decision named at the filter's if keyword, as the
         manifest names it."""
         node.target = self.visit(node.target)
         node.iter = self.visit(node.iter)
@@ -209,63 +209,63 @@ class _Rewriter(ast.NodeTransformer):
         return node
 
     def _predicate(self, test, at):
-        """test, an if's or a filter's, recorded as one leaf under the site
+        """test, an if's or a filter's, recorded as one leaf under the decision
         named at at, (line, col), as the value of a leave call whose first
-        argument enters the site before the leaf runs; an `and`/`or` that is
-        the whole test is a site of its own."""
-        site = f"{self.path}:{at[0]}:{at[1]}"
+        argument enters the decision before the leaf runs; an `and`/`or` that is
+        the whole test is a decision of its own."""
+        decision = f"{self.path}:{at[0]}:{at[1]}"
         counter = [0]
-        wrapped = self._leaf(test, site, counter)
-        enter = _call("enter", [ast.Constant(site), ast.Constant(counter[0])], test)
+        wrapped = self._leaf(test, decision, counter)
+        enter = _call("enter", [ast.Constant(decision), ast.Constant(counter[0])], test)
         return _call("leave", [enter, wrapped], test)
 
-    def _fold(self, node, site, counter):
+    def _fold(self, node, decision, counter):
         """Wraps node's leaves in place, in the manifest's order: an
         `and`/`or`'s operands left to right; a conditional expression's
         predicate, one leaf, then its then arm, then its else arm."""
         if isinstance(node, ast.IfExp):
-            node.test = self._leaf(node.test, site, counter)
-            node.body = self._arm(node.body, site, counter)
-            node.orelse = self._arm(node.orelse, site, counter)
+            node.test = self._leaf(node.test, decision, counter)
+            node.body = self._arm(node.body, decision, counter)
+            node.orelse = self._arm(node.orelse, decision, counter)
         else:
-            self._wrap(node, site, counter)
+            self._wrap(node, decision, counter)
 
-    def _arm(self, node, site, counter):
-        """An arm folded into the site when it holds an `and`/`or`, its
+    def _arm(self, node, decision, counter):
+        """An arm folded into the decision when it holds an `and`/`or`, its
         leaves wrapped; any other arm, a conditional expression among them,
-        with only its own sites rewritten, as the manifest folds no other."""
+        with only its own decisions rewritten, as the manifest folds no other."""
         if isinstance(node, ast.BoolOp):
-            self._fold(node, site, counter)
+            self._fold(node, decision, counter)
             return node
         return self.visit(node)
 
-    def _wrap(self, node, site, counter):
+    def _wrap(self, node, decision, counter):
         """Replaces node's operands in place, numbering leaves left to right
-        with counter, a one-item list shared across the whole site."""
-        node.values = [self._operand(value, site, counter) for value in node.values]
+        with counter, a one-item list shared across the whole decision."""
+        node.values = [self._operand(value, decision, counter) for value in node.values]
 
-    def _operand(self, value, site, counter):
+    def _operand(self, value, decision, counter):
         """value with its leaves wrapped when it is a nested condition, else
-        value (its own sites rewritten first) as the argument of a record."""
+        value (its own decisions rewritten first) as the argument of a record."""
         if isinstance(value, ast.BoolOp):
-            self._wrap(value, site, counter)
+            self._wrap(value, decision, counter)
             return value
-        return self._leaf(value, site, counter)
+        return self._leaf(value, decision, counter)
 
-    def _leaf(self, value, site, counter):
-        """value, its own sites rewritten first, value itself among them, as
-        the argument of a record of the next leaf of site."""
+    def _leaf(self, value, decision, counter):
+        """value, its own decisions rewritten first, value itself among them, as
+        the argument of a record of the next leaf of decision."""
         value = self.visit(value)
         index = counter[0]
         counter[0] += 1
-        return _call("record", [ast.Constant(site), ast.Constant(index), value], value)
+        return _call("record", [ast.Constant(decision), ast.Constant(index), value], value)
 
 
 def rewrite(tree, path, *, source):
-    """tree, changed in place and returned, with every site entered and left
+    """tree, changed in place and returned, with every decision entered and left
     around it and every leaf of it recorded, and each run of every function
-    statement that is no site counted. source is tree's source, str or the
-    bytes a loader reads, where the if keywords that name filters' sites
+    statement that is no decision counted. source is tree's source, str or the
+    bytes a loader reads, where the if keywords that name filters' decisions
     are found."""
     if isinstance(source, bytes):
         source = importlib.util.decode_source(source)

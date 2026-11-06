@@ -8,11 +8,11 @@ def merge(runs):
     operand's truthy and falsy counts added across them, keeping only."""
     merged = {}
     for run in runs:
-        for site, operands in run.items():
-            if site not in merged:
-                merged[site] = [dict(counts) for counts in operands]
+        for decision, operands in run.items():
+            if decision not in merged:
+                merged[decision] = [dict(counts) for counts in operands]
                 continue
-            for total, counts in zip(merged[site], operands):
+            for total, counts in zip(merged[decision], operands):
                 total["truthy"] += counts["truthy"]
                 total["falsy"] += counts["falsy"]
     return merged
@@ -23,12 +23,12 @@ def merge_paths(runs):
     count added across them, in the order the paths first appear."""
     merged = {}
     for run in runs:
-        for site, paths in run.items():
-            totals = merged.setdefault(site, {})
+        for decision, paths in run.items():
+            totals = merged.setdefault(decision, {})
             for each in paths:
                 key = tuple(each["path"])
                 totals[key] = totals.get(key, 0) + each["count"]
     return {
-        site: [{"path": list(path), "count": count} for path, count in totals.items()]
-        for site, totals in merged.items()
+        decision: [{"path": list(path), "count": count} for path, count in totals.items()]
+        for decision, totals in merged.items()
     }

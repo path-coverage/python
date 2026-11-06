@@ -1,14 +1,14 @@
-from path_coverage.manifest import sites
-from path_coverage.site_paths import possible
-from path_coverage.site_tree import tree_of
+from path_coverage.manifest import decisions
+from path_coverage.decision_paths import possible
+from path_coverage.decision_tree import tree_of
 
 
-def _tree(source, counts, site=None):
-    """The tree of the site named site in source, or of its one site when
+def _tree(source, counts, decision=None):
+    """The tree of the decision named decision in source, or of its one decision when
     none is named, its possible paths taken counts times each, in possible
     order."""
-    found = sites(source, "k.py")
-    [condition] = [found[site]] if site else found.values()
+    found = decisions(source, "k.py")
+    [condition] = [found[decision]] if decision else found.values()
     paths = [{"path": path, "count": count} for path, count in zip(possible(condition), counts)]
     return tree_of(source, condition, paths)
 
@@ -37,7 +37,7 @@ def test_1a6c3e01():
     The tree names its operator, with one column per path.
     Paths never taken (count 0) come first, each with its count.
     Each leaf has its source text and its outcome on each path, None
-    where unreached; the site has its value on each path."""
+    where unreached; the decision has its value on each path."""
     source = "def kata(id):\n    return ok(id) and id.startswith('N')\n"
     assert _tree(source, [1, 0, 1]) == {
         "operator": "and",

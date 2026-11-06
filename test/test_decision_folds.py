@@ -1,4 +1,4 @@
-from path_coverage import manifest, site_paths, source_report
+from path_coverage import manifest, decision_paths, source_report
 
 
 def test_7d61a401():
@@ -40,7 +40,7 @@ def test_7d61a403():
 def test_7d61a404():
     """Example: size, an if whose else is an elif, and tidy, an if whose
     else keyword has a comment after it
-    An elif is a site of its own, so the if names no else; nor does an if
+    An elif is a decision of its own, so the if names no else; nor does an if
     whose else is followed by a comment, as its arm's code does not follow
     the keyword."""
     source = (
@@ -55,7 +55,7 @@ def test_7d61a404():
         "    else:  # the rest\n"
         "        return 2\n"
     )
-    elses = [_fold(source, site, "if")[0]["else"] for site in ("k.py:2:4", "k.py:7:4")]
+    elses = [_fold(source, decision, "if")[0]["else"] for decision in ("k.py:2:4", "k.py:7:4")]
     assert elses == [None, None]
 
 
@@ -81,7 +81,7 @@ def test_7d61a406():
     its fold is its predicate, placed at its code."""
     source = "def active(users):\n    return [u for u in users if u.active]\n"
     rows = _fold(source, "k.py:2:29", "filter")
-    assert [(row["kind"], row["at"]) for row in rows] == [("site", [2, 29, 2, 40]), ("operand", [2, 32, 2, 40])]
+    assert [(row["kind"], row["at"]) for row in rows] == [("decision", [2, 29, 2, 40]), ("operand", [2, 32, 2, 40])]
 
 
 def test_7d61a407():
@@ -91,10 +91,10 @@ def test_7d61a407():
     assert _fold(source, "k.py:2:4", "if")[0]["else"] is None
 
 
-def _fold(source, site, top):
-    """The rows of the fold of site in source, as if it were k.py, as the
+def _fold(source, decision, top):
+    """The rows of the fold of decision in source, as if it were k.py, as the
     source report has them, headed by top, a column for each of its
     possible paths."""
-    sites = manifest.sites(source, "k.py")
-    paths = [{"path": path, "count": 0} for path in site_paths.possible(sites[site])]
-    return source_report.site(source, sites, site, paths, top)["fold"]
+    decisions = manifest.decisions(source, "k.py")
+    paths = [{"path": path, "count": 0} for path in decision_paths.possible(decisions[decision])]
+    return source_report.decision(source, decisions, decision, paths, top)["fold"]

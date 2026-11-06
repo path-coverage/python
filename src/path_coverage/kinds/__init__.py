@@ -1,6 +1,6 @@
 """The kinds of condition, each a class that knows, for a condition named by
 one of its OPERATORS, the ways it can be evaluated and its value in each
-column of its site's tree."""
+column of its decision's tree."""
 
 from .block import Block
 from .case import Case
@@ -21,6 +21,6 @@ def of(operator):
 
 def names():
     """The names of the kinds measured, eg "chain" for Chain: a report's
-    fingerprint, as runs measuring different kinds list a site's paths
+    fingerprint, as runs measuring different kinds list a decision's paths
     differently."""
     return [type(kind).__name__.lower() for kind in ALL]

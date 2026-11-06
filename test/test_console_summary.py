@@ -4,7 +4,7 @@ GROUPS = {"code": ["src/**/*.py"], "test": ["test/**/*.py"]}
 
 
 def test_7c3d9101():
-    """Example: src/kata.py's site taking 2 of its 3 paths, no groups
+    """Example: src/kata.py's decision taking 2 of its 3 paths, no groups
     The summary is one line of the paths taken alone.
     Methods are not measured, so there is no combined line."""
     paths = {
@@ -18,7 +18,7 @@ def test_7c3d9101():
 
 
 def test_7c3d9102():
-    """Example: src/kata.py's site taking 2 of its 3 paths, and
+    """Example: src/kata.py's decision taking 2 of its 3 paths, and
     test/test_kata.py's taking 1 of its 2, with groups code and test
     Each group is a heading, its own totals indented under it.
     There is no total over every group."""
@@ -58,8 +58,8 @@ def test_7c3d9103():
 
 
 def test_7c3d9104():
-    """Example: two sites, both in src/, with groups code and test
-    code totals both sites' paths; test totals none."""
+    """Example: two decisions, both in src/, with groups code and test
+    code totals both decisions' paths; test totals none."""
     taken_once = {"path": [True], "count": 1}
     paths = {"src/a.py:1:0": [taken_once], "src/b.py:1:0": [taken_once]}
     assert group_totals(paths, None, GROUPS) == {

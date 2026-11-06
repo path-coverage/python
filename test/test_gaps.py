@@ -1,7 +1,7 @@
 from path_coverage.gaps import code, lines, operand_gap
 
-SITE = "src/model/flow.py:2:11"
-TEXTS = {SITE: ["user.active", "user.admin", "flow.public"]}
+DECISION = "src/model/flow.py:2:11"
+TEXTS = {DECISION: ["user.active", "user.admin", "flow.public"]}
 
 
 def test_d40e6a01():
@@ -10,9 +10,9 @@ def test_d40e6a01():
     One line per path never taken, in possible-path order.
     Each names the outcome of every leaf the path reaches, by its text.
     A leaf the path never reaches is left out."""
-    operands = {SITE: [{"truthy": 2, "falsy": 1}, {"truthy": 0, "falsy": 2}, {"truthy": 2, "falsy": 0}]}
+    operands = {DECISION: [{"truthy": 2, "falsy": 1}, {"truthy": 0, "falsy": 2}, {"truthy": 2, "falsy": 0}]}
     paths = {
-        SITE: [
+        DECISION: [
             {"path": [True, True, None], "count": 0},
             {"path": [True, False, True], "count": 2},
             {"path": [True, False, False], "count": 0},
@@ -20,17 +20,17 @@ def test_d40e6a01():
         ]
     }
     assert lines(operands, paths, TEXTS) == [
-        f"{SITE} path never taken: `user.active` true, `user.admin` true",
-        f"{SITE} path never taken: `user.active` true, `user.admin` false, `flow.public` false",
+        f"{DECISION} path never taken: `user.active` true, `user.admin` true",
+        f"{DECISION} path never taken: `user.active` true, `user.admin` false, `flow.public` false",
     ]
 
 
 def test_d40e6a02():
-    """Example: a site none of whose leaves ever ran
+    """Example: a decision none of whose leaves ever ran
     It gets one line, `never reached`, not a line per path."""
-    operands = {SITE: [{"truthy": 0, "falsy": 0}] * 3}
-    paths = {SITE: [{"path": [True, True, None], "count": 0}]}
-    assert lines(operands, paths, TEXTS) == [f"{SITE} never reached"]
+    operands = {DECISION: [{"truthy": 0, "falsy": 0}] * 3}
+    paths = {DECISION: [{"path": [True, True, None], "count": 0}]}
+    assert lines(operands, paths, TEXTS) == [f"{DECISION} never reached"]
 
 
 def test_d40e6a04():

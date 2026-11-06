@@ -1,11 +1,11 @@
 """Finds, without running it, the statements of each function in source, one
-row each in its card, and the sites outside every function, each a row of a
+row each in its card, and the decisions outside every function, each a row of a
 top card."""
 
 import ast
 from dataclasses import dataclass
 
-from . import site_paths
+from . import decision_paths
 from . import totals as path_totals
 from .manifest import (
     Arm,
@@ -14,28 +14,28 @@ from .manifest import (
     if_keywords,
     keyword_before,
     operator_keywords,
-    site_at,
-    sites,
+    decision_at,
+    decisions,
 )
 
 
 @dataclass(frozen=True)
 class Statement:
-    """One row of a function's card, a top-level statement or a site at its
+    """One row of a function's card, a top-level statement or a decision at its
     top: where it starts; its top, what it is as written, eg = for a write;
-    how many paths it has; the name of its site, None when it is no site;
+    how many paths it has; the name of its decision, None when it is no decision;
     and its own name, by where it is, eg "k.py:2:4"."""
 
     line: int
     column: int
     top: str
     paths: int
-    site: str | None
+    decision: str | None
     name: str
 
 
-# The nodes a statement's sites are never looked for in: a function's body
-# runs only when it is called, its sites rows of its own card, and a
+# The nodes a statement's decisions are never looked for in: a function's body
+# runs only when it is called, its decisions rows of its own card, and a
 # lambda's and a comprehension's parts give rows of their own, after the
 # statement holding them.
 UNSEEN = (
@@ -48,7 +48,7 @@ UNSEEN = (
     ast.GeneratorExp,
 )
 
-# The tops of statements with a keyword of their own and no site at their
+# The tops of statements with a keyword of their own and no decision at their
 # top, by their type.
 KEYWORDS = {
     ast.For: "for",
@@ -69,84 +69,84 @@ KEYWORDS = {
 }
 
 
-# The tops of the statements that are no site yet are rows: each leaves its
+# The tops of the statements that are no decision yet are rows: each leaves its
 # function, so cuts a path short.
 LEAVING = ("return", "raise")
 
 
 def of(source, path):
-    """{def site: [Statement, ...]} for each function in source, in source
+    """{def decision: [Statement, ...]} for each function in source, in source
     order. Example: def f(): x = 1; return x gives = and return rows."""
-    return {site: rows for site, (_, rows) in _collect(source, path).items()}
+    return {decision: rows for decision, (_, rows) in _collect(source, path).items()}
 
 
 def names(source, path):
-    """{def site: its name} for each function in source, eg {"k.py:4:4":
+    """{def decision: its name} for each function in source, eg {"k.py:4:4":
     "ship"}, each its card's title."""
-    return {site: node.name for site, (node, _) in _collect(source, path).items()}
+    return {decision: node.name for decision, (node, _) in _collect(source, path).items()}
 
 
 def lasts(source, path):
-    """{def site: its last line} for each function in source, eg
+    """{def decision: its last line} for each function in source, eg
     {"k.py:4:4": 6}, where its card ends."""
-    return {site: node.end_lineno for site, (node, _) in _collect(source, path).items()}
+    return {decision: node.end_lineno for decision, (node, _) in _collect(source, path).items()}
 
 
 def reaches(source, path):
     """The names of where runs are counted, in every function in source, in
-    source order: each function's entry, by its def's site, so its calls are
-    counted, then each of its rows that is no site, where its statement
+    source order: each function's entry, by its def's decision, so its calls are
+    counted, then each of its rows that is no decision, where its statement
     starts, eg ["k.py:2:0", "k.py:3:4"]."""
     return [
         name
-        for site, rows in of(source, path).items()
-        for name in [site, *(row.name for row in rows if row.site is None)]
+        for decision, rows in of(source, path).items()
+        for name in [decision, *(row.name for row in rows if row.decision is None)]
     ]
 
 
 def top_rows(source, path):
-    """A Statement row for each site in source on no function's card,
+    """A Statement row for each decision in source on no function's card,
     outside every function, for the card of its own lines, in the order
     written: its operator, an elif's elif, and its paths. Example: RATE = 2
     if FAST else 1 gives a ternary row at 1:7."""
-    found = sites(source, path)
-    carded = {row.site for rows in of(source, path).values() for row in rows}
+    found = decisions(source, path)
+    carded = {row.decision for rows in of(source, path).values() for row in rows}
     lines = source.splitlines()
     rows = [_top_row(lines, name, found[name]) for name in found if name not in carded]
     return sorted(rows, key=lambda row: (row.line, row.column))
 
 
 def _top_row(lines, name, condition):
-    """The Statement row of the site named name, its Condition condition,
+    """The Statement row of the decision named name, its Condition condition,
     outside every function of the source of lines."""
     line, column = (int(part) for part in name.rsplit(":", 2)[1:])
-    top = _top_of_site(lines, line, column, condition)
-    paths = len(site_paths.possible(condition))
+    top = _top_of_decision(lines, line, column, condition)
+    paths = len(decision_paths.possible(condition))
     return Statement(line, column, top, paths, name, name)
 
 
 def top_level(source, path, paths):
-    """[taken, possible] of the paths of the sites in source on no
+    """[taken, possible] of the paths of the decisions in source on no
     function's card, as top_rows gives them; paths as result.paths gives
     them. Example: RATE = 2 if FAST else 1, its then taken, gives [1, 2]."""
-    names = [row.site for row in top_rows(source, path)]
+    names = [row.decision for row in top_rows(source, path)]
     return path_totals.alone({name: paths[name] for name in names})
 
 
 def totals(source, path, paths, reached):
-    """{def site: [taken, size]} of each function's card in source, its
+    """{def decision: [taken, size]} of each function's card in source, its
     rows' taken as taken gives them from paths and reached; a row not known
     counts as not taken, never more than it ran. Example: {"k.py:1:0": [2,
     4]}, 2 of ship's 4 paths taken."""
     return {
-        site: [sum(count or 0 for count in taken(rows, paths, reached)), size(rows)]
-        for site, rows in of(source, path).items()
+        decision: [sum(count or 0 for count in taken(rows, paths, reached)), size(rows)]
+        for decision, rows in of(source, path).items()
     }
 
 
 def cards(files, paths, reached):
-    """{def site: [taken, size]} of every function's card in files,
-    {path relative to root: (source, sites)}, as totals gives them, and each
+    """{def decision: [taken, size]} of every function's card in files,
+    {path relative to root: (source, decisions)}, as totals gives them, and each
     file's top level's, as top_level gives it, named for line 0, which no
     function is on. Example: {"k.py:1:0": [2, 4], "k.py:0:0": [1, 2]}."""
     found = {}
@@ -179,27 +179,27 @@ def complexity(rows):
 
 
 def taken(rows, paths, reached=None):
-    """How many paths of each row were taken: for a site's row, its paths
+    """How many paths of each row were taken: for a decision's row, its paths
     with a count, paths being as result.paths gives them; for any other
     row, its 1 path when reached has a count for it, 0 when not, None, not
     known, without reached. Example: an if row with only its then taken
     gives 1."""
     return [
-        _taken_site(row, paths) if row.site else None if reached is None else int(row.name in reached)
+        _taken_decision(row, paths) if row.decision else None if reached is None else int(row.name in reached)
         for row in rows
     ]
 
 
-def _taken_site(row, paths):
-    """How many of a site row's paths have a count in paths."""
-    return sum(1 for each in paths[row.site] if each["count"] > 0)
+def _taken_decision(row, paths):
+    """How many of a decision row's paths have a count in paths."""
+    return sum(1 for each in paths[row.decision] if each["count"] > 0)
 
 
 def _collect(source, path):
-    """{def site: (def node, rows)} for each function in source, in source
+    """{def decision: (def node, rows)} for each function in source, in source
     order."""
     tree = ast.parse(source)
-    finder = _Rows(path, source, sites(source, path), tree)
+    finder = _Rows(path, source, decisions(source, path), tree)
     found = {
         f"{path}:{node.lineno}:{node.col_offset}": (node, finder.rows(node))
         for node in ast.walk(tree)
@@ -218,8 +218,8 @@ def body_of(node):
     return body[1:] if constant else body
 
 
-def _top_of_site(lines, line, column, condition):
-    """The top of the site named at line and column, a UTF-8 byte column,
+def _top_of_decision(lines, line, column, condition):
+    """The top of the decision named at line and column, a UTF-8 byte column,
     in lines, its Condition condition: its operator, but for an if
     statement its keyword, if or elif, then /else when it has an else arm
     that is no elif, eg if/else."""
@@ -240,7 +240,7 @@ def _written_at(lines, line, column):
 @dataclass(frozen=True)
 class _Filter:
     """A comprehension's filter as a node of its own: where its if keyword
-    is, which names its site, and its test."""
+    is, which names its decision, and its test."""
 
     lineno: int
     col_offset: int
@@ -251,7 +251,7 @@ class _Rows:
     """Finds the rows of a function's statements."""
 
     def __init__(self, path, source, found, tree):
-        """Names rows after path; found is the {site: Condition} of source,
+        """Names rows after path; found is the {decision: Condition} of source,
         and tree its parse."""
         self.path = path
         self.found = found
@@ -262,63 +262,63 @@ class _Rows:
 
     def rows(self, function):
         """The Statement rows of function's body that shape a path, flat, in
-        the order written: each site's, and each return's and raise's, as
+        the order written: each decision's, and each return's and raise's, as
         each cuts a path short; no row for any other statement, whose one
         path tells the reader nothing."""
         rows = [self._row(node) for node in self._rows_in(body_of(function))]
-        return [row for row in rows if row.site or row.top in LEAVING]
+        return [row for row in rows if row.decision or row.top in LEAVING]
 
     def _rows_in(self, statements):
         """The nodes statements' rows are for, flat, in the order written:
-        each statement's tops, each followed by the sites of their own
+        each statement's tops, each followed by the decisions of their own
         inside it, then the rows of its arms' statements; then the rows of
         the statement's bodies. Example: if a: x = 1 gives the if, then the
         write."""
         nodes = []
         for statement in statements:
-            for top in self._sites_in(statement) or [statement]:
-                named = sorted([top, *self._inner_sites(top)], key=self._at)
+            for top in self._decisions_in(statement) or [statement]:
+                named = sorted([top, *self._inner_decisions(top)], key=self._at)
                 nodes += [*named, *self._rows_in(_arms_of(top))]
             nodes += self._body_rows(statement)
         return nodes
 
-    def _sites_in(self, node):
-        """[node] when it is a site, else the outermost sites in its heads,
+    def _decisions_in(self, node):
+        """[node] when it is a decision, else the outermost decisions in its heads,
         in order; none in a node UNSEEN holds. Example: x = (1 if a else 2)
         + (3 if b else 4) gives both ternaries."""
-        if self._site_of(node):
+        if self._decision_of(node):
             return [node]
         if isinstance(node, UNSEEN):
             return []
-        return [site for head in self._heads(node) for site in self._sites_in(head)]
+        return [decision for head in self._heads(node) for decision in self._decisions_in(head)]
 
-    def _inner_sites(self, site):
-        """The sites inside site that are sites of their own, in the order
+    def _inner_decisions(self, decision):
+        """The decisions inside decision that are decisions of their own, in the order
         written: in its heads, not its arms nor its bodies, which have rows
-        of their own. A node named as site is, eg a ternary's then arm when
-        it is a call, is site itself, so it is left out. None for a top that
-        is no site. Example: valid(a if x else b) and ok gives the
+        of their own. A node named as decision is, eg a ternary's then arm when
+        it is a call, is decision itself, so it is left out. None for a top that
+        is no decision. Example: valid(a if x else b) and ok gives the
         ternary."""
-        if not self._site_of(site):
+        if not self._decision_of(decision):
             return []
         named = {}
-        for head in self._heads(site):
-            for node in self._sites_within(head):
+        for head in self._heads(decision):
+            for node in self._decisions_within(head):
                 named.setdefault(self._name(node), node)
-        named.pop(self._name(site), None)
+        named.pop(self._name(decision), None)
         return list(named.values())
 
-    def _sites_within(self, node):
-        """node when it is a site, then each site within its heads, in
+    def _decisions_within(self, node):
+        """node when it is a decision, then each decision within its heads, in
         order; none in a node UNSEEN holds."""
         if isinstance(node, UNSEEN):
             return []
-        own = [node] if self._site_of(node) else []
-        return own + [site for head in self._heads(node) for site in self._sites_within(head)]
+        own = [node] if self._decision_of(node) else []
+        return own + [decision for head in self._heads(node) for decision in self._decisions_within(head)]
 
     def _body_rows(self, node):
         """The rows of the bodies in node, each as _bodies_in gives it: a
-        list of statements' rows, or the site rows of a lambda's or a
+        list of statements' rows, or the decision rows of a lambda's or a
         comprehension's parts."""
         rows = []
         for statements, parts in self._bodies_in(node):
@@ -330,7 +330,7 @@ class _Rows:
         more times or on a raise: a loop's, a with's, a class's, and a
         try's parts; (None, node) for each lambda and comprehension; none in
         a function, whose rows are its own card's, nor in an arm, whose
-        rows follow its site's."""
+        rows follow its decision's."""
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return []
         if isinstance(node, UNSEEN):
@@ -341,11 +341,11 @@ class _Rows:
 
     def _part_rows(self, node):
         """The nodes of the rows of node's parts, a lambda's or a
-        comprehension's: each site in them, then those of the lambdas and
+        comprehension's: each decision in them, then those of the lambdas and
         comprehensions inside them."""
         heads = self._heads(node)
-        sites_in = [site for head in heads for site in self._sites_within(head)]
-        return sites_in + [row for head in heads for row in self._body_rows(head)]
+        decisions_in = [decision for head in heads for decision in self._decisions_within(head)]
+        return decisions_in + [row for head in heads for row in self._body_rows(head)]
 
     def _heads(self, node):
         """node's children outside its arms and its bodies of statements:
@@ -377,9 +377,9 @@ class _Rows:
         line, column = keyword_before(self.keywords, test)
         return _Filter(line, column, test)
 
-    def _site_of(self, node):
-        """The name of the site that node is, eg "k.py:2:4" for an if
-        statement there; None when node is no site."""
+    def _decision_of(self, node):
+        """The name of the decision that node is, eg "k.py:2:4" for an if
+        statement there; None when node is no decision."""
         kinds = (_Filter, ast.BoolOp, ast.IfExp, ast.If, ast.Match)
         if isinstance(node, kinds) or (isinstance(node, ast.Call) and block_generator(node, self.builtins)):
             name = self._name(node)
@@ -392,27 +392,27 @@ class _Rows:
         return f"{self.path}:{line}:{column}"
 
     def _at(self, node):
-        """(line, column) of node's row: where its site is named, as
-        site_at says, an and or an or at its keyword, a conditional
+        """(line, column) of node's row: where its decision is named, as
+        decision_at says, an and or an or at its keyword, a conditional
         expression at its if; where any other node starts."""
-        return site_at(self.operators, node) if isinstance(node, (ast.BoolOp, ast.IfExp)) else (
+        return decision_at(self.operators, node) if isinstance(node, (ast.BoolOp, ast.IfExp)) else (
             node.lineno,
             node.col_offset,
         )
 
     def _row(self, node):
-        """The Statement row of node, where it starts: a site with as many
+        """The Statement row of node, where it starts: a decision with as many
         paths as its Condition has, its top its operator, an elif's elif;
         anything else with 1."""
-        site = self._site_of(node)
+        decision = self._decision_of(node)
         name = self._name(node)
         line, column = self._at(node)
-        if site is None:
+        if decision is None:
             return Statement(line, column, _top(node), 1, None, name)
-        condition = self.found[site]
-        top = _top_of_site(self.lines, line, column, condition)
-        paths = len(site_paths.possible(condition))
-        return Statement(line, column, top, paths, site, name)
+        condition = self.found[decision]
+        top = _top_of_decision(self.lines, line, column, condition)
+        paths = len(decision_paths.possible(condition))
+        return Statement(line, column, top, paths, decision, name)
 
 
 def _arms_of(node):
@@ -443,7 +443,7 @@ def _statements_of(node):
 
 
 def _top(statement):
-    """What a statement that is no site is as written: its keyword's, eg
+    """What a statement that is no decision is as written: its keyword's, eg
     for, or = for a write, () for a call, value for anything else."""
     if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
         return "()"

@@ -1,34 +1,34 @@
-"""What the reports say about each site's paths beyond their counts, worked
+"""What the reports say about each decision's paths beyond their counts, worked
 out from each covered file's source: where each leaf is, and what it says."""
 
 
 def of(paths, files):
-    """{site: {"leaves": [...], "taken": [...]}}: taken is each path and its
+    """{decision: {"leaves": [...], "taken": [...]}}: taken is each path and its
     count, as result.paths gives them, and leaves each leaf's
     ["line:col", "line:col"] span, so a tool can recover each leaf exactly.
-    files is {path: (source, sites)}."""
-    spans = _each_site(files, _spans)
-    return {site: {"leaves": spans[site], "taken": taken} for site, taken in paths.items()}
+    files is {path: (source, decisions)}."""
+    spans = _each_decision(files, _spans)
+    return {decision: {"leaves": spans[decision], "taken": taken} for decision, taken in paths.items()}
 
 
 def texts(files):
-    """{site: [each leaf's source text]} for every site in files."""
-    return _each_site(files, lambda source, leaf: _segment(source, leaf))
+    """{decision: [each leaf's source text]} for every decision in files."""
+    return _each_decision(files, lambda source, leaf: _segment(source, leaf))
 
 
-def _each_site(files, of_leaf):
-    """{site: [of_leaf(source, leaf) for each leaf]} for every site in
+def _each_decision(files, of_leaf):
+    """{decision: [of_leaf(source, leaf) for each leaf]} for every decision in
     files."""
     return {
-        site: [of_leaf(source, leaf) for leaf in condition.leaves()]
-        for source, sites in files.values()
-        for site, condition in sites.items()
+        decision: [of_leaf(source, leaf) for leaf in condition.leaves()]
+        for source, decisions in files.values()
+        for decision, condition in decisions.items()
     }
 
 
 def _spans(source, leaf):
     """leaf's ["line:col", "line:col"], each column counted in characters
-    from 0, as site names count them."""
+    from 0, as decision names count them."""
     return [_at(source, leaf.line, leaf.col), _at(source, leaf.end_line, leaf.end_col)]
 
 

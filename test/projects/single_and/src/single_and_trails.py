@@ -1,4 +1,4 @@
-"""A covered module for the kernel tests: one `and` site."""
+"""A covered module for the kernel tests: one `and` decision."""
 
 
 def is_new(trail_id, trails):

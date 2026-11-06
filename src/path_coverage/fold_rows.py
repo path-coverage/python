@@ -1,5 +1,5 @@
-"""The tree of a site, from site_tree.tree_of, as its row's fold in a card
-shows it: a grid whose columns are the site's paths, as page data holds its
+"""The tree of a decision, from decision_tree.tree_of, as its row's fold in a card
+shows it: a grid whose columns are the decision's paths, as page data holds its
 rows, each a kind, a branch, a label, where its code is and a cell per
 path."""
 
@@ -31,20 +31,20 @@ LEAVES = {True: ["", "leaves"], False: [""]}
 LEAVING = re.compile(r"(return|raise)\b")
 
 
-def rows(site):
-    """The rows of site's fold, a site tree located as page_cards locates
+def rows(decision):
+    """The rows of decision's fold, a decision tree located as page_cards locates
     it: its own row, naming its operator, or its label, eg if/else, each
     path's count, and where its else keyword is, if it has one; then the
     rows of its operands."""
     own = {
-        "kind": "site",
+        "kind": "decision",
         "branch": "",
-        "label": code_tokens.label_code(site.get("label", site["operator"])),
-        "at": site.get("at"),
-        "else": site.get("else_at"),
-        "counts": site["counts"],
+        "label": code_tokens.label_code(decision.get("label", decision["operator"])),
+        "at": decision.get("at"),
+        "else": decision.get("else_at"),
+        "counts": decision["counts"],
     }
-    return [own, *_operand_rows(site, "")]
+    return [own, *_operand_rows(decision, "")]
 
 
 def values(cells, names=OUTCOMES):

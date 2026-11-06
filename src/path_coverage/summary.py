@@ -1,4 +1,4 @@
-"""Which file a site is in, and whether a file is in a group."""
+"""Which file a decision is in, and whether a file is in a group."""
 
 import re
 from pathlib import PurePosixPath
@@ -10,6 +10,6 @@ def matches(path, globs):
     return any(map(PurePosixPath(path).full_match, globs))
 
 
-def path_of(site):
-    """The file a site is in: its name minus :line:column."""
-    return re.sub(r":\d+:\d+\Z", "", site)
+def path_of(decision):
+    """The file a decision is in: its name minus :line:column."""
+    return re.sub(r":\d+:\d+\Z", "", decision)

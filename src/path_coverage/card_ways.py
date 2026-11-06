@@ -1,8 +1,8 @@
 """The number of ways one call can go through each card, folded over its
 tree, as card_tree places its rows. Each row gives a pair, (ways that go on,
 ways that leave the function): a return or a raise leaves, and so does each
-path of a site taking an arm that returns or raises. Rows one after another
-multiply, but only the ways that go on reach the next row; a site adds up
+path of a decision taking an arm that returns or raises. Rows one after another
+multiply, but only the ways that go on reach the next row; a decision adds up
 its paths, each with the rows it runs on that path one after another; and a
 row that is the whole of a leaf counts only those of its paths that give the
 leaf the outcome the path has, so no impossible way is counted where gives
@@ -10,29 +10,29 @@ knows it."""
 
 import re
 
-from . import card_tree, method_statements, site_paths
-from .manifest import sites as find_sites
+from . import card_tree, method_statements, decision_paths
+from .manifest import decisions as find_decisions
 
 # An arm's code, or a row's top, that leaves the function.
 LEAVES = re.compile(r"(return|raise)\b")
 
 
 def of(source, path):
-    """{def site: its ways} for each function in source. Example:
+    """{def decision: its ways} for each function in source. Example:
     {"k.py:1:0": 3} for def f(a, b): if a: return 0, then a conditional
     expression of b: 1 way leaves, 2 go on."""
-    sites = find_sites(source, path)
+    decisions = find_decisions(source, path)
     return {
-        site: card(source, sites, rows)
-        for site, rows in method_statements.of(source, path).items()
+        decision: card(source, decisions, rows)
+        for decision, rows in method_statements.of(source, path).items()
     }
 
 
-def card(source, sites, rows):
-    """The ways through a card of rows in source, sites being {site:
+def card(source, decisions, rows):
+    """The ways through a card of rows in source, decisions being {decision:
     Condition}."""
-    places = card_tree.nested(source, sites, rows)
-    return sum(_Fold(source, rows, places, sites).total())
+    places = card_tree.nested(source, decisions, rows)
+    return sum(_Fold(source, rows, places, decisions).total())
 
 
 def sequence(pairs):
@@ -53,13 +53,13 @@ def added(pairs):
 class _Fold:
     """The fold of a card's rows, placed as places has them."""
 
-    def __init__(self, source, rows, places, sites):
+    def __init__(self, source, rows, places, decisions):
         """rows a card's, in source, placed as card_tree places them, each
-        site row's Condition among sites."""
+        decision row's Condition among decisions."""
         self.source = source
         self.rows = {card_tree.key_of(row): row for row in rows}
         self.places = places
-        self.sites = sites
+        self.decisions = decisions
         self.children = {}
         for key, place in places.items():
             self.children.setdefault(place["parent"], []).append(key)
@@ -69,21 +69,21 @@ class _Fold:
         return sequence([self.pair_of(key) for key in self.children.get(None, [])])
 
     def pair_of(self, key):
-        """The pair of the row keyed key: a site's adds up its paths' pairs;
+        """The pair of the row keyed key: a decision's adds up its paths' pairs;
         any other row is a return or a raise, as no other is a row, so
         leaves."""
         row = self.rows[key]
-        if row.site is None:
+        if row.decision is None:
             return (0, 1)
-        paths = range(len(self._possible(row.site)))
+        paths = range(len(self._possible(row.decision)))
         return added([self.pair_on(key, path) for path in paths])
 
     def pair_on(self, key, path):
-        """The pair of the site row keyed key on its path at index path: the
+        """The pair of the decision row keyed key on its path at index path: the
         rows it runs on that path, one after another, each given that path's
         outcomes; every way of it leaving when the path takes an arm that
         leaves."""
-        outcomes = self._possible(self.rows[key].site)[path]
+        outcomes = self._possible(self.rows[key].decision)[path]
         running = [
             child for child in self.children.get(key, []) if path in self.places[child]["on"]
         ]
@@ -108,16 +108,16 @@ class _Fold:
         )
 
     def _leaving(self, key):
-        """The indices of the paths of the site row keyed key that take an
+        """The indices of the paths of the decision row keyed key that take an
         arm whose code returns or raises."""
-        site = self.sites[self.rows[key].site]
+        decision = self.decisions[self.rows[key].decision]
         return [
             path
-            for region in card_tree.regions_of(self.source, key, site)
+            for region in card_tree.regions_of(self.source, key, decision)
             if region.arm and LEAVES.match(card_tree.text_of(self.source, region))
             for path in region.on
         ]
 
-    def _possible(self, site):
-        """The possible paths of the site named site."""
-        return site_paths.possible(self.sites[site])
+    def _possible(self, decision):
+        """The possible paths of the decision named decision."""
+        return decision_paths.possible(self.decisions[decision])

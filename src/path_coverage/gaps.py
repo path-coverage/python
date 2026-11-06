@@ -1,5 +1,5 @@
-"""The terminal worklist: one line per path a site never took, and nothing
-for a site that took them all."""
+"""The terminal worklist: one line per path a decision never took, and nothing
+for a decision that took them all."""
 
 import re
 
@@ -7,22 +7,22 @@ import re
 def lines(operands, paths, texts):
     """The gap lines, in manifest order, of operands and paths (as
     result.operands and result.paths give them), each leaf named by its
-    source text in texts ({site: [text, ...]}), eg
+    source text in texts ({decision: [text, ...]}), eg
     "k.py:2:4 path never taken: `ok(id)` true, `new(id)` false"."""
     return [
         line
-        for site, counts in operands.items()
-        for line in _site_gaps(site, counts, paths.get(site, []), texts.get(site, []))
+        for decision, counts in operands.items()
+        for line in _decision_gaps(decision, counts, paths.get(decision, []), texts.get(decision, []))
     ]
 
 
-def _site_gaps(site, operands, paths, texts):
-    """One line for a site none of whose leaves ever ran, else one per path
+def _decision_gaps(decision, operands, paths, texts):
+    """One line for a decision none of whose leaves ever ran, else one per path
     it never took."""
     if sum(counts["truthy"] + counts["falsy"] for counts in operands) == 0:
-        return [f"{site} never reached"]
+        return [f"{decision} never reached"]
     return [
-        f"{site} path never taken: {_steps(each['path'], texts)}"
+        f"{decision} path never taken: {_steps(each['path'], texts)}"
         for each in paths
         if each["count"] == 0
     ]
