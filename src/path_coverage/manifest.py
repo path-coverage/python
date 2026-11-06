@@ -235,10 +235,11 @@ def block_generator(node, builtins):
     """The generator of node when node is a call of one of builtins whose
     one argument is a generator, eg any(o.late for o in orders); else None,
     as for any(flags), whose items have no answer to note."""
-    called = isinstance(node.func, ast.Name) and node.func.id in builtins
-    if called and not node.keywords and len(node.args) == 1 and isinstance(node.args[0], ast.GeneratorExp):
-        return node.args[0]
-    return None
+    match node:
+        case ast.Call(func=ast.Name(id=name), args=[ast.GeneratorExp() as generator], keywords=[]) if name in builtins:
+            return generator
+        case _:
+            return None
 
 
 def builtin_blocks(tree):
@@ -265,7 +266,7 @@ def builtin_blocks(tree):
 def _alias_name(alias):
     """The name an import binds: its as name, else the first part of the
     module or name imported."""
-    return alias.asname or alias.name.split(".")[0]
+    return alias.asname if alias.asname else alias.name.split(".")[0]
 
 
 def _leaf(node):
@@ -299,7 +300,9 @@ def _only(node):
     if isinstance(node, ast.Lambda):
         return "truthy"
     if isinstance(node, ast.JoinedStr):
-        literal = any(isinstance(v, ast.Constant) and v.value for v in node.values)
+        # An f-string's literal text is never empty, so any part of it makes
+        # the string truthy.
+        literal = any(isinstance(value, ast.Constant) for value in node.values)
         return "truthy" if literal else None
     return None
 

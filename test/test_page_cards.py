@@ -89,6 +89,22 @@ def test_7d61a405():
     ]
 
 
+def test_7d61a406():
+    """Example: [u for u in users if u.active], its filter
+    The filter's arms, keep and drop, have no code, so are placed nowhere;
+    its fold is its predicate, placed at its code."""
+    source = "def active(users):\n    return [u for u in users if u.active]\n"
+    rows = _fold(source, "k.py:2:29", "filter")
+    assert [(row["kind"], row["at"]) for row in rows] == [("site", [2, 29, 2, 40]), ("operand", [2, 32, 2, 40])]
+
+
+def test_7d61a407():
+    """Example: guard, an if with no else, returning early
+    An if with no else arm has no else keyword to name."""
+    source = "def guard(a):\n    if a:\n        return 0\n    return 1\n"
+    assert _fold(source, "k.py:2:4", "if")[0]["else"] is None
+
+
 def _untaken(sites):
     """Each of sites' possible paths, none taken, as result.paths gives
     them."""

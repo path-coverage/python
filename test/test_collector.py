@@ -8,6 +8,9 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
+from path_coverage import collector
 from path_coverage.collector import serve
 from path_coverage.post import deliver
 
@@ -107,6 +110,70 @@ def test_6c2b8e08(tmp_path):
     assert deliver(json.dumps(REPORT), f"http://127.0.0.1:{port}/runs") == 200
     _stopped(server, stop, thread)
     assert [p.name for p in tmp_path.iterdir()] == ["run-0001.json"]
+
+
+def test_6c2b8e0c(tmp_path):
+    """Example: a report delivered to http://127.0.0.1:PORT, a url with no
+    path
+    It is POSTed to /, and the collector saves it."""
+    server, port, stop, thread = _serving(tmp_path)
+    status = deliver(json.dumps(REPORT), f"http://127.0.0.1:{port}")
+    _stopped(server, stop, thread)
+    assert status == 200
+    assert json.loads((tmp_path / "run-0001.json").read_text()) == REPORT
+
+
+def test_6c2b8e09(tmp_path):
+    """Example: GET /ready to a collector whose dir exists but is read-only
+    A report sent now could not be saved, so it is answered 503."""
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    runs.chmod(0o500)
+    server, port, stop, thread = _serving(runs)
+    unready = _exchange(port, b"GET /ready HTTP/1.1\r\n\r\n")
+    _stopped(server, stop, thread)
+    runs.chmod(0o700)
+    assert unready == "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"
+
+
+def test_6c2b8e0a(monkeypatch, capsys):
+    """Example: path_coverage_collector -h, its entry point run in this
+    process
+    It prints its usage and exits 0."""
+    monkeypatch.setattr(sys, "argv", ["path_coverage_collector", "-h"])
+    with pytest.raises(SystemExit) as exited:
+        collector.command()
+    assert exited.value.code == 0
+    assert capsys.readouterr().out.startswith("Usage: path_coverage_collector PORT DIR\n")
+
+
+def test_6c2b8e0b(tmp_path):
+    """Example: the collector's main, run in this process, sent a report,
+    then TERM
+    It creates DIR, saves the report, and on TERM stops serving and
+    returns 0."""
+    probe = socket.create_server(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    runs = tmp_path / "runs"
+    replies = []
+
+    def send_then_term():
+        """POSTs a report until the collector answers, then sends TERM;
+        deliver gives None while no collector is listening."""
+        while (status := deliver(json.dumps(REPORT), f"http://127.0.0.1:{port}/")) is None:
+            time.sleep(0.05)
+        replies.append(status)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    previous = signal.getsignal(signal.SIGTERM)
+    threading.Thread(target=send_then_term).start()
+    try:
+        assert collector.main([str(port), str(runs)]) == 0
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+    assert replies == [200]
+    assert json.loads((runs / "run-0001.json").read_text()) == REPORT
 
 
 def test_6c2b8e05():

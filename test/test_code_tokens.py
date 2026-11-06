@@ -21,6 +21,13 @@ def test_c0d7e304():
     assert code_tokens.of('x = f"hi {n}!"\n') == {1: [[4, 9, "s"], [12, 14, "s"]]}
 
 
+def test_c0d7e305():
+    """Example: x = 1#one, a comment written right after code
+    The number and the comment touch but are of different classes, so each
+    keeps a range of its own."""
+    assert code_tokens.of("x = 1#one\n") == {1: [[4, 5, "n"], [5, 9, "c"]]}
+
+
 def test_c0d7e302():
     """Example: the labels if/else and elif, and a ternary's arm, ? n > 1
     A label naming a choice and its else is coloured word by word, each a

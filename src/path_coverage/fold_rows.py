@@ -125,6 +125,6 @@ def _operand_row(operand, branch):
     """One operand's row: its branch, text, coloured as the code it is,
     written over more than one line read as one, each line break and the
     indent around it one space, and its outcome on each path."""
-    one_line = re.sub(r"\s*\n\s*", " ", operand["text"] or "")
+    one_line = re.sub(r"\s*\n\s*", " ", operand["text"])
     label = code_tokens.code(one_line)
     return {"kind": "operand", "branch": branch, "label": label, "at": operand.get("at"), "cells": values(operand["cells"])}

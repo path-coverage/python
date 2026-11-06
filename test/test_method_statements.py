@@ -437,6 +437,15 @@ def test_b47e3a30():
     assert missed == {path: [] for path in missed}
 
 
+def test_b47e3a33():
+    """Example: note, whose first statement is a call holding a ternary,
+    log(1 if a else 2)
+    A first statement that is an expression but no string is no
+    docstring, so it runs, and its ternary is a row."""
+    source = "def note(a):\n    log(1 if a else 2)\n"
+    assert _placed(source) == [(2, 10, "ternary")]
+
+
 def test_b47e3a31():
     """Example: ship, a write, a for over its items, a call, an if with an
     else, a return, and a raise in the else

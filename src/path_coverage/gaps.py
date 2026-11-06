@@ -19,7 +19,7 @@ def lines(operands, paths, texts):
 def _site_gaps(site, operands, paths, texts):
     """One line for a site none of whose leaves ever ran, else one per path
     it never took."""
-    if all(_never_ran(counts) for counts in operands):
+    if sum(counts["truthy"] + counts["falsy"] for counts in operands) == 0:
         return [f"{site} never reached"]
     return [
         f"{site} path never taken: {_steps(each['path'], texts)}"
@@ -38,14 +38,15 @@ def _steps(path, texts):
 
 
 def code(text):
-    """text as a Markdown code span on one line: each run of whitespace one
-    space, fenced by a run of backticks one longer than any inside it, with
-    a space inside the fence when text starts or ends with one."""
+    """text, a leaf's source, as a Markdown code span on one line: each run
+    of whitespace one space, fenced by a run of backticks one longer than
+    any inside it. A leaf's backticks are only ever inside its strings, so
+    it never starts or ends with one, which a fence would need padding
+    for."""
     text = re.sub(r"\s+", " ", text)
     longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
     fence = "`" * (longest + 1)
-    pad = " " if text.startswith("`") or text.endswith("`") else ""
-    return f"{fence}{pad}{text}{pad}{fence}"
+    return f"{fence}{text}{fence}"
 
 
 def operand_gap(counts):

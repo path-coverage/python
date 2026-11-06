@@ -70,13 +70,13 @@ def _arm(source, arm, decided, then_on, outcomes, leaves):
     cells and the outcome on which its choice takes its then arm, and the
     tree of its condition."""
     picked = then_on if arm.kind == "then" else not then_on
-    body = arm.body and _node(source, arm.body, outcomes, leaves)
+    body = _node(source, arm.body, outcomes, leaves) if arm.body else None
     written = arm.at or arm.extent
     return {
         "arm": arm.kind,
         "text": segment(source, *written) if written else None,
         "cells": [outcome == picked for outcome in decided],
-        "body": body or None,
+        "body": body,
     }
 
 

@@ -59,7 +59,7 @@ def groups(rows, named):
 def matches(path, globs):
     """True when path, relative to root, matches any of globs, as cover
     globs match."""
-    return any(PurePosixPath(path).full_match(glob) for glob in globs)
+    return any(map(PurePosixPath(path).full_match, globs))
 
 
 def _add(pairs):

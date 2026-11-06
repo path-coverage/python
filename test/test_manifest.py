@@ -292,6 +292,39 @@ def test_5c1e9a04():
     ]
 
 
+def test_5c1e9a11():
+    """Example: name or f'', name or f'x', name or f'{n}', name or
+    f'{a}{b}', name or f'{n} items'
+    An f-string with literal text anywhere is truthy, whatever its
+    expressions give. One that is only expressions may be either, and so
+    may an empty one, as nothing is known of its parts."""
+    source = (
+        "a = name or f''\n"
+        "b = name or f'x'\n"
+        "c = name or f'{n}'\n"
+        "d = name or f'{a}{b}'\n"
+        "e = name or f'{n} items'\n"
+    )
+    onlys = [condition.leaves()[1].only for condition in sites(source, "k.py").values()]
+    assert onlys == [None, "truthy", None, None, "truthy"]
+
+
+def test_5c1e9a12():
+    """Example: match n: case 0 as zero: ... case _: ...
+    A case binding a name to a pattern matches only what its pattern does,
+    so its leaf may be either; only a bare _ or name matches anything."""
+    source = (
+        "def size(n):\n"
+        "    match n:\n"
+        "        case 0 as zero:\n"
+        "            return zero\n"
+        "        case _:\n"
+        "            return n\n"
+    )
+    [match] = sites(source, "k.py").values()
+    assert [leaf.only for leaf in match.leaves()] == [None, "truthy"]
+
+
 def test_5c1e9a03():
     """A condition inside a leaf operand is a site of its own: the any
     that is the or's first leaf, and the and in the any's generator. The

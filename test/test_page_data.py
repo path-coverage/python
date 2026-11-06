@@ -59,22 +59,26 @@ def test_e2b45f02():
 
 def test_e2b45f03():
     """Example: __init__, no rows, called once, then never; ship, its if
-    taken one way of two; pick, both its rows taken every way
+    taken one way of two, then every way; pick, both its rows taken every
+    way, then its return never reached
     A card is covered only when every row took all its paths and its
     function was called: never called, a function ran none of its code,
-    so it has a gap."""
+    so it has a gap; and one row's gap is the card's."""
     def init(calls):
         """__init__'s card, called calls times."""
         return {"calls": calls, "rows": []}
 
-    ship = {"calls": 3, "rows": [{"paths": 2, "taken": 1}]}
-    pick = {"calls": 2, "rows": [{"paths": 2, "taken": 2}, {"paths": 1, "taken": 1}]}
-    assert [page_data.status(card) for card in (init(1), init(0), ship, pick)] == [
-        "covered",
-        "gaps",
-        "gaps",
-        "covered",
-    ]
+    def ship(taken):
+        """ship's card, its if taken taken ways of 2."""
+        return {"calls": 3, "rows": [{"paths": 2, "taken": taken}]}
+
+    def pick(returned):
+        """pick's card, its if taken every way, its return reached
+        returned times."""
+        return {"calls": 2, "rows": [{"paths": 2, "taken": 2}, {"paths": 1, "taken": returned}]}
+
+    cards = (init(1), init(0), ship(1), ship(2), pick(1), pick(0))
+    assert [page_data.status(card) for card in cards] == ["covered", "gaps", "gaps", "covered", "covered", "gaps"]
 
 
 def test_e2b45f04():

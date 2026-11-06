@@ -209,12 +209,13 @@ def _collect(source, path):
 
 
 def body_of(node):
-    """The statements of node's body that run, a function's or a class's,
-    its docstring left out, as Python runs no code for it."""
+    """The statements of node's body that might give a row, a function's
+    or a class's, a first statement that is a constant alone, eg its
+    docstring or ..., left out, as it runs no code."""
     body = node.body
     first = body[0]
-    docstring = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
-    return body[1:] if docstring and isinstance(first.value.value, str) else body
+    constant = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+    return body[1:] if constant else body
 
 
 def _top_of_site(lines, line, column, condition):

@@ -79,9 +79,9 @@ def located(source, condition, tree):
         if isinstance(operand, Condition):
             node = located(source, operand, node)
         elif isinstance(operand, Arm):
-            body = operand.body and located(source, operand.body, node["body"])
+            body = located(source, operand.body, node["body"]) if operand.body else None
             written = operand.at or operand.extent
-            node = {**node, "body": body or None, "at": position(source, *written) if written else None}
+            node = {**node, "body": body, "at": position(source, *written) if written else None}
         else:
             node = {**node, "at": position(source, operand.line, operand.col, operand.end_line, operand.end_col)}
         operands.append(node)

@@ -101,6 +101,20 @@ def test_5be7c006():
     }
 
 
+def test_5be7c007():
+    """Example: pick, a conditional expression whose else arm is an or of b
+    and an any
+    The any is in the else arm and in the or's second leaf, the
+    expression's third, so it runs only on the paths that take the else
+    arm and evaluate that leaf: where a and b were both false. It is the
+    whole of its leaf, so gives the leaf its value."""
+    source = "def pick(a, b, xs):\n    return 1 if a else (b or any(x for x in xs))\n"
+    assert _places(source) == {
+        "2:13": TOP,
+        "2:29": ("2:13", "else", [2, 3], 2, [False, True, False, True, False]),
+    }
+
+
 def test_5be7c005():
     """Example: every Python file of the package's src and test.
     Every row placed in a parent is placed in a row of its own card, on
@@ -120,14 +134,13 @@ def _misplaced(source):
     sites = manifest.sites(source, "k.py")
     found = []
     for rows in card_tree.of(source, "k.py").values():
-        for place in rows.values():
+        inner = [place for place in rows.values() if place["parent"]]
+        for place in inner:
             parent = place["parent"]
-            if parent is None:
-                continue
-            possible = len(site_paths.possible(sites[f"k.py:{parent}"]))
-            found += [] if parent in rows else [parent]
-            found += [] if place["on"] else ["no path"]
-            found += [path for path in place["on"] if path >= possible]
+            possible = range(len(site_paths.possible(sites[f"k.py:{parent}"])))
+            found += sorted({parent} - set(rows))
+            found += ["no path"] * (place["on"] == [])
+            found += sorted(set(place["on"]) - set(possible))
         found += _looped(rows)
     return found
 
@@ -140,6 +153,6 @@ def _looped(rows):
     for key in rows:
         at = key
         for _ in rows:
-            at = rows[at]["parent"] if at is not None else None
-        reached += [] if at is None else [at]
-    return reached
+            at = rows.get(at, {}).get("parent")
+        reached.append(at)
+    return list(filter(None, reached))

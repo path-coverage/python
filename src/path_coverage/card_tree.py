@@ -76,7 +76,7 @@ def _placed(key, span, regions, site):
     owner = _smallest(holding).owner
     own = [region for region in holding if region.owner == owner]
     arm = _smallest([region for region in own if region.arm])
-    on = [index for index in own[0].on if all(index in region.on for region in own)]
+    on = sorted(set.intersection(*(set(region.on) for region in own)))
     leaf = _smallest([region for region in own if region.arm is None]) if site else None
     whole = leaf is not None and (leaf.begin, leaf.end) == span
     return {

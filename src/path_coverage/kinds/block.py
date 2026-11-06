@@ -39,12 +39,10 @@ class Block:
 
     def value(self, operator, operands):
         """Its value in each column, from its count of items and its last
-        answer there; None where it was not reached."""
+        answer there. Its tree is always its own site's, so every column
+        has a count of items."""
         items, answer = operands
-        return [
-            count and self.path_value(operator, count, last)
-            for count, last in zip(items["cells"], answer["cells"])
-        ]
+        return [self.path_value(operator, count, last) for count, last in zip(items["cells"], answer["cells"])]
 
     def path_value(self, operator, items, answer):
         """Its value on a path: eg False for any given 0 items, True for all

@@ -45,6 +45,12 @@ def _call(method, args, at):
     return call
 
 
+def _constant(statement):
+    """True for a statement that is a constant alone, eg a docstring or
+    ..., which runs no code."""
+    return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
+
+
 def _unmatched_case(site, patterns, at):
     """case _ if unmatched(site, patterns): pass, located at node at: the
     case a match ends with to note that none of its cases was taken, its
@@ -111,14 +117,13 @@ class _Rewriter(ast.NodeTransformer):
 
     def _entered(self, function):
         """function with a reach call naming it, by its def's site, which
-        reaches always holds, as the first statement of its body, after its
-        docstring, which stays its docstring, so each call is counted."""
+        reaches always holds, in its body after its first statement when
+        that is a constant, so a docstring stays its docstring, even one
+        that is the whole body; else first. Each call is counted."""
         name = f"{self.path}:{function.lineno}:{function.col_offset}"
         body = function.body
-        first = body[0]
-        docstring = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
-        at = 1 if docstring and isinstance(first.value.value, str) and len(body) > 1 else 0
-        function.body = [*body[:at], _reach(name, body[at]), *body[at:]]
+        at = 1 if _constant(body[0]) else 0
+        function.body = [*body[:at], _reach(name, body[min(at, len(body) - 1)]), *body[at:]]
 
     def visit_BoolOp(self, node):
         """node, its leaves (nested conditions' and folded arms' included)

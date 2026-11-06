@@ -164,6 +164,47 @@ def test_7e40b309():
     assert recorder.site_paths == {"k.py:2:4": {(True, False, True): 1}}
 
 
+def test_7e40b310():
+    """Example: the same match with case "silver" as kind in place of case
+    "silver", for a bronze order
+    A last case that names its match still matches only silver, so the
+    case noting that none matched is still added after it, and the bronze
+    order's path, no case taken, is counted."""
+    recorder = Recorder()
+    fee = _fee(MATCH.replace('case "silver"', 'case "silver" as kind'), recorder)
+    assert fee(SimpleNamespace(kind="bronze", big=True)) is None
+    assert recorder.site_paths == {"k.py:2:4": {(False, None, False): 1}}
+
+
+def test_7e40b311():
+    """Example: a generator suspended inside an and, at its yield, then
+    resumed in another thread
+    The and's evaluation began in one thread and ends in another, whose
+    record of it is empty, so its path cannot be told and is not counted;
+    each leaf's outcome still is, and the generator gives what it would
+    uninstrumented."""
+    import threading
+
+    source = (
+        "def ask(a):\n"
+        '    got = a and (yield "asked")\n'
+        "    yield got\n"
+    )
+    recorder = Recorder()
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    namespace = {RECORDER_NAME: recorder}
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    asking = namespace["ask"](True)
+    assert next(asking) == "asked"
+    answers = []
+    thread = threading.Thread(target=lambda: answers.append(asking.send(5)))
+    thread.start()
+    thread.join(5)
+    assert answers == [5]
+    assert recorder.site_paths == {}
+    assert recorder.counts == {("k.py:2:12", 0): {"truthy": 1, "falsy": 0}, ("k.py:2:12", 1): {"truthy": 1, "falsy": 0}}
+
+
 def test_7e40b30a():
     """Example: the gold and silver match, for a big gold, a small gold, a
     silver and a bronze order
@@ -258,7 +299,7 @@ def _lines_run(source, rewritten, *args):
     # Notes each line event of code compiled from k.py. Code that runs inside
     # a trace function is never measured by coverage.py, so the tracer is one
     # expression, on a line that runs.
-    trace = lambda frame, event, _arg: (event == "line" and frame.f_code.co_filename == "k.py" and seen.add((frame.f_code.co_name, frame.f_lineno))) or trace  # noqa: E731, E501
+    trace = lambda frame, event, _arg: (seen.add((frame.f_code.co_name, frame.f_lineno)) if (event, frame.f_code.co_filename) == ("line", "k.py") else None, trace)[1]  # noqa: E731, E501
     sys.settrace(trace)
     try:
         namespace["fee"](*args)
@@ -326,6 +367,28 @@ def test_7e40b30e():
     exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     assert namespace["depth"](1) is False
     assert recorder.site_paths == {"k.py:2:4": {(False,): 1, (True,): 1}}
+
+
+def test_7e40b30f():
+    """Example: describe, a function whose body is its docstring alone,
+    called once, and stub, whose body is ... alone
+    Each call is counted at the function's entry, after its first
+    statement when that is a constant, so describe's docstring stays its
+    docstring."""
+    source = (
+        "def describe():\n"
+        '    """Describes nothing."""\n'
+        "def stub():\n"
+        "    ...\n"
+    )
+    recorder = Recorder()
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    namespace = {RECORDER_NAME: recorder}
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    namespace["describe"]()
+    namespace["stub"]()
+    assert namespace["describe"].__doc__ == "Describes nothing."
+    assert recorder.reached == {"k.py:1:0": 1, "k.py:3:0": 1}
 
 
 def test_7e40b30d():

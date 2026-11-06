@@ -53,13 +53,14 @@ class Choice:
         """Its value in each column: its taken arm's body's, None for a
         plain arm or a column that took no arm."""
         arms = operands[1:]
-        return [
-            next(
-                (arm["body"]["cells"][column] if arm["body"] else None)
-                for arm in arms
-                if arm["cells"][column]
-            )
-            if any(arm["cells"][column] for arm in arms)
-            else None
-            for column in range(len(arms[0]["cells"]))
-        ]
+        return [_taken_value(arms, column) for column in range(len(arms[0]["cells"]))]
+
+
+def _taken_value(arms, column):
+    """The value in column of the arm of arms that column took: its body's,
+    None for a plain arm, or when column took no arm, as an if with no else
+    arm does on its false path."""
+    arm = next((arm for arm in arms if arm["cells"][column]), None)
+    if arm is None or arm["body"] is None:
+        return None
+    return arm["body"]["cells"][column]

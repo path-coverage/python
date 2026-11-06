@@ -79,12 +79,12 @@ def test_a91d2e02():
     A leaf the evaluation never reached stays None on the path."""
     recorder = Recorder()
     site = "src/model/flow.py:2:11"
-    for ok, new in [(True, False), (False, None)]:
+    for ok, new in [(True, True), (True, False), (False, None)]:
         trail = recorder.enter(site, 2)
         value = recorder.record(site, 0, ok) and recorder.record(site, 1, new)
         assert recorder.leave(trail, value) is value
     assert recorder.site_paths == {
-        site: {(True, False): 1, (False, None): 1},
+        site: {(True, True): 1, (True, False): 1, (False, None): 1},
     }
 
 

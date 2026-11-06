@@ -633,3 +633,65 @@ def test_e5a70c03():
     )
     assert started is False
     assert exits == []
+
+
+def test_e5a70c15(tmp_path):
+    """Example: cover *.py and skip vendored.py under root, then imports of
+    covered.py, vendored.py, lib/other.py, a namespace package, a module
+    outside root, and one that does not exist
+    Only covered.py is instrumented, its run recorded: the skipped one, the
+    one no cover glob matches, the one outside root and the namespace
+    package, which has no source, are loaded as they would be without path
+    coverage, and the missing one still fails to import."""
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    for file in (root / "covered.py", root / "vendored.py", root / "lib" / "other.py", outside / "away.py"):
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("VALUE = 1\n")
+    (root / "spaced").mkdir()
+    sys.path[:0] = [str(root), str(root / "lib"), str(outside)]
+    path_coverage.start(root=root, cover=["*.py"], skip=["vendored.py"], coverage_dir=tmp_path, on_exit=lambda report: None)
+    try:
+        imported = [__import__(name) for name in ("covered", "vendored", "other", "spaced", "away")]
+        with pytest.raises(ModuleNotFoundError):
+            __import__("nowhere_at_all")
+    finally:
+        path_coverage.stop()
+        del sys.path[:3]
+        for name in ("covered", "vendored", "other", "spaced", "away"):
+            sys.modules.pop(name)
+    instrumented = [module.__name__ for module in imported if "__path_coverage__" in vars(module)]
+    assert instrumented == ["covered"]
+
+
+def test_e5a70c16(tmp_path, capsys):
+    """Example: start_from_env with PATH_COVERAGE_COLLECTOR, a collector's
+    url, and no PATH_COVERAGE_REPORT
+    The reporters default to post, so the exit report is sent to that
+    collector, which saves it, and nothing is printed."""
+    import socket
+    import threading
+
+    from path_coverage.collector import serve
+
+    server = socket.create_server(("127.0.0.1", 0))
+    stop = threading.Event()
+    thread = threading.Thread(target=serve, args=(server, tmp_path / "runs", stop))
+    (tmp_path / "runs").mkdir()
+    thread.start()
+    exits = []
+    path_coverage.start_from_env(
+        {
+            "PATH_COVERAGE_ROOT": str(PROJECTS / "single_and"),
+            "PATH_COVERAGE_COVER": "src/**/*.py",
+            "PATH_COVERAGE_DIR": str(tmp_path / "coverage"),
+            "PATH_COVERAGE_COLLECTOR": f"http://127.0.0.1:{server.getsockname()[1]}/runs",
+        },
+        on_exit=exits.append,
+    )
+    path_coverage.stop()
+    exits[0]()
+    stop.set()
+    thread.join(5)
+    server.close()
+    assert capsys.readouterr().out == ""
+    assert [path.name for path in (tmp_path / "runs").iterdir()] == ["run-0001.json"]

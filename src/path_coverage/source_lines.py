@@ -52,4 +52,5 @@ def _merged(spans):
 
 def _status_of(counts):
     """"covered" when no operand has a gap, else "gaps"."""
-    return "gaps" if any(operand_gap(operand) for operand in counts) else "covered"
+    gaps = [gap for operand in counts for gap in operand_gap(operand)]
+    return "gaps" if gaps else "covered"

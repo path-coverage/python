@@ -48,4 +48,3 @@ def test_d40e6a03():
     Its fence is one backtick longer than any run inside it."""
     assert code("tags\n    or []") == "`tags or []`"
     assert code("x == '`'") == "``x == '`'``"
-    assert code("`x`") == "`` `x` ``"

@@ -103,6 +103,25 @@ def test_a91f2b04():
     assert [_shown(leaves), leaves["at"], leaves["branch"]] == [["return", "leaves", ""], [6, 8, 6, 16], "lhs"]
 
 
+def test_a91f2b07():
+    """Example: the filter of [u for u in users if u.active], each way once
+    A filter's arms, keep and drop, have no code of their own, so its fold
+    shows its predicate alone: no arm row, and no return or raise row."""
+    tree = {
+        "operator": "filter",
+        "counts": [1, 1],
+        "cells": [None, None],
+        "operands": [
+            {"text": "u.active", "cells": [True, False]},
+            {"arm": "then", "text": None, "cells": [True, False], "body": None},
+            {"arm": "else", "text": None, "cells": [False, True], "body": None},
+        ],
+    }
+    assert [(row["kind"], *_shown(row)) for row in fold_rows.rows(tree)[1:]] == [
+        ("operand", "u.active", "T", "F"),
+    ]
+
+
 def test_a91f2b05():
     """Example: "big" if order.big else "small", its else taken
     A ternary's fold keeps a row for each arm, ? and :, as its arms are

@@ -133,9 +133,6 @@ def main(argv):
 
 
 def command():
-    """The installed path_coverage_collector script's entry point."""
+    """The installed path_coverage_collector script's entry point, and
+    python -m path_coverage.collector's."""
     sys.exit(main(sys.argv[1:]))
-
-
-if __name__ == "__main__":
-    command()

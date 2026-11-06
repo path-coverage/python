@@ -59,12 +59,12 @@ class _Config:
             relative = Path(self.relative(path))
         except ValueError:
             return False
-        return any(relative.full_match(glob) for glob in self.cover) and not self.skips(relative)
+        return any(map(relative.full_match, self.cover)) and not self.skips(relative)
 
     def skips(self, relative):
         """True when relative, a path relative to root, matches a skip
         glob."""
-        return any(Path(relative).full_match(glob) for glob in self.skip)
+        return any(map(Path(relative).full_match, self.skip))
 
 
 class _Loader(importlib.machinery.SourceFileLoader):
