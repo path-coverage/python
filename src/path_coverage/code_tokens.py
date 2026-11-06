@@ -1,11 +1,11 @@
-"""The colours of a file's code on its page: each token Python's own
-tokenize finds gets the class of its kind, eg k for a keyword, so the page's
-CSS colours it."""
+"""The colours of a file's code on its page, as page data holds them: each
+token Python's own tokenize finds gets the class of its kind, eg k for a
+keyword, so the page colours it."""
 
 import io
 import keyword
+import re
 import tokenize
-from html import escape
 
 # The class of each coloured token type that is not a name: n a number, s
 # a string, or a part of an f-string or t-string that is no expression, c
@@ -34,6 +34,42 @@ def of(source):
         for number, first, last in _ranges(lengths, start, end):
             lines.setdefault(number, []).append([first, last, css])
     return {number: _joined(sorted(ranges)) for number, ranges in lines.items()}
+
+
+def code(text):
+    """text, a fragment of code on one line, eg a site tree's operand or a
+    card's top, as page data holds it: its text and the [from, to, class]
+    of each range coloured as the code it is part of. Example: "if" gives
+    {"text": "if", "tokens": [[0, 2, "k"]]}."""
+    return {"text": text, "tokens": of(text).get(1, [])}
+
+
+def label_code(text):
+    """The code of a row's or a fold's label, coloured as code colours it;
+    but a label naming a choice and its else, eg if/else, each of its
+    words, as code would read the / as division. Example: if/else gives if
+    and else, each a keyword."""
+    if not re.fullmatch(r"\w+/else", text):
+        return code(text)
+    first, other = text.split("/")
+    return joined_code(code(first), "/", code(other))
+
+
+def ternary_arm_code(label):
+    """The code of a ternary's arm's label, eg ? total > 100: its ? or :
+    coloured as an operator, the code after it as code."""
+    mark, _, rest = label.partition(" ")
+    marked = {"text": mark, "tokens": [[0, len(mark), "o"]]}
+    return joined_code(marked, " ", code(rest))
+
+
+def joined_code(one, between, other):
+    """The code of one, then between, uncoloured, then other, other's
+    ranges moved on past one and between. Example: if, / and else give
+    if/else, else's range moved on by 3."""
+    shift = len(one["text"]) + len(between)
+    moved = [[first + shift, last + shift, css] for first, last, css in other["tokens"]]
+    return {"text": one["text"] + between + other["text"], "tokens": one["tokens"] + moved}
 
 
 def _ranges(lengths, start, end):
@@ -88,29 +124,3 @@ def _joined(ranges):
         else:
             out.append([first, last, css])
     return out
-
-
-def fragment(text):
-    """text, a fragment of code, eg a site tree's operand or a card's top,
-    escaped and coloured as the code it is part of. Example: "if" gives
-    <span class="k">if</span>."""
-    return html(text, of(text).get(1, []))
-
-
-def ternary_arm(label):
-    """A ternary's arm's label, eg ? total > 100, as HTML: its ? or :
-    coloured as an operator, the code after it as code."""
-    mark, _, code = label.partition(" ")
-    return f'<span class="o">{mark}</span> {fragment(code)}'
-
-
-def html(text, tokens):
-    """text, escaped, each of tokens' ranges, [[from, to, class], ...], in
-    a span of its class."""
-    at = 0
-    parts = []
-    for first, last, css in tokens:
-        parts.append(escape(text[at:first]))
-        parts.append(f'<span class="{css}">{escape(text[first:last])}</span>')
-        at = last
-    return "".join(parts) + escape(text[at:])

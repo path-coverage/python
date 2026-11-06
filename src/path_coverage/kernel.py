@@ -285,6 +285,7 @@ def _finish(config, files, operands, paths, reached):
     if config.groups:
         report["totals"]["groups"] = console_summary.group_totals(paths, cards, config.groups)
     report["cards"] = listed_cards.of(files, operands, paths, reached)
+    report["tree"] = listed_cards.tree(files, operands)
     text = json.dumps(report, indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)

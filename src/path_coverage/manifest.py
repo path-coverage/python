@@ -34,6 +34,11 @@ class Arm:
     # end_line, end_col) as ast counts them, for its text; None for an if
     # statement's arms, named by their kind instead.
     at: tuple | None = field(default=None, compare=False)
+    # Where the arm's code is, as at counts it, so a card's row can be
+    # placed in the arm holding it: a conditional expression's arm's, as
+    # at; an if statement's arm's statements, first to last; None for an
+    # arm of no code, eg a filter's.
+    extent: tuple | None = field(default=None, compare=False)
 
     def leaves(self):
         """The leaves of the condition the arm holds; none for a plain arm."""
@@ -47,6 +52,10 @@ class Condition:
 
     operator: str
     operands: tuple
+    # Where the whole of the condition is written, (line, col, end_line,
+    # end_col) as ast counts them, so a card can tell which rows run
+    # inside it.
+    extent: tuple | None = field(default=None, compare=False)
 
     def leaves(self):
         """Every Leaf, nested ones and arms' included, left to right; a
@@ -58,20 +67,25 @@ class Condition:
         ]
 
 
-# The nodes a choice's arm may hold as part of the choice's own site.
-FOLDABLE = (ast.BoolOp, ast.IfExp)
+# The nodes a choice's arm may hold as part of the choice's own site. A
+# conditional expression in an arm is a site of its own, so each row of a
+# card is one choice, nested in the arm it runs in.
+FOLDABLE = (ast.BoolOp,)
 
 
 class _SiteFinder(ast.NodeVisitor):
     """Collects each site, in source order, and its Condition."""
 
-    def __init__(self, path, keywords, builtins):
+    def __init__(self, path, keywords, builtins, operators):
         """Starts with no sites found, naming sites after path; keywords are
-        where the source's if keywords are, as if_keywords gives them, and
-        builtins the block calls' names the module leaves as builtins."""
+        where the source's if keywords are, as if_keywords gives them,
+        builtins the block calls' names the module leaves as builtins, and
+        operators where its and, or and if keywords are, as
+        operator_keywords gives them."""
         self.path = path
         self.keywords = keywords
         self.builtins = builtins
+        self.operators = operators
         self.sites = {}
 
     def visit_Call(self, node):
@@ -88,7 +102,7 @@ class _SiteFinder(ast.NodeVisitor):
         self.sites[site] = None
         self.visit(generator)
         operands = (_leaf(generator.generators[0].iter), _leaf(generator.elt))
-        self.sites[site] = Condition(node.func.id, operands)
+        self.sites[site] = Condition(node.func.id, operands, _extent(node))
 
     def visit_Match(self, node):
         """Notes a match statement as a site, named at its keyword: its
@@ -104,8 +118,8 @@ class _SiteFinder(ast.NodeVisitor):
             if case.guard is None:
                 clauses.append(pattern)
             else:
-                clauses.append(Condition("case", (pattern, self._operand(case.guard))))
-        self.sites[site] = Condition("match", tuple(clauses))
+                clauses.append(Condition("case", (pattern, self._leaf(case.guard))))
+        self.sites[site] = Condition("match", tuple(clauses), _extent(node))
         for case in node.cases:
             for statement in case.body:
                 self.visit(statement)
@@ -120,13 +134,16 @@ class _SiteFinder(ast.NodeVisitor):
             line, col = keyword_before(self.keywords, test)
             site = f"{self.path}:{line}:{col}"
             self.sites[site] = None
-            predicate = self._operand(test)
-            self.sites[site] = Condition("filter", (predicate, Arm("then"), Arm("else")))
+            predicate = self._leaf(test)
+            extent = (line, col, test.end_lineno, test.end_col_offset)
+            operands = (predicate, Arm("then"), Arm("else"))
+            self.sites[site] = Condition("filter", operands, extent)
 
     def visit_BoolOp(self, node):
-        """Notes node as a site. It claims its place first, so a site found
-        inside one of its leaves follows it, keeping sites in source order."""
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
+        """Notes node as a site, named where site_at says. It claims its
+        place first, so a site found inside one of its leaves follows it."""
+        line, col = site_at(self.operators, node)
+        site = f"{self.path}:{line}:{col}"
         self.sites[site] = None
         self.sites[site] = self._condition(node)
 
@@ -139,9 +156,10 @@ class _SiteFinder(ast.NodeVisitor):
         they are statements; the sites inside them follow it."""
         site = f"{self.path}:{node.lineno}:{node.col_offset}"
         self.sites[site] = None
-        predicate = self._operand(node.test)
-        arms = (Arm("then"), Arm("else")) if node.orelse else (Arm("then"),)
-        self.sites[site] = Condition(operator="if", operands=(predicate, *arms))
+        predicate = self._leaf(node.test)
+        then = Arm("then", extent=_statements_extent(node.body))
+        arms = (then, Arm("else", extent=_statements_extent(node.orelse))) if node.orelse else (then,)
+        self.sites[site] = Condition("if", (predicate, *arms), _extent(node))
         for statement in node.body + node.orelse:
             self.visit(statement)
 
@@ -154,31 +172,39 @@ class _SiteFinder(ast.NodeVisitor):
             return Condition(
                 operator="ternary",
                 operands=(
-                    self._operand(node.test),
+                    self._leaf(node.test),
                     self._arm("then", node.body),
                     self._arm("else", node.orelse),
                 ),
+                extent=_extent(node),
             )
         return Condition(
             operator=OPERATORS[type(node.op)],
             operands=tuple(self._operand(value) for value in node.values),
+            extent=_extent(node),
         )
 
     def _arm(self, kind, node):
         """An Arm holding node's condition when node is one a choice folds
         into its site, else a plain Arm, once any site inside node is
         noted."""
-        at = (node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
+        at = _extent(node)
         if isinstance(node, FOLDABLE):
-            return Arm(kind, self._condition(node), at)
+            return Arm(kind, self._condition(node), at, at)
         self.visit(node)
-        return Arm(kind, None, at)
+        return Arm(kind, None, at, at)
 
     def _operand(self, node):
         """node as a nested Condition when it is an `and`/`or`, else a Leaf,
         once any site inside the leaf is noted too."""
         if isinstance(node, ast.BoolOp):
             return self._condition(node)
+        return self._leaf(node)
+
+    def _leaf(self, node):
+        """node as one Leaf, once any site in it is noted, node itself
+        included: a choice's predicate, so an `and`/`or` that is the whole of
+        it is a site of its own, each row of a card one decision."""
         self.visit(node)
         return Leaf(
             node.lineno, node.col_offset, node.end_lineno, node.end_col_offset, _only(node)
@@ -188,6 +214,19 @@ class _SiteFinder(ast.NodeVisitor):
 # The builtins whose call of a generator is a site: each stops early, at
 # the first item whose answer decides it.
 BLOCK_CALLS = ("any", "all")
+
+
+def _extent(node):
+    """Where node is written, (line, col, end_line, end_col) as ast counts
+    them."""
+    return (node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
+
+
+def _statements_extent(statements):
+    """Where statements are written, from the first's start to the last's
+    end, as _extent counts them."""
+    first, last = statements[0], statements[-1]
+    return (first.lineno, first.col_offset, last.end_lineno, last.end_col_offset)
 
 
 def block_generator(node, builtins):
@@ -275,10 +314,11 @@ def _display(items, plain):
 
 
 def sites(source, path):
-    """{site: Condition} for each site in source, in source order, each site
-    named "path:line:col" of where its condition starts."""
+    """{site: Condition} for each site in source, each site named
+    "path:line:col" of where site_at places it."""
     tree = ast.parse(source)
-    finder = _SiteFinder(path, if_keywords(source), builtin_blocks(tree))
+    operators = operator_keywords(source)
+    finder = _SiteFinder(path, if_keywords(source), builtin_blocks(tree), operators)
     finder.visit(tree)
     return finder.sites
 
@@ -292,6 +332,31 @@ def if_keywords(source):
         for kind, text, (line, col), _, _ in tokenize.generate_tokens(io.StringIO(source).readline)
         if kind == tokenize.NAME and text == "if"
     ]
+
+
+def operator_keywords(source):
+    """[(line, col), ...] of every and, or and if keyword in source, in
+    order, columns counted as if_keywords counts them: where site_at names
+    the operators' sites."""
+    lines = source.splitlines(keepends=True)
+    return [
+        (line, len(lines[line - 1][:col].encode()))
+        for kind, text, (line, col), _, _ in tokenize.generate_tokens(io.StringIO(source).readline)
+        if kind == tokenize.NAME and text in ("and", "or", "if")
+    ]
+
+
+def site_at(operators, node):
+    """The (line, col) that names node's site, operators being where
+    operator_keywords finds them: an and or an or at its first keyword,
+    after its first operand; a conditional expression at its if, after its
+    then value; any other node where it starts. So no two sites share a
+    name, eg any(...) or b, whose any starts where the or does. Example:
+    a or b at line 2, col 4 gives (2, 6)."""
+    first = node.values[0] if isinstance(node, ast.BoolOp) else node.body if isinstance(node, ast.IfExp) else None
+    if first is None:
+        return (node.lineno, node.col_offset)
+    return operators[bisect.bisect_left(operators, (first.end_lineno, first.end_col_offset))]
 
 
 def keyword_before(keywords, test):

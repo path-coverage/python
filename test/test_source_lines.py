@@ -14,11 +14,13 @@ SOURCE = (
 
 def test_0d9b5501():
     """Each line has its number and text; a line a site spans has the
-    site's status and its span, from the line the site starts on to the
-    line its last operand ends on, so a multi-line condition is one span."""
+    site's status and its span, from the line the site's code starts on to
+    the line its last operand ends on, so a multi-line condition is one
+    span, even an or named at its keyword on its second line."""
     operands = {
-        "src/model/flow.py:2:4": [{"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
-        "src/model/flow.py:5:8": [{"truthy": 2, "falsy": 0}, {"truthy": 0, "falsy": 0}],
+        "src/model/flow.py:2:4": [{"truthy": 1, "falsy": 1}],
+        "src/model/flow.py:2:19": [{"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
+        "src/model/flow.py:6:8": [{"truthy": 2, "falsy": 0}, {"truthy": 0, "falsy": 0}],
     }
     found = sites(SOURCE, "src/model/flow.py")
     assert lines_of(SOURCE, found, operands) == [
@@ -42,8 +44,9 @@ def test_0d9b5502():
         "    )\n"
     )
     operands = {
-        "src/model/flow.py:2:11": [{"truthy": 3, "falsy": 1}, {"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
-        "src/model/flow.py:2:29": [{"truthy": 4, "falsy": 2}, {"truthy": 0, "falsy": 2}],
+        "src/model/flow.py:2:61": [{"truthy": 3, "falsy": 1}, {"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
+        "src/model/flow.py:2:29": [{"truthy": 4, "falsy": 2}],
+        "src/model/flow.py:2:41": [{"truthy": 4, "falsy": 2}, {"truthy": 0, "falsy": 2}],
     }
     found = sites(source, "src/model/flow.py")
     assert [(line["status"], line["span"]) for line in lines_of(source, found, operands)] == [

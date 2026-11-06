@@ -18,7 +18,8 @@ def test_5c1e9a0a():
     """Example: a filter (u.active and u.admin) on a line of its own, after
     a comment, then a second filter u.new
     The filter is named at its if keyword, not at its test.
-    Its predicate's `and` nests in it, as no site of its own.
+    Its predicate, the whole `and`, is one leaf of it, and the `and` is a
+    site of its own.
     Each filter is a site of its own."""
     source = (
         "def admins(users):\n"
@@ -32,7 +33,8 @@ def test_5c1e9a0a():
     both = Condition(operator="and", operands=(Leaf(5, 9, 5, 17), Leaf(5, 22, 5, 29)))
     arms = (Arm("then"), Arm("else"))
     assert sites(source, "k.py") == {
-        "k.py:4:8": Condition(operator="filter", operands=(both, *arms)),
+        "k.py:4:8": Condition(operator="filter", operands=(Leaf(5, 9, 5, 29), *arms)),
+        "k.py:5:18": both,
         "k.py:6:8": Condition(operator="filter", operands=(Leaf(6, 11, 6, 16), *arms)),
     }
 
@@ -92,7 +94,8 @@ def test_5c1e9a0e():
     """Example: any(o.late for o in orders) or all(o.paid for o in orders),
     in a module that imports its own any
     That any may not be the builtin, so its call is a leaf only.
-    The all is the builtin, so its call is a site of its own."""
+    The all is the builtin, so its call is a site of its own.
+    The or is named at its keyword, col 39."""
     source = (
         "from flags import any\n"
         "\n"
@@ -100,7 +103,7 @@ def test_5c1e9a0e():
         "    return any(o.late for o in orders) or all(o.paid for o in orders)\n"
     )
     assert sites(source, "k.py") == {
-        "k.py:4:11": Condition(operator="or", operands=(Leaf(4, 11, 4, 38), Leaf(4, 42, 4, 69))),
+        "k.py:4:39": Condition(operator="or", operands=(Leaf(4, 11, 4, 38), Leaf(4, 42, 4, 69))),
         "k.py:4:42": Condition(operator="all", operands=(Leaf(4, 62, 4, 68), Leaf(4, 46, 4, 52))),
     }
 
@@ -140,7 +143,9 @@ def test_5c1e9a0f():
 def test_5c1e9a07():
     """Example: if order.big and order.new: ... else: ...
     An if statement is a site, named at its keyword, col 4.
-    Its predicate's `and` nests in it, as no site of its own.
+    Its predicate, the whole `and`, is one leaf of it, and the `and` is a
+    site of its own, named at its keyword, so each row of a card is one
+    decision.
     Its then and else arms are plain, as they are statements."""
     source = (
         "def fee(order):\n"
@@ -150,8 +155,10 @@ def test_5c1e9a07():
         "        return 7\n"
     )
     both = Condition(operator="and", operands=(Leaf(2, 7, 2, 16), Leaf(2, 21, 2, 30)))
+    predicate = Leaf(2, 7, 2, 30)
     assert sites(source, "k.py") == {
-        "k.py:2:4": Condition(operator="if", operands=(both, Arm("then"), Arm("else"))),
+        "k.py:2:4": Condition(operator="if", operands=(predicate, Arm("then"), Arm("else"))),
+        "k.py:2:17": both,
     }
 
 
@@ -179,7 +186,8 @@ def test_5c1e9a08():
 def test_5c1e9a05():
     """Example: "admin" if user.admin else "guest"
     A conditional expression is a site, even with a one-leaf predicate.
-    It is named where it starts, at "admin", col 11.
+    It is named at its if keyword, col 19, so it never shares a name with a
+    site starting where it does, eg a call in its then arm.
     Its operands are its predicate, then its then and else arms.
     Both arms are plain values, so neither holds a condition."""
     source = (
@@ -187,7 +195,7 @@ def test_5c1e9a05():
         '    return "admin" if user.admin else "guest"\n'
     )
     assert sites(source, "src/model/user.py") == {
-        "src/model/user.py:2:11": Condition(
+        "src/model/user.py:2:19": Condition(
             operator="ternary",
             operands=(Leaf(2, 22, 2, 32), Arm("then", None), Arm("else", None)),
         ),
@@ -208,20 +216,20 @@ def test_5c1e9a06():
         operator="ternary",
         operands=(Leaf(2, 40, 2, 51), Arm("then", either), Arm("else", None)),
     )
-    assert sites(source, "src/model/flow.py") == {"src/model/flow.py:2:11": condition}
+    assert sites(source, "src/model/flow.py") == {"src/model/flow.py:2:37": condition}
     assert condition.leaves() == [Leaf(2, 40, 2, 51), Leaf(2, 11, 2, 21), Leaf(2, 25, 2, 36)]
 
 
 def test_5c1e9a01():
-    """A single `and` is one site, named path:line:col where it starts
-    (col 0-based, as ast and Prism both count it), with its two operands
-    as leaves, left to right."""
+    """A single `and` is one site, named path:line:col of its keyword (col
+    0-based, as ast counts it), with its two operands as leaves, left to
+    right."""
     source = (
         "def is_new(trail_id, trails):\n"
         "    return trail_id in trails and trails[trail_id].is_new\n"
     )
     assert sites(source, "src/model/trail.py") == {
-        "src/model/trail.py:2:11": Condition(
+        "src/model/trail.py:2:30": Condition(
             operator="and",
             operands=(Leaf(2, 11, 2, 29), Leaf(2, 34, 2, 57)),
         ),
@@ -236,7 +244,7 @@ def test_5c1e9a02():
         "    return user.active and (user.admin or flow.public or flow.owner == user)\n"
     )
     assert sites(source, "src/model/flow.py") == {
-        "src/model/flow.py:2:11": Condition(
+        "src/model/flow.py:2:23": Condition(
             operator="and",
             operands=(
                 Leaf(2, 11, 2, 22),
@@ -285,18 +293,24 @@ def test_5c1e9a04():
 
 
 def test_5c1e9a03():
-    """A condition inside a leaf operand is a site of its own, following
-    the site whose leaf holds it."""
+    """A condition inside a leaf operand is a site of its own: the any
+    that is the or's first leaf, and the and in the any's generator. The
+    any starts where the or's code does, but the or is named at its
+    keyword, so each keeps a name of its own."""
     source = (
         "def all_compliant(trails, strict):\n"
         "    return any(t.done and t.ok for t in trails) or not strict\n"
     )
     assert sites(source, "src/model/trail.py") == {
-        "src/model/trail.py:2:11": Condition(
+        "src/model/trail.py:2:48": Condition(
             operator="or",
             operands=(Leaf(2, 11, 2, 47), Leaf(2, 51, 2, 61)),
         ),
-        "src/model/trail.py:2:15": Condition(
+        "src/model/trail.py:2:11": Condition(
+            operator="any",
+            operands=(Leaf(2, 40, 2, 46), Leaf(2, 15, 2, 30)),
+        ),
+        "src/model/trail.py:2:22": Condition(
             operator="and",
             operands=(Leaf(2, 15, 2, 21), Leaf(2, 26, 2, 30)),
         ),

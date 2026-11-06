@@ -15,6 +15,13 @@ def possible(condition):
     ]
 
 
+def values(condition):
+    """The value of condition as a whole on each of its possible paths, in
+    possible's order, None where its kind notes none, eg [False, True,
+    False, True, False] for any of a generator."""
+    return [value for _outcomes, value in walk(condition)]
+
+
 def walk(node):
     """[({id(leaf): outcome}, value), ...] for each way node can be
     evaluated, value being the outcome of node as a whole: a leaf's own,

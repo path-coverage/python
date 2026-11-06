@@ -12,7 +12,7 @@
   function show(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     var other = theme === 'dark' ? 'light' : 'dark';
-    button.textContent = String.fromCharCode(theme === 'dark' ? 0x2600 : 0x263E);
+    button.textContent = theme === 'dark' ? '☀' : '☾';
     button.setAttribute('aria-label', 'Switch to ' + other);
     button.title = 'Switch to ' + other;
     settings.carry('theme', theme);

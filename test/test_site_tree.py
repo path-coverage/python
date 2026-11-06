@@ -3,10 +3,12 @@ from path_coverage.site_paths import possible
 from path_coverage.site_tree import tree_of
 
 
-def _tree(source, counts):
-    """The tree of source's one site, its possible paths taken counts
-    times each, in possible order."""
-    [condition] = sites(source, "k.py").values()
+def _tree(source, counts, site=None):
+    """The tree of the site named site in source, or of its one site when
+    none is named, its possible paths taken counts times each, in possible
+    order."""
+    found = sites(source, "k.py")
+    [condition] = [found[site]] if site else found.values()
     paths = [{"path": path, "count": count} for path, count in zip(possible(condition), counts)]
     return tree_of(source, condition, paths)
 
@@ -69,8 +71,9 @@ def test_1a6c3e02():
 
 
 def test_1a6c3e03():
-    """Example: if order.big and order.new: ... else: ...
-    An if's tree is a ternary's, its arms plain.
+    """Example: if order.big and order.new: ... else: ..., taken once each
+    way
+    An if's tree is a ternary's, its arms plain, its predicate one leaf.
     So the if's value on every path is None."""
     source = (
         "def fee(order):\n"
@@ -79,9 +82,9 @@ def test_1a6c3e03():
         "    else:\n"
         "        return 7\n"
     )
-    tree = _tree(source, [1, 0, 2])
+    tree = _tree(source, [1, 1], "k.py:2:4")
     assert tree["operator"] == "if"
-    assert tree["cells"] == [None, None, None]
+    assert tree["cells"] == [None, None]
     _, then_arm, else_arm = tree["operands"]
-    assert then_arm["cells"] == [False, True, False]
-    assert else_arm["cells"] == [True, False, True]
+    assert then_arm["cells"] == [True, False]
+    assert else_arm["cells"] == [False, True]

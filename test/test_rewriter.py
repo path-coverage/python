@@ -9,7 +9,7 @@ SOURCE = (
     "def can_attest(user, flow):\n"
     "    return user.active and (user.admin or flow.public)\n"
 )
-SITE = "src/model/flow.py:2:11"
+SITE = "src/model/flow.py:2:23"
 
 
 def _can_attest(recorder):
@@ -54,7 +54,7 @@ def test_7e40b303():
     assert can_see(SimpleNamespace(active=True, admin=False), flow) == "yes"
     assert can_see(SimpleNamespace(active=False, admin=True), flow) is False
     assert recorder.site_paths == {
-        "src/model/flow.py:2:11": {(True, False, True): 1, (False, None, None): 1},
+        "src/model/flow.py:2:37": {(True, False, True): 1, (False, None, None): 1},
     }
 
 
@@ -63,7 +63,8 @@ def test_7e40b304():
     return 6 / return 7, called three ways
     Only each predicate is entered and left, not the whole statement.
     So an arm that returns still has its path counted.
-    The elif is a site of its own."""
+    The if's predicate, the whole and, is one leaf, and the and is a site
+    of its own. The elif is a site of its own."""
     source = (
         "def fee(order):\n"
         "    if order.big and order.new:\n"
@@ -81,7 +82,8 @@ def test_7e40b304():
     fees = [fee(SimpleNamespace(big=b, new=n, vip=v)) for b, n, v in orders]
     assert fees == [5, 6, 7]
     assert recorder.site_paths == {
-        "k.py:2:4": {(True, True): 1, (False, None): 1, (True, False): 1},
+        "k.py:2:4": {(True,): 1, (False,): 2},
+        "k.py:2:17": {(True, True): 1, (False, None): 1, (True, False): 1},
         "k.py:4:4": {(True,): 1, (False,): 1},
     }
 
@@ -90,7 +92,8 @@ def test_7e40b307():
     """Example: [u.name for u in users if u.active and u.admin], over an
     admin, an inactive user and an active non-admin
     The filter is entered and left around its test, once per item.
-    So each item's path is counted under the filter's if keyword.
+    So each item's path is counted under the filter's if keyword, its test
+    one leaf, the and a site of its own.
     The names it keeps are unchanged."""
     source = "def admins(users):\n    return [u.name for u in users if u.active and u.admin]\n"
     recorder = Recorder()
@@ -104,7 +107,8 @@ def test_7e40b307():
     ]
     assert namespace["admins"](users) == ["ann"]
     assert recorder.site_paths == {
-        "k.py:2:34": {(True, True): 1, (False, None): 1, (True, False): 1},
+        "k.py:2:34": {(True,): 1, (False,): 2},
+        "k.py:2:46": {(True, True): 1, (False, None): 1, (True, False): 1},
     }
 
 
@@ -216,9 +220,10 @@ def test_7e40b30c():
 def test_7e40b305():
     """Example: fee with a docstring, then if not rates: return 0, a
     write, if member: total -= 5 and a return, called three ways
-    Each statement that is no site is reached, by its name, an arm's too.
-    The early return skips the write and the last return.
-    The docstring stays the docstring.
+    fee's entry is reached on each call, by its def's site, and each
+    return, a row that is no site, by its name, an arm's too; the writes
+    are no rows, so not reached. The early return skips the last return.
+    The docstring stays the docstring, the entry's reach after it.
     The fees are unchanged."""
     source = (
         "def fee(rates, member):\n"
@@ -237,7 +242,7 @@ def test_7e40b305():
     fee = namespace["fee"]
     assert [fee([], True), fee([1], True), fee([1], False)] == [0, 95, 100]
     assert fee.__doc__ == "The fee."
-    assert recorder.reached == {"k.py:4:8": 1, "k.py:5:4": 2, "k.py:7:8": 1, "k.py:8:4": 2}
+    assert recorder.reached == {"k.py:1:0": 3, "k.py:4:8": 1, "k.py:8:4": 2}
     assert recorder.site_paths["k.py:6:4"] == {(True,): 1, (False,): 1}
 
 
@@ -296,3 +301,24 @@ def test_7e40b302():
     assert can_attest(user, None) is False
     assert recorder.site_paths == {SITE: {(False, None, None): 1}}
     assert list(recorder.counts) == [(SITE, 0)]
+
+
+def test_7e40b30d():
+    """Example: 1 if a and b else (2 if c else 3), called with a and b
+    true, then with a false and c true
+    The and that is the outer conditional expression's whole predicate is
+    a site of its own, as is the conditional expression in its else arm,
+    each as the manifest names it: the outer one records its predicate as
+    one leaf, and each other site its own paths."""
+    source = "def pick(a, b, c):\n    return 1 if a and b else (2 if c else 3)\n"
+    recorder = Recorder()
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    namespace = {RECORDER_NAME: recorder}
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    pick = namespace["pick"]
+    assert [pick(True, True, False), pick(False, True, True)] == [1, 2]
+    assert recorder.site_paths == {
+        "k.py:2:13": {(True,): 1, (False,): 1},
+        "k.py:2:18": {(True, True): 1, (False, None): 1},
+        "k.py:2:32": {(True,): 1},
+    }

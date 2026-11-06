@@ -25,6 +25,12 @@ def tree_of(source, condition, paths):
     return {**tree, "counts": [taken["count"] for taken in columns]}
 
 
+def node(source, condition, outcomes):
+    """The tree of condition, as tree_of builds it, over the paths of
+    outcomes, each a path's leaf outcomes, eg site_paths.possible's."""
+    return _node(source, condition, outcomes, iter(range(len(condition.leaves()))))
+
+
 def _node(source, condition, outcomes, leaves):
     """The tree of condition, each leaf taking the next index of leaves, so
     leaves pair with path entries left to right: its operands first, then
@@ -59,14 +65,16 @@ def _node(source, condition, outcomes, leaves):
 
 
 def _arm(source, arm, decided, then_on, outcomes, leaves):
-    """One arm of a choice: its text, None for an if's arm, whether each
-    column took it, from the predicate's cells and the outcome on which its
-    choice takes its then arm, and the tree of its condition."""
+    """One arm of a choice: its text, an if's arm's its statements, None for
+    an arm of no code, whether each column took it, from the predicate's
+    cells and the outcome on which its choice takes its then arm, and the
+    tree of its condition."""
     picked = then_on if arm.kind == "then" else not then_on
     body = arm.body and _node(source, arm.body, outcomes, leaves)
+    written = arm.at or arm.extent
     return {
         "arm": arm.kind,
-        "text": segment(source, *arm.at) if arm.at else None,
+        "text": segment(source, *written) if written else None,
         "cells": [outcome == picked for outcome in decided],
         "body": body or None,
     }

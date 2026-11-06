@@ -28,8 +28,8 @@
 }
 /* Code's syntax colours, each muted so the orange, blue and green
    of coverage still stand out: keywords, strings, comments,
-   numbers, capitalised names, and, in bold gold, the marks of a
-   ternary's arms, ? and :. */
+   numbers, constants, instance variables, and, in bold gold, the
+   operators that decide a path, eg && and &. */
 :root {
   --syn-k: #7E3BA0; --syn-s: #3B7550; --syn-c: #77808F;
   --syn-n: #9E4A78; --syn-t: #4B52A0; --syn-v: #2A7570; --syn-o: #7A6600;
@@ -259,10 +259,14 @@ body[data-open] button.lnum:focus-visible { outline: none; }
 }
 .operator { font-weight: 600; }
 .row .arm { white-space: pre; font-weight: 600; }
-/* An if's then names its arm, quoting no code, so is italic. */
-.row .arm[data-named] { font-style: italic; }
 .branch { white-space: pre; color: var(--muted); margin-right: -16px; }
-.row .text { white-space: pre; }
+/* A leaf's text is never wider than 48ch, nor than its row has
+   room for: the rest of a long one scrolls within it, so its
+   cells stay in their columns at the row's right edge. */
+.row .text {
+  white-space: pre; min-width: 0; max-width: 48ch;
+  overflow-x: auto; scrollbar-width: thin;
+}
 /* A branch's cell, of the kind its data-bx names, drawn a whole
    row tall so branches join from row to row: v a vertical line,
    t a vertical with a stub right, l the top half of a vertical
@@ -286,10 +290,15 @@ body[data-open] button.lnum:focus-visible { outline: none; }
   background: var(--surface); color: var(--fg); font: 600 12px var(--font-code);
 }
 /* A cell's mark, drawn in place of a letter: a tick for a path
-   that took an arm. */
+   that took a ?:'s arm, a return arrow for one that left the
+   method at a return or a raise, a disc for a &. receiver not
+   nil, an empty set for one nil. */
 .row .cell[data-mark="taken"]::before { content: "\2713"; }
-/* Hovering a cell with hover text, eg a path's count, shows that
-   text in a chip above it. */
+.row .cell[data-mark="leaves"]::before { content: "\21A9"; }
+.row .cell[data-mark="present"]::before { content: "\25CF"; }
+.row .cell[data-mark="absent"]::before { content: "\2205"; }
+/* Hovering a cell with hover text, eg a path's count or a &.
+   receiver's mark, shows that text in a chip above it. */
 .row [data-hover] { position: relative; cursor: default; }
 .row [data-hover]:hover::after {
   content: attr(data-hover); position: absolute; bottom: 100%; left: 50%;
@@ -420,7 +429,7 @@ body.dragging { cursor: col-resize; user-select: none; }
 .statements .prow.calls .plabel { width: auto; }
 .statements .plabel + .pcell { flex: 1; min-width: 56px; text-align: left; }
 .statements .prow.site, .statements .prow.site .pcell { cursor: pointer; }
-.statements .prow.site:hover .pcell, .statements .prow.site:hover .plabel { color: var(--link); }
+.statements .prow.site:hover .pcell:not(.not-taken):not(.was-taken), .statements .prow.site:hover .plabel { color: var(--link); }
 .statements .prow.columns .plabel, .statements .prow.columns .pcell { color: var(--muted); }
 /* A card's paths not taken are orange and those taken blue, as a
    status always is; its column titles are too, as their key. None
@@ -429,10 +438,18 @@ body.dragging { cursor: col-resize; user-select: none; }
 .statements .pcell.was-taken,
 .statements .pcell.not-taken.none { color: var(--ok); }
 .prow.calls .plabel { color: var(--fg); }
+/* How many times a card's method was called, after its name; a gap,
+   never called, coloured as one. */
+.call-count { margin-left: 6px; color: var(--muted); font-weight: 400; }
+.call-count.never { color: var(--bad); font-weight: 600; }
 /* Hovering a card's row lights its line in the code; hovering a
    fold's row marks the characters of its operand. */
 .src.lit { background: var(--cond-tint); }
 mark.chars { background: var(--lit); color: inherit; border-radius: 3px; box-shadow: 0 0 0 2px var(--lit); }
+/* The fold row of the code under the pointer, lit as marked code is. */
+.fold .row.hovered, .statements .prow.hovered {
+  background: var(--lit); border-radius: 3px;
+}
 .fold .row[data-at] { cursor: default; }
 .fold .row[data-at]:hover { background: rgba(255, 255, 255, 0.08); }
 

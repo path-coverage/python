@@ -65,18 +65,20 @@ def test_7b3d9106():
 def test_7b3d9107():
     """Example: if order.big and order.new: return 5, with no else
     An if's arms are statements, so they add no paths of their own.
-    Its paths are its predicate's.
+    Its paths are its predicate's, one leaf, as the and is a site of its
+    own: true and false.
     It has no else arm, yet still has a false path."""
     source = "def fee(order):\n    if order.big and order.new:\n        return 5\n    return 7\n"
-    assert possible(_only_site(source)) == [[True, True], [True, False], [False, None]]
+    assert possible(sites(source, "k.py")["k.py:2:4"]) == [[True], [False]]
 
 
 def test_7b3d9108():
     """Example: [u for u in users if u.active and u.admin]
     The filter keeps an item on true and drops it on false.
-    Its arms hold no condition, so its paths are its predicate's."""
+    Its arms hold no condition, so its paths are its predicate's, one leaf,
+    as the and is a site of its own."""
     source = "def admins(users):\n    return [u for u in users if u.active and u.admin]\n"
-    assert possible(_only_site(source)) == [[True, True], [True, False], [False, None]]
+    assert possible(sites(source, "k.py")["k.py:2:29"]) == [[True], [False]]
 
 
 def test_7b3d9109():

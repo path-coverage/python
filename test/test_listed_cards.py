@@ -15,13 +15,13 @@ def _then_taken(count):
 
 
 PATHS = {
-    "k.py:1:7": _then_taken(1),
-    "k.py:3:11": [
+    "k.py:1:9": _then_taken(1),
+    "k.py:3:22": [
         {"path": [True, True], "count": 1},
         {"path": [True, False], "count": 0},
         {"path": [False, None], "count": 0},
     ],
-    "k.py:5:11": _then_taken(0),
+    "k.py:5:13": _then_taken(0),
 }
 
 
@@ -36,7 +36,8 @@ def _listed(source, paths, reached):
 def test_d3c9a101():
     """Example: SHOP, RATE's then taken, SIZE's never, ship's and once
     Each card is listed as its page draws it: its name, its first and
-    last lines, and a row per statement.
+    last lines, the ways one call can go through it, how many times it was
+    called, never here, none for a top card, and a row per statement.
     A row has its line:col, its top, its paths, how many were taken,
     and its site.
     A top card is named for its first line, its name the class holding
@@ -46,27 +47,34 @@ def test_d3c9a101():
             "name": "ship",
             "first": 2,
             "last": 3,
-            "rows": [{"at": "3:11", "top": "and", "paths": 3, "taken": 1, "site": "k.py:3:11"}],
+            "ways": 3,
+            "calls": 0,
+            "rows": [{"at": "3:22", "top": "and", "paths": 3, "taken": 1, "site": "k.py:3:22"}],
         },
         "k.py:1:0": {
             "name": "file",
             "first": 1,
             "last": 1,
-            "rows": [{"at": "1:07", "top": "ternary", "paths": 2, "taken": 1, "site": "k.py:1:7"}],
+            "ways": 2,
+            "calls": None,
+            "rows": [{"at": "1:09", "top": "ternary", "paths": 2, "taken": 1, "site": "k.py:1:9"}],
         },
         "k.py:5:0": {
             "name": "Shop",
             "first": 5,
             "last": 5,
-            "rows": [{"at": "5:11", "top": "ternary", "paths": 2, "taken": 0, "site": "k.py:5:11"}],
+            "ways": 2,
+            "calls": None,
+            "rows": [{"at": "5:13", "top": "ternary", "paths": 2, "taken": 0, "site": "k.py:5:13"}],
         },
     }
 
 
 def test_d3c9a102():
-    """Example: ship, a write then a return, the write reached
-    A row that is no site has no site, and its taken is 1 when reached.
-    Without reached, its taken is None, not known."""
+    """Example: ship, a write then a return, the return reached
+    The write is no row. The return is a row that has no site, and its
+    taken is 1 when reached. Without reached, its taken is None, not
+    known."""
     source = (
         "def ship(order):\n"
         "    box = order.pack()\n"
@@ -74,7 +82,7 @@ def test_d3c9a102():
     )
     rows = [
         [row["taken"] for row in _listed(source, {}, reached)["k.py:1:0"]["rows"]]
-        for reached in ({"k.py:2:4": 1}, None)
+        for reached in ({"k.py:3:4": 1}, None)
     ]
-    assert rows == [[1, 0], [None, None]]
-    assert [row["site"] for row in _listed(source, {}, {})["k.py:1:0"]["rows"]] == [None, None]
+    assert rows == [[1], [None]]
+    assert [row["site"] for row in _listed(source, {}, {})["k.py:1:0"]["rows"]] == [None]

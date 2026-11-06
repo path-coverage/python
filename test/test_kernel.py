@@ -20,6 +20,14 @@ def _imported(project, module_name):
         sys.modules.pop(module_name, None)
 
 
+def _page_data(page):
+    """The data of the report's page in the file page, as it holds it
+    inline, for the shared renderer to draw. Example: index.html gives its
+    tables."""
+    inline = re.search(r"^window\.pathCoverage = (.*);$", page.read_text(), re.MULTILINE).group(1)
+    return json.loads(inline.replace("<\\/", "</"))
+
+
 NEW = '`trails[trail_id]["new"]`'
 LEAVES = [["6:11", "6:29"], ["6:34", "6:57"]]
 
@@ -40,8 +48,10 @@ def test_e5a70c01(tmp_path, capsys):
     The report at exit writes every site's counts and paths as JSON.
     Each path has its count, and each leaf its line:col span.
     It names the kinds measured, as runs measuring others differ.
-    It lists each card, is_new's here, a row for its and.
-    is_new has no statement that is no site, so none is reached.
+    It lists each card, is_new's here, a row for its and, its 3 ways and
+    its 2 calls, and how each card's rows nest: the and at the top, inside
+    no other site.
+    is_new's entry is reached on each call; it has no row that is no site.
     It prints the one path never taken: true, then false."""
     project = PROJECTS / "single_and"
     exits = []
@@ -59,7 +69,7 @@ def test_e5a70c01(tmp_path, capsys):
         path_coverage.stop()
     [report] = exits
     report()
-    site = "src/single_and_trails.py:6:11"
+    site = "src/single_and_trails.py:6:30"
     assert json.loads((tmp_path / "path_coverage.json").read_text()) == {
         "sites": {
             site: [
@@ -69,14 +79,23 @@ def test_e5a70c01(tmp_path, capsys):
         },
         "paths": {site: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
         "kinds": ["block", "case", "chain", "choice"],
-        "reached": {},
+        "reached": {"src/single_and_trails.py:4:0": 2},
         "totals": {"decisions": [2, 3], "methods": [2, 3]},
         "cards": {
             "src/single_and_trails.py:4:0": {
                 "name": "is_new",
                 "first": 4,
                 "last": 6,
-                "rows": [{"at": "6:11", "top": "and", "paths": 3, "taken": 2, "site": site}],
+                "ways": 3,
+                "calls": 2,
+                "rows": [{"at": "6:30", "top": "and", "paths": 3, "taken": 2, "site": site}],
+            }
+        },
+        "tree": {
+            "src/single_and_trails.py": {
+                "4:0": {
+                    "6:30": {"parent": None, "in": None, "on": None, "leaf": None, "gives": None}
+                }
             }
         },
     }
@@ -106,7 +125,7 @@ def test_e5a70c02(tmp_path, capsys):
     assert started is True
     [report] = exits
     report()
-    site = "src/single_and_trails.py:6:11"
+    site = "src/single_and_trails.py:6:30"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["paths"][site]["taken"] == _taken(0, 1, 0)
     assert capsys.readouterr().out == (
@@ -142,7 +161,7 @@ def test_e5a70c04(tmp_path, capsys):
     assert capsys.readouterr().out == ""
     assert sorted(p.name for p in tmp_path.iterdir()) == ["path_coverage.gw0.json"]
     main_exits[0]()
-    site = "src/single_and_trails.py:6:11"
+    site = "src/single_and_trails.py:6:30"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["sites"] == {
         site: [
@@ -191,17 +210,18 @@ def test_e5a70c06(tmp_path, capsys):
         path_coverage.stop()
     exits[0]()
     assert capsys.readouterr().out == (
-        "src/never_imported_flows.py:6:11 path never taken: "
+        "src/never_imported_flows.py:6:26 path never taken: "
         '`flow["public"]` false, `flow["owner"] == "everyone"` false\n'
-        "src/never_imported_policies.py:6:11 never reached\n"
+        "src/never_imported_policies.py:6:29 never reached\n"
     )
 
 
 def test_e5a70c07(tmp_path, capsys):
-    """report=["html"] writes index.html, linking each covered file, and
+    """report=["html"] writes index.html, listing each covered file, and
     files/<path>.html, its source beside its cards, each site's tree
-    folded under its row, coloured as code; with no "gaps" in report
-    nothing is printed."""
+    folded under its row, coloured as code, each page its data for the
+    shared renderer to draw; with no "gaps" in report nothing is
+    printed."""
     project = PROJECTS / "single_and"
     exits = []
     path_coverage.start(
@@ -218,13 +238,14 @@ def test_e5a70c07(tmp_path, capsys):
         path_coverage.stop()
     exits[0]()
     assert capsys.readouterr().out == ""
-    index = (tmp_path / "index.html").read_text()
-    assert '<a href="files/src/single_and_trails.py.html">src/single_and_trails.py</a>' in index
-    page = (tmp_path / "files" / "src" / "single_and_trails.py.html").read_text()
-    assert '<a data-index="" href="../../index.html">Path coverage</a>' in page
-    assert (
-        '<span class="text" data-text="">trails[trail_id][<span class="s">&quot;new&quot;</span>]</span>'
-    ) in page
+    index = _page_data(tmp_path / "index.html")
+    assert [row["path"] for row in index["tables"][0]["rows"]] == ["src/single_and_trails.py"]
+    page = _page_data(tmp_path / "files" / "src" / "single_and_trails.py.html")
+    assert page["path"] == "src/single_and_trails.py"
+    [card] = page["cards"]
+    [row] = card["rows"]
+    leaf = row["fold"][2]["label"]
+    assert leaf == {"text": 'trails[trail_id]["new"]', "tokens": [[17, 22, "s"]]}
 
 
 def test_e5a70c08(tmp_path):
@@ -268,12 +289,11 @@ def test_e5a70c09(tmp_path, capsys):
 def test_e5a70c0a(tmp_path, capsys):
     """Example: fee, a write, if member, if big and a return, called once
     with member and not big
-    Each run of a statement that is no site is counted, as reached, the
-    write in member's then too.
+    Each call of fee is counted, as its entry reached, and each run of a
+    row that is no site, its return; its writes are no rows.
     The report prints each if's own path never taken, as a site.
     The JSON totals are [taken, possible]: decisions [2, 4], one of each
-    if's two paths, and methods [5, 8], fee's card: 1+1+1+1+0+1 of
-    1+2+1+2+1+1."""
+    if's two paths, and methods [3, 5], fee's card: 1+1+1 of 2+2+1."""
     project = PROJECTS / "two_decisions"
     exits = []
     path_coverage.start(
@@ -294,11 +314,10 @@ def test_e5a70c0a(tmp_path, capsys):
     )
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["reached"] == {
-        "src/two_decisions_shop.py:6:4": 1,
-        "src/two_decisions_shop.py:8:8": 1,
+        "src/two_decisions_shop.py:4:0": 1,
         "src/two_decisions_shop.py:11:4": 1,
     }
-    assert report["totals"] == {"decisions": [2, 4], "methods": [5, 8]}
+    assert report["totals"] == {"decisions": [2, 4], "methods": [3, 5]}
 
 
 def test_e5a70c0b(tmp_path):
@@ -368,11 +387,10 @@ def test_e5a70c0c(tmp_path, capsys):
     )
     report = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())
     assert report["reached"] == {
-        "src/two_decisions_shop.py:6:4": 2,
-        "src/two_decisions_shop.py:8:8": 1,
+        "src/two_decisions_shop.py:4:0": 2,
         "src/two_decisions_shop.py:11:4": 2,
     }
-    assert report["totals"] == {"decisions": [3, 4], "methods": [6, 8]}
+    assert report["totals"] == {"decisions": [3, 4], "methods": [4, 5]}
 
 
 def test_e5a70c12(tmp_path, capsys):
@@ -452,7 +470,7 @@ def test_e5a70c0e(tmp_path, capsys):
         start(exits.append)
         path_coverage.stop()
         exits[0]()
-        assert capsys.readouterr().out == "src/never_imported_flows.py:6:11 never reached\n"
+        assert capsys.readouterr().out == "src/never_imported_flows.py:6:26 never reached\n"
 
 
 def _is_public_twice(project, start):
@@ -540,9 +558,8 @@ def test_e5a70c10(tmp_path, capsys):
                 "policies": {"decisions": [0, 3], "methods": [0, 3]},
             },
         }
-        index = (tmp_path / "index.html").read_text()
-        tabs = re.findall(r'<button type="button" role="tab"[^>]*>([^<]*)</button>', index)
-        assert tabs == ["All files", "flows", "policies"]
+        tables = _page_data(tmp_path / "index.html")["tables"]
+        assert [table["name"] for table in tables] == ["All files", "flows", "policies"]
 
 
 def test_e5a70c11(tmp_path):
@@ -566,7 +583,7 @@ def test_e5a70c11(tmp_path):
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["totals"]["groups"] == {
-        "shop": {"decisions": [2, 4], "methods": [5, 8]},
+        "shop": {"decisions": [2, 4], "methods": [3, 5]},
         "none": {"decisions": [0, 0], "methods": [0, 0]},
     }
 
@@ -574,7 +591,7 @@ def test_e5a70c11(tmp_path):
 def test_e5a70c13(tmp_path):
     """Example: fee never called
     The JSON report says no statement was reached: reached is {}.
-    So fee's statements are known, and not taken: methods [0, 8]."""
+    So fee's rows are known, and not taken: methods [0, 5]."""
     project = PROJECTS / "two_decisions"
     exits = []
     path_coverage.start(
@@ -588,15 +605,15 @@ def test_e5a70c13(tmp_path):
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["reached"] == {}
-    assert report["totals"] == {"decisions": [0, 4], "methods": [0, 8]}
+    assert report["totals"] == {"decisions": [0, 4], "methods": [0, 5]}
 
 
 def test_e5a70c14(tmp_path):
     """Example: fee called with member and not big, its report's reached
     then dropped, as a run that counted no statement writes it, then
     render of that report
-    So render cannot say fee's statements that are no site were reached.
-    They count as not taken: methods [2, 8], never more than ran.
+    So render cannot say fee's return, a row that is no site, was reached.
+    It counts as not taken: methods [2, 5], never more than ran.
     Its merged report has no reached either."""
     project = PROJECTS / "two_decisions"
     exits = []
@@ -620,7 +637,7 @@ def test_e5a70c14(tmp_path):
     )
     report = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())
     assert "reached" not in report
-    assert report["totals"] == {"decisions": [2, 4], "methods": [2, 8]}
+    assert report["totals"] == {"decisions": [2, 4], "methods": [2, 5]}
 
 
 def test_e5a70c03():

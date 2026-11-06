@@ -7,7 +7,16 @@ from dataclasses import dataclass
 
 from . import site_paths
 from . import totals as path_totals
-from .manifest import block_generator, builtin_blocks, if_keywords, keyword_before, sites
+from .manifest import (
+    Arm,
+    block_generator,
+    builtin_blocks,
+    if_keywords,
+    keyword_before,
+    operator_keywords,
+    site_at,
+    sites,
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +69,11 @@ KEYWORDS = {
 }
 
 
+# The tops of the statements that are no site yet are rows: each leaves its
+# function, so cuts a path short.
+LEAVING = ("return", "raise")
+
+
 def of(source, path):
     """{def site: [Statement, ...]} for each function in source, in source
     order. Example: def f(): x = 1; return x gives = and return rows."""
@@ -79,10 +93,15 @@ def lasts(source, path):
 
 
 def reaches(source, path):
-    """The names of every row that is no site, in every function in source,
-    in source order, eg ["k.py:3:4"]: where a call can count the runs of its
-    statement, which starts there."""
-    return [row.name for rows in of(source, path).values() for row in rows if row.site is None]
+    """The names of where runs are counted, in every function in source, in
+    source order: each function's entry, by its def's site, so its calls are
+    counted, then each of its rows that is no site, where its statement
+    starts, eg ["k.py:2:0", "k.py:3:4"]."""
+    return [
+        name
+        for site, rows in of(source, path).items()
+        for name in [site, *(row.name for row in rows if row.site is None)]
+    ]
 
 
 def top_rows(source, path):
@@ -199,11 +218,22 @@ def body_of(node):
 
 
 def _top_of_site(lines, line, column, condition):
-    """The top of the site starting at line and column, a UTF-8 byte
-    column, in lines, its Condition condition: its operator, but elif for
-    an if statement written elif."""
-    written = lines[line - 1].encode()[column:]
-    return "elif" if condition.operator == "if" and written.startswith(b"elif") else condition.operator
+    """The top of the site named at line and column, a UTF-8 byte column,
+    in lines, its Condition condition: its operator, but for an if
+    statement its keyword, if or elif, then /else when it has an else arm
+    that is no elif, eg if/else."""
+    if condition.operator != "if":
+        return condition.operator
+    own = "elif" if _written_at(lines, line, column).startswith(b"elif") else "if"
+    arms = [operand for operand in condition.operands if isinstance(operand, Arm) and operand.kind == "else"]
+    if arms and not _written_at(lines, *arms[0].extent[:2]).startswith(b"elif"):
+        return f"{own}/else"
+    return own
+
+
+def _written_at(lines, line, column):
+    """The bytes of line of lines from column, a UTF-8 byte column, on."""
+    return lines[line - 1].encode()[column:]
 
 
 @dataclass(frozen=True)
@@ -226,12 +256,16 @@ class _Rows:
         self.found = found
         self.builtins = builtin_blocks(tree)
         self.keywords = if_keywords(source)
+        self.operators = operator_keywords(source)
         self.lines = source.splitlines()
 
     def rows(self, function):
-        """The Statement rows of function's body, flat, in the order
-        written."""
-        return [self._row(node) for node in self._rows_in(body_of(function))]
+        """The Statement rows of function's body that shape a path, flat, in
+        the order written: each site's, and each return's and raise's, as
+        each cuts a path short; no row for any other statement, whose one
+        path tells the reader nothing."""
+        rows = [self._row(node) for node in self._rows_in(body_of(function))]
+        return [row for row in rows if row.site or row.top in LEAVING]
 
     def _rows_in(self, statements):
         """The nodes statements' rows are for, flat, in the order written:
@@ -242,7 +276,8 @@ class _Rows:
         nodes = []
         for statement in statements:
             for top in self._sites_in(statement) or [statement]:
-                nodes += [top, *self._inner_sites(top), *self._rows_in(_arms_of(top))]
+                named = sorted([top, *self._inner_sites(top)], key=self._at)
+                nodes += [*named, *self._rows_in(_arms_of(top))]
             nodes += self._body_rows(statement)
         return nodes
 
@@ -351,8 +386,18 @@ class _Rows:
         return None
 
     def _name(self, node):
-        """The name of where node starts, eg "k.py:2:4"."""
-        return f"{self.path}:{node.lineno}:{node.col_offset}"
+        """The name of where node is, as _at places it, eg "k.py:2:4"."""
+        line, column = self._at(node)
+        return f"{self.path}:{line}:{column}"
+
+    def _at(self, node):
+        """(line, column) of node's row: where its site is named, as
+        site_at says, an and or an or at its keyword, a conditional
+        expression at its if; where any other node starts."""
+        return site_at(self.operators, node) if isinstance(node, (ast.BoolOp, ast.IfExp)) else (
+            node.lineno,
+            node.col_offset,
+        )
 
     def _row(self, node):
         """The Statement row of node, where it starts: a site with as many
@@ -360,12 +405,13 @@ class _Rows:
         anything else with 1."""
         site = self._site_of(node)
         name = self._name(node)
+        line, column = self._at(node)
         if site is None:
-            return Statement(node.lineno, node.col_offset, _top(node), 1, None, name)
+            return Statement(line, column, _top(node), 1, None, name)
         condition = self.found[site]
-        top = _top_of_site(self.lines, node.lineno, node.col_offset, condition)
+        top = _top_of_site(self.lines, line, column, condition)
         paths = len(site_paths.possible(condition))
-        return Statement(node.lineno, node.col_offset, top, paths, site, name)
+        return Statement(line, column, top, paths, site, name)
 
 
 def _arms_of(node):

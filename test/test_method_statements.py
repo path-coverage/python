@@ -22,25 +22,11 @@ SHIP = (
 )
 
 
-def test_b47e3a01():
-    """Example: total, a write, a call and a value
-    Each top-level statement is a row: its line, column and top.
-    A write is =, a call is (), and a name read is a value.
-    The docstring is no row, as Python runs no code for it."""
-    source = (
-        "def total(order):\n"
-        '    """The order\'s subtotal, its first item saved."""\n'
-        "    amount = order.subtotal\n"
-        "    order.items[0].save()\n"
-        "    amount\n"
-    )
-    assert _placed(source) == [(3, 4, "="), (4, 4, "()"), (5, 4, "value")]
-
-
 def test_b47e3a02():
     """Example: refuse, logging then raising, and first, returning
-    A raise is raise, as it leaves the function.
-    A return is return."""
+    A raise is a row, raise, as it leaves the function; the log call is
+    none, its one path telling the reader nothing.
+    A return is a row, return."""
     source = (
         "def refuse(order):\n"
         "    order.log('refused')\n"
@@ -50,7 +36,7 @@ def test_b47e3a02():
         "    return items[0]\n"
     )
     tops = {site: [row.top for row in rows] for site, rows in _statements(source).items()}
-    assert tops == {"k.py:1:0": ["()", "raise"], "k.py:5:0": ["return"]}
+    assert tops == {"k.py:1:0": ["raise"], "k.py:5:0": ["return"]}
 
 
 def test_b47e3a03():
@@ -68,26 +54,26 @@ def test_b47e3a04():
     """Example: ship, an if statement then a return
     The if is a site, so its row is named by its operator, if.
     It is at the if keyword, as decision mode names it.
-    Its then's statement is a row after it."""
+    Its then's statement, a call, is no row."""
     source = (
         "def ship(order):\n"
         "    if order.paid:\n"
         "        order.pack()\n"
         "    return order\n"
     )
-    assert _placed(source) == [(2, 4, "if"), (3, 8, "()"), (4, 4, "return")]
+    assert _placed(source) == [(2, 4, "if"), (4, 4, "return")]
 
 
 def test_b47e3a05():
     """Example: label, writing a conditional expression's value
     A write is looked through, so its row is the ternary's.
-    It is at the ternary's column, as decision mode names it."""
+    It is at the ternary's if, where decision mode names it."""
     source = (
         "def label(items):\n"
         "    text = 'some' if items else 'none'\n"
         "    return text\n"
     )
-    assert _placed(source) == [(2, 11, "ternary"), (3, 4, "return")]
+    assert _placed(source) == [(2, 18, "ternary"), (3, 4, "return")]
 
 
 def test_b47e3a06():
@@ -99,7 +85,7 @@ def test_b47e3a06():
         "    total = (10 if big else 0) + (5 if member else 0)\n"
         "    return total\n"
     )
-    assert _placed(source) == [(2, 13, "ternary"), (2, 34, "ternary"), (3, 4, "return")]
+    assert _placed(source) == [(2, 16, "ternary"), (2, 36, "ternary"), (3, 4, "return")]
 
 
 def test_b47e3a07():
@@ -109,14 +95,14 @@ def test_b47e3a07():
         "def price(item):\n"
         "    return 0 if item.free else item.cost\n"
     )
-    assert _placed(source) == [(2, 11, "ternary")]
+    assert _placed(source) == [(2, 13, "ternary")]
 
 
 def test_b47e3a08():
     """Example: ship, writing an and, an if, then a return
     A site's row has as many paths as decision mode gives it.
     An and of two operands has 3, an if 2.
-    Any other row has 1."""
+    A return has 1."""
     source = (
         "def ship(order):\n"
         "    ready = order.paid and order.packed\n"
@@ -125,14 +111,14 @@ def test_b47e3a08():
         "    return order\n"
     )
     rows = _statements(source)["k.py:1:0"]
-    assert [(row.top, row.paths) for row in rows] == [("and", 3), ("if", 2), ("()", 1), ("return", 1)]
+    assert [(row.top, row.paths) for row in rows] == [("and", 3), ("if", 2), ("return", 1)]
 
 
 def test_b47e3a09():
     """Example: fee, a write, four ifs, then a return
-    Each if's then is a row of 1 path after it.
-    Its size is the sum of its rows' paths, 1+2+1+2+1+2+1+2+1+1 = 14.
-    Its complexity is their product, 1*2*1*2*1*2*1*2*1*1 = 16.
+    Its rows are the four ifs and the return.
+    Its size is the sum of its rows' paths, 2+2+2+2+1 = 9.
+    Its complexity is their product, 2*2*2*2*1 = 16.
     Each path of one row goes on to each of the next."""
     source = (
         "def fee(user, order):\n"
@@ -148,14 +134,14 @@ def test_b47e3a09():
         "    return total\n"
     )
     rows = _statements(source)["k.py:1:0"]
-    assert [method_statements.size(rows), method_statements.complexity(rows)] == [14, 16]
+    assert [method_statements.size(rows), method_statements.complexity(rows)] == [9, 16]
 
 
 def test_b47e3a10():
     """Example: ship, an if then a return, its then taken twice
     A site's row names its site.
     Its taken is how many of the site's paths were taken: 1 of 2.
-    Any other row names no site.
+    The return names no site.
     Its taken is None, not known, without reaches."""
     source = (
         "def ship(order):\n"
@@ -165,16 +151,16 @@ def test_b47e3a10():
     )
     rows = _statements(source)["k.py:1:0"]
     paths = {"k.py:2:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
-    assert [row.site for row in rows] == ["k.py:2:4", None, None]
-    assert method_statements.taken(rows, paths) == [1, None, None]
+    assert [row.site for row in rows] == ["k.py:2:4", None]
+    assert method_statements.taken(rows, paths) == [1, None]
 
 
 def test_b47e3a11():
     """Example: labels, a comprehension, and tally, a for loop
     A comprehension's element runs once for each item.
-    So labels' write is a row, and the ternary in it is a row after it.
+    The ternary in it is a row, though the write holding it is none.
     A for loop's body runs once for each item too.
-    So tally's for is a row, then a row for each statement of its body."""
+    So tally's for is no row, but each site in its body is one."""
     source = (
         "def labels(items):\n"
         "    names = ['sale' if i.sale else 'full' for i in items]\n"
@@ -185,14 +171,14 @@ def test_b47e3a11():
         "        if item.sale:\n"
         "            item.count()\n"
     )
-    assert _placed(source) == [(2, 4, "="), (2, 13, "ternary"), (3, 4, "return")]
-    assert _placed(source, "k.py:5:0") == [(6, 4, "for"), (7, 8, "if"), (8, 12, "()")]
+    assert _placed(source) == [(2, 20, "ternary"), (3, 4, "return")]
+    assert _placed(source, "k.py:5:0") == [(7, 8, "if")]
 
 
 def test_b47e3a12():
     """Example: load, reading a file in a try, rescuing a missing one
-    The try is a row, then a row for each statement of its parts.
-    Its handler's are rows too, as a raise runs them."""
+    The try is no row, nor is its write, but a site in any of its parts
+    is one: its handler's too, as a raise runs them."""
     source = (
         "def load(path, fallback):\n"
         "    try:\n"
@@ -201,22 +187,7 @@ def test_b47e3a12():
         "        text = fallback if fallback else ''\n"
         "    return text\n"
     )
-    assert _placed(source) == [(2, 4, "try"), (3, 8, "="), (5, 15, "ternary"), (6, 4, "return")]
-
-
-def test_b47e3a13():
-    """Example: record, writing an index, an attribute, an op-write
-    and an annotated name
-    Each write is =."""
-    source = (
-        "def record(event, index):\n"
-        "    event['index'] = index\n"
-        "    event.time = now()\n"
-        "    index += 1\n"
-        "    count: int = index\n"
-    )
-    rows = _statements(source)["k.py:1:0"]
-    assert [(row.top, row.paths) for row in rows] == [("=", 1)] * 4
+    assert _placed(source) == [(5, 24, "ternary"), (6, 4, "return")]
 
 
 def test_b47e3a14():
@@ -238,65 +209,53 @@ def test_b47e3a14():
 
 def test_b47e3a15():
     """Example: ship, a write, a ternary, then a return
-    Each row that is no site is reached where its statement starts.
-    It is named by that place, so a call there can count its runs.
-    The ternary is a site, its paths already counted."""
-    assert method_statements.reaches(SHIP, "k.py") == ["k.py:3:4", "k.py:5:4"]
+    ship's entry is reached, named by its def's site, so its calls are
+    counted. Each row that is no site, the return, is reached where its
+    statement starts. The write is no row, so not reached; the ternary is
+    a site, its paths already counted."""
+    assert method_statements.reaches(SHIP, "k.py") == ["k.py:1:0", "k.py:5:4"]
 
 
 def test_b47e3a16():
     """Example: outer, defining inner, then returning it
-    A nested def is a row of its own: def, with 1 path.
-    It is not looked through, as its body runs when it is called.
-    inner has its own rows."""
+    A nested def is no row of outer's, nor is it looked through, as its
+    body runs when it is called.
+    inner has its own card, its rows its own."""
     source = (
         "def outer(rate):\n"
         "    def inner(x):\n"
         "        return x * rate if rate else x\n"
         "    return inner\n"
     )
-    assert _placed(source) == [(2, 4, "def"), (4, 4, "return")]
-    assert _placed(source, "k.py:2:4") == [(3, 15, "ternary")]
+    assert _placed(source) == [(4, 4, "return")]
+    assert _placed(source, "k.py:2:4") == [(3, 24, "ternary")]
 
 
 def test_b47e3a17():
-    """Example: ship, a write, a ternary, then a return, the write
-    reached twice, the return never, the ternary's then taken
+    """Example: ship, a write, a ternary, then a return, the return
+    reached twice, the ternary's then taken
     Each row is named by where it is.
     A row that is no site is taken when its statement was reached.
-    So the write's taken is 1 and the return's 0."""
+    So the ternary's taken is 1, of 2, and the return's 1; never reached,
+    the return's is 0."""
     rows = _statements(SHIP)["k.py:1:0"]
-    paths = {"k.py:4:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
-    assert [row.name for row in rows] == ["k.py:3:4", "k.py:4:4", "k.py:5:4"]
-    reached = {"k.py:3:4": 2}
-    assert method_statements.taken(rows, paths, reached) == [1, 1, 0]
+    paths = {"k.py:4:15": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
+    assert [row.name for row in rows] == ["k.py:4:15", "k.py:5:4"]
+    taken = [method_statements.taken(rows, paths, reached) for reached in ({"k.py:5:4": 2}, {})]
+    assert taken == [[1, 1], [1, 0]]
 
 
 def test_b47e3a18():
-    """Example: ship, the write reached, the ternary's then taken,
-    the return never reached
-    Its card's total is [taken, size]: [2, 4].
-    Without reaches, the write and return are not known.
-    They count as not taken: [1, 4], never more than it ran."""
-    paths = {"k.py:4:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
+    """Example: ship, the ternary's then taken, the return reached
+    Its card's total is [taken, size]: [2, 3].
+    Without reaches, the return is not known.
+    It counts as not taken: [1, 3], never more than it ran."""
+    paths = {"k.py:4:15": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
     totals = [
         method_statements.totals(SHIP, "k.py", paths, reached)
-        for reached in ({"k.py:3:4": 1}, None)
+        for reached in ({"k.py:5:4": 1}, None)
     ]
-    assert totals == [{"k.py:1:0": [2, 4]}, {"k.py:1:0": [1, 4]}]
-
-
-def test_b47e3a19():
-    """Example: ship, logging with a call of a plain name, then a
-    pass
-    A call of a name is a call: ().
-    Any statement with no top of its own, eg pass, is a value."""
-    source = (
-        "def ship(order):\n"
-        "    log('shipped')\n"
-        "    pass\n"
-    )
-    assert [row.top for row in _statements(source)["k.py:1:0"]] == ["()", "value"]
+    assert totals == [{"k.py:1:0": [2, 3]}, {"k.py:1:0": [1, 3]}]
 
 
 def test_b47e3a20():
@@ -319,10 +278,10 @@ def test_b47e3a21():
     """Example: drain, a while, a with, a match, an any, a class and
     a lambda
     A while's test is looked through, so its row is the and.
-    A with's items are looked through; it holds none, so it is with.
+    A with, a class and a pass are no rows, but each site in a body is one.
     A match is a site, its row at its keyword.
     Each body, and each case's, gives rows after its statement.
-    A lambda's body gives a row for each site in it."""
+    A lambda's body gives a row for each site in it, after its return."""
     source = (
         "def drain(queue, path):\n"
         "    while queue.size and queue.open:\n"
@@ -337,34 +296,21 @@ def test_b47e3a21():
         "    return lambda: 1 if late else 2\n"
     )
     assert _placed(source) == [
-        (2, 10, "and"),
-        (3, 8, "ternary"),
-        (4, 4, "with"),
+        (2, 21, "and"),
+        (3, 20, "ternary"),
         (5, 15, "any"),
         (6, 4, "match"),
-        (8, 12, "value"),
-        (9, 4, "class"),
-        (10, 15, "ternary"),
+        (10, 17, "ternary"),
         (11, 4, "return"),
-        (11, 19, "ternary"),
+        (11, 21, "ternary"),
     ]
-
-
-def test_b47e3a22():
-    """Example: a stub whose body is ... alone
-    A constant other than a string is no docstring.
-    So it is a row of its own, a value."""
-    source = (
-        "def stub(order):\n"
-        "    ...\n"
-    )
-    assert _placed(source) == [(2, 4, "value")]
 
 
 def test_b47e3a23():
     """Example: fee, an if, an elif and an else, then a return
-    Each arm's statements are rows after its if, in the order written.
-    An elif is a row of the else before it, its top elif."""
+    An elif is a row of the else before it, its top elif. The if's else is
+    that elif, so the if is labelled if; the elif has an else of its own,
+    so it is labelled elif/else. The writes in their arms are no rows."""
     source = (
         "def fee(user):\n"
         "    if user.member:\n"
@@ -375,14 +321,7 @@ def test_b47e3a23():
         "        rate = 9\n"
         "    return rate\n"
     )
-    assert _placed(source) == [
-        (2, 4, "if"),
-        (3, 8, "="),
-        (4, 4, "elif"),
-        (5, 8, "="),
-        (7, 8, "="),
-        (8, 4, "return"),
-    ]
+    assert _placed(source) == [(2, 4, "if"), (4, 4, "elif/else"), (8, 4, "return")]
 
 
 def test_b47e3a24():
@@ -396,14 +335,15 @@ def test_b47e3a24():
         "        case _:\n"
         "            return 1 if box.full else 0\n"
     )
-    assert _placed(source) == [(2, 4, "match"), (4, 12, "return"), (6, 19, "ternary")]
+    assert _placed(source) == [(2, 4, "match"), (4, 12, "return"), (6, 21, "ternary")]
 
 
 def test_b47e3a25():
     """Example: ready, an and holding a ternary, and ship, an if whose
     predicate holds one
     A site inside a site's leaf is a site of its own.
-    So it is a row too, after the site holding it."""
+    So it is a row too. Rows on one line are in the order they are named:
+    the ternary, at its if, before the and, at its keyword."""
     source = (
         "def ready(order):\n"
         "    return valid(order.code if order.code else None) and order.paid\n"
@@ -412,20 +352,21 @@ def test_b47e3a25():
         "    if send(order.fast if order.paid else None):\n"
         "        order.done()\n"
     )
-    assert _placed(source) == [(2, 11, "and"), (2, 17, "ternary")]
-    assert _placed(source, "k.py:4:0") == [(5, 4, "if"), (5, 12, "ternary"), (6, 8, "()")]
+    assert _placed(source) == [(2, 28, "ternary"), (2, 53, "and")]
+    assert _placed(source, "k.py:4:0") == [(5, 4, "if"), (5, 23, "ternary")]
 
 
 def test_b47e3a26():
-    """Example: ship, an if packing a paid order, then a return
-    A row in an arm that is no site is reached where it starts too."""
+    """Example: ship, an if returning a paid order packed, then a return
+    A row in an arm that is no site, the first return, is reached where it
+    starts too, after ship's entry."""
     source = (
         "def ship(order):\n"
         "    if order.paid:\n"
-        "        order.pack()\n"
+        "        return order.pack()\n"
         "    return order\n"
     )
-    assert method_statements.reaches(source, "k.py") == ["k.py:3:8", "k.py:4:4"]
+    assert method_statements.reaches(source, "k.py") == ["k.py:1:0", "k.py:3:8", "k.py:4:4"]
 
 
 SHOP = (
@@ -444,10 +385,10 @@ def test_b47e3a27():
     ship's and is on its card, so it is no top row."""
     rows = method_statements.top_rows(SHOP, "k.py")
     assert [(row.line, row.column, row.top, row.paths) for row in rows] == [
-        (1, 7, "ternary", 2),
-        (5, 11, "ternary", 2),
+        (1, 9, "ternary", 2),
+        (5, 13, "ternary", 2),
     ]
-    assert [row.site for row in rows] == ["k.py:1:7", "k.py:5:11"]
+    assert [row.site for row in rows] == ["k.py:1:9", "k.py:5:13"]
 
 
 def _then_taken(count):
@@ -456,13 +397,13 @@ def _then_taken(count):
 
 
 SHOP_PATHS = {
-    "k.py:1:7": _then_taken(1),
-    "k.py:3:11": [
+    "k.py:1:9": _then_taken(1),
+    "k.py:3:22": [
         {"path": [True, True], "count": 1},
         {"path": [True, False], "count": 0},
         {"path": [False, None], "count": 0},
     ],
-    "k.py:5:11": _then_taken(0),
+    "k.py:5:13": _then_taken(0),
 }
 
 
@@ -496,3 +437,41 @@ def test_b47e3a30():
         if lost:
             missed[path] = sorted(lost)
     assert missed == {}
+
+
+def test_b47e3a31():
+    """Example: ship, a write, a for over its items, a call, an if with an
+    else, a return, and a raise in the else
+    A row that is no site and has one path tells the reader nothing, so a
+    card has no row for it: the write, the for and the call are dropped,
+    though the for's body still gives rows. A return or a raise stays, as it
+    cuts a path short. An if with an else is labelled if/else."""
+    source = (
+        "def ship(order):\n"
+        "    box = order.pack()\n"
+        "    for item in order.items:\n"
+        "        item.check()\n"
+        "        if item.big:\n"
+        "            return box\n"
+        "        else:\n"
+        "            raise ValueError(item)\n"
+    )
+    assert _placed(source) == [(5, 8, "if/else"), (6, 12, "return"), (8, 12, "raise")]
+
+
+def test_b47e3a32():
+    """Example: ship, a write then an if returning early, and RATE outside
+    every function
+    Each row that is no site, a return here, is reached where it starts,
+    and so is each function's entry, named by its def's site, where its
+    body starts, so its calls can be counted."""
+    source = (
+        "RATE = 2\n"
+        "def ship(order):\n"
+        '    """Ships order."""\n'
+        "    box = order.pack()\n"
+        "    if box.empty:\n"
+        "        return None\n"
+        "    return box\n"
+    )
+    assert method_statements.reaches(source, "k.py") == ["k.py:2:0", "k.py:6:8", "k.py:7:4"]

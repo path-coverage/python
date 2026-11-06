@@ -2,7 +2,7 @@
 // of the code, one open at a time, level with its first line. A
 // method's def number opens its card, unfolding its body; a loose
 // site's button, outside every method, opens its lines' top card.
-// The page's markup, as rendered, already marks every method's
+// The page's markup, from the Ruby, already marks every method's
 // lines, numbers and rows; this only opens, closes and places.
 (function () {
   var code = document.querySelector('.code');
@@ -380,6 +380,135 @@
       arrow.setAttribute('aria-expanded', String(each === fold));
     });
     place();
+  }
+
+  // Hovering code in the open card's lines unfolds that card's fold
+  // holding the innermost row whose code is under the pointer, alone,
+  // lighting that row; code in no fold, eg x = 42, lights its
+  // statement's row in the card instead, every fold folded. Each
+  // waits a pause, so sweeping the pointer along a line does not
+  // flicker. Leaving the code leaves what was lit lit. A card that
+  // is not open is left shut, as opening it would fold other
+  // methods' code away from under the pointer.
+  var HOVER_PAUSE = 80;
+  var hoverTimer = null;
+  var hoveredRow = null;
+  code.addEventListener('mousemove', function (event) {
+    clearTimeout(hoverTimer);
+    var x = event.clientX;
+    var y = event.clientY;
+    hoverTimer = setTimeout(function () { hoverAt(x, y); }, HOVER_PAUSE);
+  });
+  code.addEventListener('mouseleave', function () { clearTimeout(hoverTimer); });
+
+  // Shows, in the open card, the row of the code at x, y, if any.
+  function hoverAt(x, y) {
+    var at = caretAt(x, y);
+    var open = grids.filter(function (grid) { return !grid.hidden; })[0];
+    if (!at || !open) { return; }
+    var row = innermostRow(open, at.line, at.column);
+    if (row) {
+      if (row !== hoveredRow) { showRow(row); }
+      return;
+    }
+    var statement = statementRow(open, at.line, at.column);
+    if (statement && statement !== hoveredRow) { showStatement(statement); }
+  }
+
+  // The row of grid's statement holding line and column: of those
+  // starting on line, the last starting at or before column, or the
+  // first, eg the ?: row for the x = of x = a ? 1 : 2; null for none.
+  function statementRow(grid, line, column) {
+    var rows = grid.querySelectorAll('.prow[data-line="' + line + '"]:not(.calls)');
+    var best = rows[0] || null;
+    rows.forEach(function (row) {
+      var label = row.querySelector('.plabel').textContent;
+      if (Number(label.split(':')[1]) <= column) { best = row; }
+    });
+    return best;
+  }
+
+  // Lights row, a statement's, alone, every fold folded.
+  function showStatement(row) {
+    if (hoveredRow) { hoveredRow.classList.remove('hovered'); }
+    hoveredRow = row;
+    unfold(null);
+    row.classList.add('hovered');
+  }
+
+  // The line and column of the code character at x, y; null when
+  // no code is there.
+  function caretAt(x, y) {
+    var node;
+    var offset;
+    if (document.caretRangeFromPoint) {
+      var range = document.caretRangeFromPoint(x, y);
+      if (!range) { return null; }
+      node = range.startContainer;
+      offset = range.startOffset;
+    } else if (document.caretPositionFromPoint) {
+      var caret = document.caretPositionFromPoint(x, y);
+      if (!caret) { return null; }
+      node = caret.offsetNode;
+      offset = caret.offset;
+    } else {
+      return null;
+    }
+    var element = node.nodeType === 1 ? node : node.parentElement;
+    var src = element && element.closest('.src');
+    if (!src) { return null; }
+    var before = document.createRange();
+    before.setStart(src, 0);
+    before.setEnd(node, offset);
+    return { line: lineOf(src), column: before.toString().length };
+  }
+
+  // The number of the line whose code is src, a line's own or one of
+  // a loose site's lines.
+  function lineOf(src) {
+    var block = src.closest('.block');
+    if (!block) { return Number(src.parentElement.querySelector('.lineno').id.slice(1)); }
+    var index = Array.prototype.indexOf.call(block.querySelectorAll('.srcs > .src'), src);
+    return Number(block.querySelectorAll('.lineno')[index].id.slice(1));
+  }
+
+  // The row, of grid's folds, whose code, its data-at, or whose
+  // else keyword, its data-else, holds line and column and is the
+  // shortest so; null for none.
+  function innermostRow(grid, line, column) {
+    var best = null;
+    var shortest = Infinity;
+    grid.querySelectorAll('.fold .row[data-at], .fold .row[data-else]').forEach(function (row) {
+      ['data-at', 'data-else'].forEach(function (name) {
+        var span = row.getAttribute(name);
+        if (!span) { return; }
+        var at = span.split(',').map(Number);
+        if (!holds(at, line, column)) { return; }
+        var size = (at[2] - at[0]) * 100000 + (at[3] - at[1]);
+        if (size < shortest) { best = row; shortest = size; }
+      });
+    });
+    return best;
+  }
+
+  // True when at, [line, column, end line, end column], holds the
+  // character at line and column.
+  function holds(at, line, column) {
+    var from = line > at[0] || (line === at[0] && column >= at[1]);
+    var to = line < at[2] || (line === at[2] && column < at[3]);
+    return from && to;
+  }
+
+  // Unfolds row's fold alone and lights row, its text scrolled back
+  // to its start, unlighting the row lit before.
+  function showRow(row) {
+    if (hoveredRow) { hoveredRow.classList.remove('hovered'); }
+    hoveredRow = row;
+    var fold = row.closest('.fold');
+    if (fold.hidden) { unfold(fold); }
+    row.classList.add('hovered');
+    var text = row.querySelector('.text');
+    if (text) { text.scrollLeft = 0; }
   }
 
   // Opening one card closes the others, and a click never closes

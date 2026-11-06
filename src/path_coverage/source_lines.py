@@ -1,8 +1,6 @@
 """The lines of one file's HTML page, each with the status of the
 conditions on it."""
 
-import re
-
 from .gaps import operand_gap
 
 
@@ -28,10 +26,12 @@ def _marks(sites, operands):
 
 
 def _spans_of(sites, operands):
-    """[(span, status)] for each site: from the line it starts on to the
-    line its last operand ends on."""
+    """[(span, status)] for each site: from the line its code starts on,
+    which may be before the line it is named on, eg an or named at its
+    keyword on a line after its first operand's, to the line its last
+    operand ends on."""
     return [
-        ((line_of(site), condition.leaves()[-1].end_line), _status_of(operands[site]))
+        ((condition.extent[0], condition.leaves()[-1].end_line), _status_of(operands[site]))
         for site, condition in sites.items()
     ]
 
@@ -53,8 +53,3 @@ def _merged(spans):
 def _status_of(counts):
     """"covered" when no operand has a gap, else "gaps"."""
     return "gaps" if any(operand_gap(operand) for operand in counts) else "covered"
-
-
-def line_of(site):
-    """The line a site starts on, from its path:line:col name."""
-    return int(re.search(r":(\d+):\d+\Z", site).group(1))

@@ -15,10 +15,20 @@ in tracebacks and in line coverage are those of the file as written."""
 import ast
 import importlib.util
 
-from .manifest import block_generator, builtin_blocks, if_keywords, keyword_before
+from .manifest import (
+    block_generator,
+    builtin_blocks,
+    if_keywords,
+    keyword_before,
+    operator_keywords,
+    site_at,
+)
 from .method_statements import reaches
 
 RECORDER_NAME = "__path_coverage__"
+
+# The statements that define a function, whose calls are counted on entry.
+FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def _call(method, args, at):
@@ -62,39 +72,63 @@ class _Rewriter(ast.NodeTransformer):
     """Wraps every site, numbering its leaves as the manifest does, and
     precedes each function statement in reaches with a reach call."""
 
-    def __init__(self, path, reaches, keywords, builtins):
+    def __init__(self, path, reaches, keywords, builtins, operators):
         """Names sites after path; reaches holds the names of the function
         statements whose runs are counted, as method_statements.reaches
-        gives them; keywords are where the source's if keywords are, and
-        builtins the block calls' names the module leaves as builtins."""
+        gives them; keywords are where the source's if keywords are,
+        builtins the block calls' names the module leaves as builtins, and
+        operators where its and, or and if keywords are, as
+        operator_keywords gives them, so sites are named as the manifest
+        names them."""
         self.path = path
         self.reaches = reaches
         self.keywords = keywords
         self.builtins = builtins
+        self.operators = operators
 
     def reach_all(self, tree):
         """tree with each statement in reaches, in any list of statements,
-        a body, an else or a finally, preceded by a reach call naming it.
-        Run once every site is rewritten, as a match's rewrite adds a
-        statement before it."""
+        a body, an else or a finally, preceded by a reach call naming it,
+        and each function in reaches entered with one, so its calls are
+        counted. Run once every site is rewritten, as a match's rewrite adds
+        a statement before it."""
         for node in list(ast.walk(tree)):
             for field in ("body", "orelse", "finalbody"):
                 statements = getattr(node, field, None)
                 if isinstance(statements, list):
                     setattr(node, field, [part for statement in statements for part in self._reached(statement)])
+            if isinstance(node, FUNCTIONS):
+                self._entered(node)
         return tree
 
     def _reached(self, statement):
-        """[statement], preceded by its reach call when it is in reaches."""
+        """[statement], preceded by its reach call when it is in reaches;
+        a def is counted on entry, not where it is defined."""
         name = f"{self.path}:{statement.lineno}:{statement.col_offset}"
-        return [_reach(name, statement), statement] if name in self.reaches else [statement]
+        if isinstance(statement, FUNCTIONS) or name not in self.reaches:
+            return [statement]
+        return [_reach(name, statement), statement]
+
+    def _entered(self, function):
+        """function, when its def's site is in reaches, with a reach call
+        naming it as the first statement of its body, after its docstring,
+        which stays its docstring, so each call is counted."""
+        name = f"{self.path}:{function.lineno}:{function.col_offset}"
+        if name not in self.reaches:
+            return
+        body = function.body
+        first = body[0]
+        docstring = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+        at = 1 if docstring and isinstance(first.value.value, str) and len(body) > 1 else 0
+        function.body = [*body[:at], _reach(name, body[at]), *body[at:]]
 
     def visit_BoolOp(self, node):
         """node, its leaves (nested conditions' and folded arms' included)
         each wrapped in a record call under this site, as the value of a
         leave call whose first argument enters the site before any leaf
-        runs."""
-        site = f"{self.path}:{node.lineno}:{node.col_offset}"
+        runs. It is named where site_at says, as the manifest names it."""
+        line, col = site_at(self.operators, node)
+        site = f"{self.path}:{line}:{col}"
         counter = [0]
         self._fold(node, site, counter)
         enter = _call("enter", [ast.Constant(site), ast.Constant(counter[0])], node)
@@ -157,13 +191,10 @@ class _Rewriter(ast.NodeTransformer):
         return [enter, node]
 
     def _guard(self, guard, site, counter):
-        """A case's guard with its leaves recorded under site, numbered on
-        from counter, an `and`/`or` folded into the site as an if's
-        predicate is."""
-        if isinstance(guard, ast.BoolOp):
-            self._fold(guard, site, counter)
-            return guard
-        return self._operand(guard, site, counter)
+        """A case's guard recorded as one leaf under site, numbered on from
+        counter, an `and`/`or` in it a site of its own, as an if's predicate
+        is."""
+        return self._leaf(guard, site, counter)
 
     def visit_comprehension(self, node):
         """node with each filter's test entered and left, its leaves
@@ -175,34 +206,32 @@ class _Rewriter(ast.NodeTransformer):
         return node
 
     def _predicate(self, test, at):
-        """test, an if's or a filter's, with its leaves recorded under the
-        site named at at, (line, col), as the value of a leave call whose
-        first argument enters the site before any leaf runs."""
+        """test, an if's or a filter's, recorded as one leaf under the site
+        named at at, (line, col), as the value of a leave call whose first
+        argument enters the site before the leaf runs; an `and`/`or` that is
+        the whole test is a site of its own."""
         site = f"{self.path}:{at[0]}:{at[1]}"
         counter = [0]
-        wrapped = test
-        if isinstance(test, ast.BoolOp):
-            self._fold(test, site, counter)
-        else:
-            wrapped = self._operand(test, site, counter)
+        wrapped = self._leaf(test, site, counter)
         enter = _call("enter", [ast.Constant(site), ast.Constant(counter[0])], test)
         return _call("leave", [enter, wrapped], test)
 
     def _fold(self, node, site, counter):
         """Wraps node's leaves in place, in the manifest's order: an
         `and`/`or`'s operands left to right; a conditional expression's
-        predicate, then its then arm, then its else arm."""
+        predicate, one leaf, then its then arm, then its else arm."""
         if isinstance(node, ast.IfExp):
-            node.test = self._operand(node.test, site, counter)
+            node.test = self._leaf(node.test, site, counter)
             node.body = self._arm(node.body, site, counter)
             node.orelse = self._arm(node.orelse, site, counter)
         else:
             self._wrap(node, site, counter)
 
     def _arm(self, node, site, counter):
-        """An arm folded into the site when it holds a condition, its leaves
-        wrapped; any other arm with only its own sites rewritten."""
-        if isinstance(node, (ast.BoolOp, ast.IfExp)):
+        """An arm folded into the site when it holds an `and`/`or`, its
+        leaves wrapped; any other arm, a conditional expression among them,
+        with only its own sites rewritten, as the manifest folds no other."""
+        if isinstance(node, ast.BoolOp):
             self._fold(node, site, counter)
             return node
         return self.visit(node)
@@ -218,6 +247,11 @@ class _Rewriter(ast.NodeTransformer):
         if isinstance(value, ast.BoolOp):
             self._wrap(value, site, counter)
             return value
+        return self._leaf(value, site, counter)
+
+    def _leaf(self, value, site, counter):
+        """value, its own sites rewritten first, value itself among them, as
+        the argument of a record of the next leaf of site."""
         value = self.visit(value)
         index = counter[0]
         counter[0] += 1
@@ -233,5 +267,6 @@ def rewrite(tree, path, *, source):
     if isinstance(source, bytes):
         source = importlib.util.decode_source(source)
     reached = set(reaches(source, path))
-    rewriter = _Rewriter(path, reached, if_keywords(source), builtin_blocks(tree))
+    operators = operator_keywords(source)
+    rewriter = _Rewriter(path, reached, if_keywords(source), builtin_blocks(tree), operators)
     return rewriter.reach_all(rewriter.visit(tree))

@@ -4,7 +4,7 @@ without the page."""
 
 import ast
 
-from . import method_statements
+from . import card_tree, card_ways, method_statements
 from .source_lines import lines_of
 
 
@@ -13,35 +13,57 @@ def of(files, operands, paths, reached):
     (source, sites)}: each function's, by its def's site, then each top
     card's, by its first line, as card gives them; operands and paths as
     result gives them, reached each statement's runs, None when not known.
-    Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3, "rows":
-    [...]}}."""
+    Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3, "ways":
+    2, "calls": 1, "rows": [...]}}."""
     listed = {}
     for path, (source, sites) in files.items():
-        listed.update(_function_cards(source, path, paths, reached))
+        listed.update(function_cards(source, (path, sites), paths, reached))
         lines = lines_of(source, sites, operands)
-        listed.update(_top_cards(source, path, lines, paths))
+        listed.update(top_cards(source, (path, sites), lines, paths))
     return listed
 
 
-def _function_cards(source, path, paths, reached):
-    """The cards of each function in source, at path, as of gives them."""
+def tree(files, operands):
+    """{path: {card "line:col": {row "line:col": place}}} of every card in
+    files, as of lists them, each row placed as card_tree places it: how
+    the rows of each card nest. operands as result gives them."""
+    nested = {}
+    for path, (source, sites) in files.items():
+        cards = {site: rows for site, rows in card_tree.of(source, path, sites).items()}
+        lines = lines_of(source, sites, operands)
+        for (first, _), rows in spans(source, path, lines).items():
+            cards[f"{path}:{first}:0"] = card_tree.nested(source, sites, rows)
+        nested[path] = {":".join(site.split(":")[-2:]): rows for site, rows in cards.items()}
+    return nested
+
+
+def function_cards(source, at, paths, reached):
+    """The cards of each function in source, at being its (path, sites), as
+    of gives them: each counting its calls, its entry's runs, 0 when never
+    called, None when not known."""
+    path, sites = at
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
-    return {
-        site: card(site, names[site], lasts[site], rows, method_statements.taken(rows, paths, reached))
-        for site, rows in method_statements.of(source, path).items()
-    }
+    cards = {}
+    for site, rows in method_statements.of(source, path).items():
+        calls = None if reached is None else reached.get(site, 0)
+        title = (names[site], lasts[site], card_ways.card(source, sites, rows), calls)
+        cards[site] = card(site, title, rows, method_statements.taken(rows, paths, reached))
+    return cards
 
 
-def _top_cards(source, path, lines, paths):
-    """The top cards of source, at path, its lines as source_lines.lines_of
-    gives them: one for each span of lines holding sites outside every
-    function, named for its first line's start, titled by its scope."""
+def top_cards(source, at, lines, paths):
+    """The top cards of source, at being its (path, sites), its lines as
+    source_lines.lines_of gives them: one for each span of lines holding
+    sites outside every function, named for its first line's start, titled
+    by its scope, its calls None, as no call runs it."""
+    path, sites = at
     scope = scopes(source)
     found = {}
     for (first, last), rows in spans(source, path, lines).items():
         site = f"{path}:{first}:0"
-        found[site] = card(site, scope(first), last, rows, method_statements.taken(rows, paths))
+        title = (scope(first), last, card_ways.card(source, sites, rows), None)
+        found[site] = card(site, title, rows, method_statements.taken(rows, paths))
     return found
 
 
@@ -71,13 +93,17 @@ def scopes(source):
     return scope
 
 
-def card(site, name, last, rows, taken):
-    """The card at site, titled name, ending on line last: its first line,
-    from site, and a row for each of rows, Statements, with its taken, as
-    method_statements.taken gives them."""
+def card(site, title, rows, taken):
+    """The card at site, its title (name, last, ways, calls): titled name,
+    its first line from site, ending on line last, ways the ways one call
+    can go through it, as card_ways counts them, calls how many times it
+    was called, None for a top card or when not known; and a row for each
+    of rows, Statements, with its taken, as method_statements.taken gives
+    them."""
+    name, last, ways, calls = title
     first = int(site.split(":")[-2])
     listed = [_row(statement, count) for statement, count in zip(rows, taken)]
-    return {"name": name, "first": first, "last": last, "rows": listed}
+    return {"name": name, "first": first, "last": last, "ways": ways, "calls": calls, "rows": listed}
 
 
 def _row(statement, count):
