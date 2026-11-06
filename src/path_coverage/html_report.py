@@ -1,390 +1,99 @@
 """The HTML report: index.html, one sortable row per covered file, and
-files/<path>.html for each, its source with each site's line number a button
-that opens the site's grid of paths, and, when methods are measured, a card
-of each function's statements beside it."""
+files/<path>.html for each, its source beside the rail of its cards: one
+for each function, and one for each span of lines holding sites outside
+every function, each site's row folding its tree under it."""
 
-import re
-from html import escape
-from itertools import groupby
-from pathlib import Path
+import shutil
 
-from . import kinds, method_statements, summary
-from .html_statements import card
-from .kinds.block import ITEMS
+from . import html_file, html_index, html_statements, html_syntax, html_tree, listed_cards, method_statements, summary
+from .html_file import Card
 from .manifest import Arm, Condition
 from .site_tree import tree_of
-from .source_lines import line_of, lines_of
-
-ASSETS = Path(__file__).parent / "html"
-JUMP_LISTS = {"covered": "Covered", "gaps": "Gaps"}
-TEE, ELBOW, BAR, DASH = "&#9500;", "&#9492;", "&#9474;", "&#9472;"
-# Each outcome's cell: a leaf's T or F, a block call's count of items.
-OUTCOMES = {True: "T", False: "F", None: "", **dict(zip(ITEMS, ("0", "1", "*")))}
-# A tick marks a path taking a plain arm.
-TAKEN = {True: "&#10003;", False: ""}
+from .source_lines import lines_of
 
 
-def write(operands, files, coverage_dir, paths, cards=None, reached=None, groups=None):
+def write(operands, files, coverage_dir, paths, cards, reached, groups=None):
     """Writes index.html and files/<path>.html into coverage_dir. operands
     and paths are as result.operands and result.paths give them; files is
     {path relative to root: (source, sites)} for each covered file; cards,
-    {def site: [taken, size]}, are given when methods are measured, with
+    {card site: [taken, size]}, as method_statements.cards gives them, with
     reached, each statement's runs, None when not known; groups, {name:
-    [glob, ...]}, each get a tab of the index page."""
+    [glob, ...]}, each get a tab of the index page. The files dir is
+    emptied first, so it holds no page for a file no longer covered."""
+    shutil.rmtree(coverage_dir / "files", ignore_errors=True)
     rows = summary.files(paths, cards)
     tabs = summary.groups(rows, groups) if groups else []
-    (coverage_dir / "index.html").write_text(index_page(rows, summary.total(rows), tabs))
+    (coverage_dir / "index.html").write_text(html_index.page(rows, summary.total(rows), tabs))
     for path, (source, sites) in files.items():
         out = coverage_dir / "files" / f"{path}.html"
         out.parent.mkdir(parents=True, exist_ok=True)
-        own = "" if cards is None else method_cards(source, path, paths, reached)
-        out.write_text(_file_page(path, source, sites, operands, paths, own))
+        out.write_text(file_page(path, source, sites, operands, paths, reached))
 
 
-def method_cards(source, path, paths, reached):
-    """The hidden cards of every function in source, at path, from paths,
-    as result.paths gives them, and reached, each statement's runs;
-    side.js moves each into the rail beside its def."""
+def file_page(path, source, sites, operands, paths, reached):
+    """The page of the covered file at path, its source with its sites,
+    from operands and paths, its cards' rows' taken from reached too: its
+    functions' cards, then a card for each span of its sites outside every
+    function."""
+    lines = _coloured(source, lines_of(source, sites, operands))
+
+    def tree(site):
+        """The rows of site's tree, for its row's fold in a card."""
+        return _fold(source, path, sites, paths, site)
+
+    cards = method_cards(source, path, paths, reached, tree) + top_cards(source, path, lines, paths, tree)
+    return html_file.page(path, lines, cards)
+
+
+def method_cards(source, path, paths, reached, tree=None):
+    """The Card of each function in source, at path, its rows' taken from
+    paths, as result.paths gives them, and reached; tree, when given,
+    giving each site row's fold."""
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
-    return "\n".join(
-        card(site, names[site], rows, method_statements.taken(rows, paths, reached), lasts[site])
-        for site, rows in method_statements.of(source, path).items()
-    )
-
-
-def _file_page(path, source, sites, operands, paths, cards):
-    """The whole page of the covered file at path, written at
-    files/<path>.html, so it links back to the index one folder up for each
-    folder in that."""
-    lines = lines_of(source, sites, operands)
-    trees = {}
-    for site, condition in sites.items():
-        first = lines[line_of(site) - 1]["span"][0]
-        tree = tree_of(source, condition, paths[site])
-        trees.setdefault(first, []).append(_located(source, condition, tree))
-    return _fill(
-        _asset("file.html"),
-        path=escape(path),
-        index="../" * (path.count("/") + 1) + "index.html",
-        style=_asset("style.css"),
-        script=_asset("toggle.js") + _asset("side.js"),
-        jumps=jumps(lines),
-        listing=listing(lines, trees),
-        grids=cards,
-    )
-
-
-def _asset(name):
-    """The text of one of the report's template, style or script files."""
-    return (ASSETS / name).read_text()
-
-
-def _fill(template, **values):
-    """template with each {{name}} replaced by values[name]."""
-    return re.sub(r"\{\{(\w+)\}\}", lambda match: values[match.group(1)], template)
-
-
-# The class and label of each of a total's three columns.
-PARTS = (("taken", "taken"), ("of", "/ of"), ("percent", "%"))
-
-
-def _head(methods):
-    """The two heading rows of a files table: File and Sites, each over
-    both rows, then each total's name over its taken, / of and % columns,
-    every column sortable; methods' total only when methods are
-    measured."""
-    names = ["Within each decision"] + (["Within each method"] if methods else [])
-    top = [
-        _heading(' rowspan="2"', 0, "text", "File"),
-        _heading(' class="num" rowspan="2"', 1, "number", "Sites"),
-        *(f'<th class="group" colspan="3">{name}</th>' for name in names),
-    ]
-    bottom = [
-        _heading(f' class="{css}"', 2 + 3 * group + i, "number", label)
-        for group in range(len(names))
-        for i, (css, label) in enumerate(PARTS)
-    ]
-    return "\n".join(f"<tr>\n{chr(10).join(row)}\n</tr>" for row in (top, bottom))
-
-
-def _heading(attrs, column, kind, label):
-    """A sortable heading, attrs its th's, sorting the column-th column as
-    kind, text or number, its button showing label."""
-    button = f'<button type="button" data-column="{column}" data-type="{kind}">{label}</button>'
-    return f'<th{attrs} aria-sort="none">{button}</th>'
-
-
-def index_page(rows, total, groups=()):
-    """The whole index page: a files table, sortable by any column, with one
-    row per summary.files row, and total, as summary.total gives it, as its
-    footer. groups, [name, rows, total] for each group as summary.groups
-    gives them, each get a tab and a table after All files; with none there
-    is no tab bar, just the one table."""
-    tables = [["All files", rows, total], *groups]
-    script = _asset("sort.js") + (_asset("tabs.js") if groups else "")
-    return _fill(
-        _asset("index.html"),
-        style=_asset("style.css"),
-        script=script,
-        tabs=_tab_bar([name for name, _, _ in tables]) if groups else "",
-        tables="\n".join(
-            _table(index, own_rows, own_total)
-            for index, (_, own_rows, own_total) in enumerate(tables)
-        ),
-    )
-
-
-def _tab_bar(names):
-    """The tab bar of names, the first tab selected, each tab controlling
-    the table of the same index."""
-    tabs = "".join(
-        f'<button type="button" role="tab" aria-selected="{"true" if index == 0 else "false"}"'
-        f' aria-controls="files-{index}">{escape(name)}</button>'
-        for index, name in enumerate(names)
-    )
-    return f'<nav class="tabs" role="tablist" aria-label="Groups">{tabs}</nav>'
-
-
-def _table(index, rows, total):
-    """The index-th tab's table of rows, total as its footer; any but the
-    first starts hidden."""
-    head = _head(total["methods"] is not None)
-    hidden = "" if index == 0 else ' hidden="hidden"'
-    body = "\n".join(index_row(row) for row in rows)
-    return "\n".join(
-        [
-            f'<table class="files" id="files-{index}" role="tabpanel"{hidden}>',
-            f"<thead>\n{head}\n</thead>",
-            f"<tbody>\n{body}\n</tbody>",
-            f"<tfoot>\n{_counts_row(_cell('Total', 'Total'), total)}\n</tfoot>",
-            "</table>",
-        ]
-    )
-
-
-def index_row(row):
-    """The index table row of one summary.files row; each cell has a
-    data-sort value for the page's column sorting."""
-    path = escape(row["path"])
-    return _counts_row(_cell(path, f'<a href="files/{path}.html">{path}</a>'), row)
-
-
-def _counts_row(first, row):
-    """A row of first, then row's sites, its total within each decision,
-    and, when methods are measured, its total within each method."""
-    cells = [
-        first,
-        _cell(row["sites"], row["sites"]),
-        *_paths_cells(row["decisions"], "no decisions"),
-    ]
-    if row["methods"] is not None:
-        cells.extend(_paths_cells(row["methods"], "no method with two or more decisions"))
-    return f"<tr>{''.join(cells)}</tr>"
-
-
-def _paths_cells(pair, none):
-    """Three cells showing [taken, possible] paths, eg 3, / 6 and 50%, each
-    sorted by its own number, so they read 3 / 6 50%. With no paths to
-    take, as in a group no file is in, or a file with no method of two or
-    more decisions, the percent shows -, titled with none, saying why,
-    with an empty sort value, which sort.js keeps last whichever way the
-    column is sorted."""
-    taken, possible_count = pair
-    counts = [
-        _cell(taken, taken, css="taken"),
-        _cell(possible_count, f"/ {possible_count}", css="of"),
-    ]
-    if possible_count == 0:
-        return [*counts, _cell("", "-", none, css="percent")]
-    percent = round(100 * taken / possible_count)
-    return [*counts, _cell(percent, f"{percent}%", css="percent")]
-
-
-def _cell(sort_value, content, title=None, css=None):
-    """One table cell, sorted by sort_value, showing content, with title as
-    its hover text and css as its class, each when there is one."""
-    hover = f' title="{title}"' if title else ""
-    klass = f' class="{css}"' if css else ""
-    return f'<td{klass} data-sort="{sort_value}"{hover}>{content}</td>'
-
-
-def jumps(lines):
-    """The file page header's lists of links to the first line of each
-    span: those covered, then those with gaps."""
-    firsts = [line for line in lines if line["span"] and line["span"][0] == line["number"]]
-    lists = [
-        _jump_list(status, label, [line["number"] for line in firsts if line["status"] == status])
-        for status, label in JUMP_LISTS.items()
-    ]
-    return f'<nav class="jumps" aria-label="Sites">{"".join(lists)}</nav>'
-
-
-def _jump_list(status, label, numbers):
-    """One labelled list of links to lines."""
-    links = "".join(f'<a class="jump" data-status="{status}" href="#L{n}">{n}</a>' for n in numbers)
-    return (
-        f'<div class="jump-list" data-jumps="{status}">'
-        f'<span class="jump-label">{label}</span>{links}</div>'
-    )
-
-
-def listing(lines, trees):
-    """The source listing of lines (as source_lines.lines_of gives them):
-    each run of lines sharing a span is one block, followed by its tree.
-    trees is {span's first line: [site_tree.tree_of, ...]}."""
-    blocks = [
-        list(group)
-        for _, group in groupby(lines, key=lambda line: line["span"] or ("line", line["number"]))
-    ]
-    gaps = [block[0]["number"] for block in blocks if block[0]["status"] == "gaps"]
-    body = "\n".join(_block(block, trees, gaps) for block in blocks)
-    return f'<div class="code">\n{body}\n</div>'
-
-
-def _block(lines, trees, gaps):
-    """A plain line, or the lines of one span behind one button with the
-    span's tree straight after them; either way after its nav cell."""
-    first = lines[0]
-    cell = _nav_cell(first["number"], gaps)
-    if first["span"] is None:
-        return f'<div class="line">{cell}{_number(first["number"])}{_code(first)}</div>'
-    site_trees = trees.get(first["number"], [])
-    return _span_block(lines, len(site_trees), cell) + _tree(
-        first["number"], site_trees, first["status"] == "gaps"
-    )
-
-
-def _span_block(lines, sites, cell):
-    """The lines of one span after their nav cell: one button over all their
-    numbers, and how many sites it opens when two or more, beside their code."""
-    numbers = "".join(_number(line["number"]) for line in lines)
-    codes = "".join(_code(line) for line in lines)
-    count = f'<span class="site-count" data-site-count="">{sites}</span>' if sites > 1 else ""
-    first = lines[0]
-    button = (
-        f'<button type="button" class="lnum" data-status="{first["status"]}"'
-        f' aria-expanded="{"true" if first["status"] == "gaps" else "false"}"'
-        f' aria-controls="tree-{first["number"]}">{count}{numbers}</button>'
-    )
-    return f'<div class="block">{cell}{button}<div class="srcs">{codes}</div></div>'
-
-
-def _nav_cell(number, gaps):
-    """The cell left of a row's number: at a span with gaps, links to the
-    previous and next such span, wrapping round at the ends; empty on every
-    other row, so the numbers stay aligned."""
-    links = ""
-    if number in gaps:
-        index = gaps.index(number)
-        previous, following = gaps[index - 1], gaps[(index + 1) % len(gaps)]
-        links = (
-            f'<a data-prev="" href="#L{previous}" aria-label="Previous gap, line {previous}">&#9650;</a>'
-            f'<a data-next="" href="#L{following}" aria-label="Next gap, line {following}">&#9660;</a>'
-        )
-    return f'<span class="nav" data-nav="">{links}</span>'
-
-
-def _number(number):
-    """One line's number, the target of a link to #L<number>."""
-    return f'<span class="lineno" id="L{number}" data-line="{number}">{number}</span>'
-
-
-def _code(line):
-    """One line's code, escaped."""
-    return f'<span class="src" data-src="">{escape(line["text"], quote=False)}</span>'
-
-
-def _tree(number, site_trees, open_):
-    """The tree of a span, open when its sites have gaps, else hidden: each
-    site's rows in a group of their own."""
-    groups = "".join(
-        f'<div class="site" data-site="">{"".join(_site_rows(site))}</div>' for site in site_trees
-    )
-    hidden = "" if open_ else ' hidden="hidden"'
-    return f'<div class="tree" id="tree-{number}"{hidden}>{groups}</div>'
-
-
-def _site_rows(site):
-    """A site's row, naming its operator and each path's count, then the
-    rows of its operands."""
-    counts = "".join(
-        f'<span class="{"count never" if count == 0 else "count"}" data-count="">{count}</span>'
-        for count in site["counts"]
-    )
-    return [_row(_at(site), _operator(site), counts), *_operand_rows(site, "")]
-
-
-def _cells(values, names=OUTCOMES):
-    """One cell per path, naming each value with names."""
-    return "".join(f'<span class="cell" data-cell="">{names[value]}</span>' for value in values)
-
-
-def _at(node):
-    """The data-at attribute of a node located in its source, "" for one
-    that is not."""
-    at = node.get("at")
-    return f' data-at="{",".join(str(n) for n in at)}"' if at else ""
-
-
-def _operand_rows(condition, indent):
-    """The rows of a condition's operands, each branching from its operator
-    after indent; a nested condition's operands, and those of an arm's
-    condition, follow its own row, indented under its branch."""
-    rows = []
-    last = len(condition["operands"]) - 1
-    for i, operand in enumerate(condition["operands"]):
-        tip = i == last
-        branch = indent + (f"{ELBOW}{DASH} " if tip else f"{TEE}{DASH} ")
-        under = indent + ("   " if tip else f"{BAR}  ")
-        rows.extend(_node_rows(operand, branch, under, condition["operator"]))
-    return rows
-
-
-def _node_rows(operand, branch, under, choice):
-    """The rows of one operand of a condition whose operator is choice."""
-    if "arm" in operand:
-        return _arm_rows(operand, branch, under, choice)
-    if "operator" not in operand:
-        return [_operand_row(operand, branch)]
-    lead = _branch(branch) + _operator(operand)
-    row = _row(f' data-subtree=""{_at(operand)}', lead, _cells(operand["cells"]))
-    return [row, *_operand_rows(operand, under)]
-
-
-def _arm_rows(arm, branch, under, choice):
-    """An arm's row: a ternary's ? for then and : for else, an arm holding a
-    condition showing the condition's operator and value, its operands
-    below, a plain arm its text; an if's named then or else. A plain arm
-    marks the paths taking it."""
-    body = arm["body"]
-    values = _cells(body["cells"]) if body else _cells(arm["cells"], TAKEN)
-    label = kinds.of(choice).arm_label(arm, choice)
-    lead = _branch(branch) + f'<span class="arm" data-label="">{escape(label)}</span>'
-    row = _row(f' data-arm=""{_at(arm)}', lead, values)
-    return [row, *_operand_rows(body, under)] if body else [row]
-
-
-def _row(attrs, lead, values):
-    """A row of the grid, with attrs, lead's cells naming it, then values,
-    its cells for each path."""
-    return f'<div class="row"{attrs}>{lead}{values}</div>'
-
-
-def _operator(condition):
-    """The cell naming a condition's operator."""
-    return f'<span class="operator" data-operator="">{escape(condition["operator"])}</span>'
-
-
-def _operand_row(operand, branch):
-    """One operand's row: its branch, text, and its outcome on each path."""
-    lead = _branch(branch) + f'<span class="text" data-text="">{escape(operand["text"] or "")}</span>'
-    return _row(f' data-operand=""{_at(operand)}', lead, _cells(operand["cells"]))
-
-
-def _branch(branch):
-    """The cell drawing a row's branch from its operator."""
-    return f'<span class="branch" data-branch="">{branch}</span>'
+    found = []
+    for site, rows in method_statements.of(source, path).items():
+        taken = method_statements.taken(rows, paths, reached)
+        html = html_statements.card(site, names[site], rows, taken, lasts[site], tree)
+        first, column = (int(part) for part in site.split(":")[-2:])
+        status = html_statements.status(rows, taken)
+        found.append(Card(first, lasts[site], column, status, False, None, html))
+    return found
+
+
+def top_cards(source, path, lines, paths, tree=None):
+    """A top Card for each span of lines holding sites outside every
+    function in source, at path, as each span's lines share one button: a
+    row per site in it, titled by its scope. lines are as
+    source_lines.lines_of gives them."""
+    scope = listed_cards.scopes(source)
+    found = []
+    for (first, last), rows in listed_cards.spans(source, path, lines).items():
+        taken = method_statements.taken(rows, paths)
+        site = f"{path}:{first}:0"
+        html = html_statements.top_card(site, scope(first), rows, taken, last, tree)
+        status = html_statements.status(rows, taken)
+        found.append(Card(first, last, 0, status, True, len(rows), html))
+    return found
+
+
+def _fold(source, path, sites, paths, site):
+    """The rows of site's tree, as a file's page draws them, for its row's
+    fold in a card; an elif's labelled elif, as it is written."""
+    condition = sites[site]
+    tree = _located(source, condition, tree_of(source, condition, paths[site]))
+    line, column = (int(part) for part in site.split(":")[-2:])
+    written = source.splitlines()[line - 1].encode()[column:]
+    if condition.operator == "if" and written.startswith(b"elif"):
+        tree = {**tree, "label": "elif"}
+    return "".join(html_tree.site_rows(tree))
+
+
+def _coloured(source, lines):
+    """lines, as source_lines.lines_of gives them for source, each with its
+    coloured tokens, as html_syntax.of gives them."""
+    tokens = html_syntax.of(source)
+    return [{**line, "tokens": tokens.get(line["number"], [])} for line in lines]
 
 
 def _located(source, condition, tree):

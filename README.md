@@ -3,32 +3,79 @@
 Path coverage for Python, to run alongside coverage.py's line and branch
 coverage.
 
+Status: sites cover `and`, `or`, the conditional expression,
+`if`/`elif`/`else`, `match`, comprehension filters, and `any` and `all`
+called with a generator. Each function's card has a row for every
+statement in it.
+
+## Overview
+
+A *site* is one decision in your code: an `and`, `or`, `if`, conditional
+expression, `match`, filter, or an `any` or `all` of a generator. Each way
+it can go is a *path*. For example
+
 ```python
-def fee(user, order):
-    total = order.total
-    if user.member and user.paid:
-        total -= 5
-    if order.total > 100:
-        total -= 10
-    return total
+len(name) > 2 and name.isascii()
 ```
 
-Two tests, a paying member with a big order and a non-member with a small
-one, run every line and take every branch, so coverage.py reports 100%. Yet
-they can still miss paths, at two scopes, and path_coverage lists each path
-no test took.
+has three paths: true then true, true then false, and false alone, as
+`and` then skips its right side.
 
-## Within each decision
+Line and branch coverage can be 100% while a path was never taken.
+path_coverage counts how often each path was taken: within each site, and
+within each function, through its statements.
 
-The first `if` can go three ways: member and paid, member and not paid, not
-a member. A member who has not paid may never have been tried.
+As the run exits it writes its report:
+- `path_coverage.json`, for AIs and other tools.
+- `index.html`, with a page per file, for people.
 
-## Within each method
+## Reading the HTML
 
-The two `if`s can go four ways together. A paying member with a small order
-may never have been tried.
+Clicking a `def` line's number on a file's HTML page opens that function's
+*card* to its left. One card is always open.
 
-## Use
+A card has a row for each statement in the function, by `line:col`, with
+its counts of paths not taken and taken. Code outside every function gets
+a card too, titled by the class holding it, or `file`.
+
+Clicking a site's row opens it:
+- on the left is the site's code, as a tree.
+- on the right is one column for each possible path through it.
+  - the column's head is `0` for a path never taken, and `*` for one
+    taken (hover for its count). Look for zeros!
+  - the marks in a column line up with the tree's rows, as below.
+
+### Boolean: `T` `F`
+
+Many parts of a site, such as `len(name) > 2`, are true or false.
+
+- `T` the expression was true.
+- `F` the expression was false.
+
+### Unreachable: blank
+
+Some parts of a site are not always evaluated.
+
+- blank: the expression is never evaluated on that path.
+
+### Taken: a tick
+
+An `if` takes one of its arms.
+
+- a tick marks the column whose path took that arm.
+
+Below the predicate is one row per arm: `then` and `else` for an `if`,
+`?` and `:` for a conditional expression, `keep` and `drop` for a filter.
+
+### Count: `0` `1` `*`
+
+`any` and `all` can be given any number of items.
+
+- `0` the generator gave no items.
+- `1` it gave one item.
+- `*` it gave two or more.
+
+## Getting started
 
 From code, before any covered module is imported:
 
@@ -40,7 +87,6 @@ path_coverage.start(
     cover=["src/**/*.py"],             # each matching module is instrumented as it is imported
     skip=["src/migrations/**/*.py"],   # except these, though a cover glob matches them
     coverage_dir="/tmp/coverage",      # where path_coverage.json is written
-    measure=["decisions", "methods"],  # decisions alone unless methods is named
     report=["gaps", "html", "summary"],  # the reporters run at exit (default ["gaps"])
     groups={                           # optional: each group's own tab, summary and totals
         "models": ["src/models/**/*.py"],
@@ -49,10 +95,10 @@ path_coverage.start(
 )
 ```
 
-An unknown reporter or measure is refused by name, with the list of the ones
-there are. A file matching any `skip` glob is neither instrumented nor
-reported. A group's globs are relative to `root`, as cover globs are; a file
-can be in several groups, or in none.
+An unknown reporter is refused by name, with the list of the ones there
+are. A file matching any `skip` glob is neither instrumented nor reported.
+A group's globs are relative to `root`, as cover globs are; a file can be
+in several groups, or in none.
 
 With pytest, from the environment alone:
 
@@ -61,7 +107,6 @@ export PATH_COVERAGE_ROOT=/app
 export PATH_COVERAGE_COVER=src/**/*.py,lib/*.py   # comma-separated
 export PATH_COVERAGE_SKIP=src/migrations/**/*.py  # optional, comma-separated
 export PATH_COVERAGE_DIR=/tmp/coverage
-export PATH_COVERAGE_MEASURE=decisions,methods    # optional, default decisions
 export PATH_COVERAGE_REPORT=gaps,html,summary     # optional, default gaps
 export PATH_COVERAGE_GROUPS=models:src/models/**/*.py,routes:src/routes/**/*.py
 python -m pytest -p path_coverage.pytest_plugin test/
@@ -76,8 +121,10 @@ part, `path_coverage.gw0.json` and so on, and the controller adds every
 part's counts to its own report, so the gaps are those that every worker
 left.
 
-A run whose own files are thrown away, such as one in a `docker build` step,
-can send its report to a collector instead:
+## Use when you cannot edit the code!
+
+A run whose own files are thrown away, such as one in a `docker build`
+step, can send its report to a collector instead:
 
 ```sh
 export PATH_COVERAGE_COLLECTOR=http://host.docker.internal:4570/runs
@@ -85,8 +132,8 @@ export PATH_COVERAGE_COLLECTOR=http://host.docker.internal:4570/runs
 
 With a collector the reporters default to `post`. The package's
 `path_coverage_collector` command (or `python -m path_coverage.collector`)
-is that collector. It saves each report POSTed to it as a numbered file, and
-once every run is done they render as one report:
+is that collector. It saves each report POSTed to it as a numbered file,
+and once every run is done they render as one report:
 
 ```sh
 path_coverage_collector 4570 /tmp/paths/runs   # until sent TERM
@@ -98,14 +145,14 @@ import path_coverage
 
 path_coverage.render(
     root="/app", cover=["src/**/*.py"], coverage_dir="/tmp/coverage",
-    measure=["decisions", "methods"], report=["gaps", "html"],
+    report=["gaps", "html"],
     runs=sorted(Path("/tmp/paths/runs").glob("*.json")),
 )
 ```
 
-Each JSON report names the kinds of condition it measured. A version
-that measures other kinds lists a site's paths differently. So `render`
-refuses a run whose kinds differ from those of the installed version.
+Each JSON report names the kinds of site it measured. A version that
+measures other kinds lists a site's paths differently. So `render` refuses
+a run whose kinds differ from those of the installed version.
 
 - A report is saved before it is answered 200, so a 200 means it is on
   disk. A report cut short, eg by a sender dying mid-send, is answered 400
@@ -121,12 +168,12 @@ refuses a run whose kinds differ from those of the installed version.
 As the process exits (or, under the pytest plugin, as pytest finishes):
 
 - `path_coverage.json` is written to `coverage_dir`: every site of every
-  covered file, with each leaf's true and false counts (`sites`), each
-  site's possible paths with their counts and each leaf's `line:col` span
-  (`paths`), each function's taken paths (`method_paths`), and the two
-  totals as [taken, possible] paths (`totals`, `methods` only when
-  measured), with, when groups are configured, each group's own two
-  totals under `totals.groups`:
+  covered file, with each leaf's true and false counts under `sites`, each
+  site's paths under `paths`, each card under `cards`, the statements
+  reached under `reached`, and the paths taken of all possible under
+  `totals`, as [taken, possible]: `decisions`, `methods`, and, with groups,
+  each group's own under `groups`. It also names the kinds of site
+  measured under `kinds`.
 
 ```json
 "paths": {
@@ -140,27 +187,23 @@ As the process exits (or, under the pytest plugin, as pytest finishes):
   }
 },
 "totals": {
-  "decisions": [41, 52], "methods": [9, 16],
+  "decisions": [41, 52], "methods": [90, 116],
   "groups": {
-    "models": { "decisions": [30, 36], "methods": [7, 12] },
-    "routes": { "decisions": [11, 16], "methods": [2, 4] }
+    "models": { "decisions": [30, 36], "methods": [70, 82] },
+    "routes": { "decisions": [11, 16], "methods": [20, 34] }
   }
 }
 ```
 
-- `gaps` prints one line per path never taken, in manifest order: a site's
-  naming the outcome of each leaf on it, a function's the outcome of each
-  decision on it, by line:
+- `gaps` prints one line per site path never taken, in manifest order,
+  naming the outcome of each leaf on it:
 
 ```text
 src/kata.py:3:11 path never taken: `ok(id)` true, `new(id)` false
 src/kata.py:4:11 never reached
-src/fee.py:1:0 fee path never taken: line 3 true, line 5 false
 ```
 
 ### Decisions
-
-Measured always, as `decisions`: the paths within each decision.
 
 A site is named by the `path:line:column` where it starts: the path relative
 to `root`, the line 1-based, the column a 0-based byte offset, as Python's
@@ -243,52 +286,49 @@ tags = record.get("tags") or []   # leaf 1: never evaluated, or no gap
 
 ### Methods
 
-With `measure=["decisions", "methods"]`, each function with two or more
-top-level `if` statements also counts each call's path through them: the
-outcome of each decision it reached, in order. A function is named by the
-`path:line:column` of its `def`, then its name. Each decision is one outcome
-on the path, however many leaves its predicate has; those are its site's to
-show. A decision whose arm always leaves the function (it ends in `return`
-or `raise`) ends the path there.
+Each function has a card, named by the `path:line:column` of its `def`,
+with a row per statement, in the order written: its body's, and those of
+each arm, loop, `with`, `try` and class inside it. A nested `def` is one
+row, as its body runs only when called; it has a card of its own. A row
+that is a site counts its paths; any other row is one path, taken when the
+statement is reached. A function's total adds up its rows. A file's sites
+outside every function get a card for each span of their lines.
+
+The JSON report's `cards` hold each card's rows:
+
+```json
+"cards": {
+  "label.py:1:0": {
+    "name": "label", "first": 1, "last": 4,
+    "rows": [
+      { "at": "2:04", "top": "if", "paths": 2, "taken": 1, "site": "label.py:2:4" },
+      { "at": "3:08", "top": "return", "paths": 1, "taken": 1, "site": null },
+      { "at": "4:04", "top": "return", "paths": 1, "taken": 0, "site": null }
+    ]
+  }
+}
+```
 
 ### Reporters
 
-- `html` writes `index.html` to `coverage_dir`: the covered files with their
-  sites and their paths taken of all possible, within each decision and,
-  when `methods` is measured, within each method. Each total reads like
-  `9 / 28 32%`, its three numbers in columns of their own. Each column
-  is sortable. A file with no method of two or more decisions shows `-`
-  as its methods percent. A Total row adds up every file. With groups
-  configured, a tab bar heads the table: All files, then each group, then
-  Ungrouped for the files in no group (only when there are any), each tab
-  showing a table of its own files with its own Total row, each sorted on
-  its own. Each file name opens `files/<path>.html`, the file's source. On
-  a line holding a site the line number is a button that opens a grid of
-  the site's paths: its rows are the site's tree (its operators, nested as
-  Python groups them, a conditional expression's arms marked `?` and `:`,
-  an `if`'s named `then` and `else`, and its leaves), its columns its paths,
-  never taken first, each headed by its count. When `methods` is measured, a
-  grid of each function's paths sits beside its `def`.
+- `html` writes `index.html` to `coverage_dir`: a sortable row per covered
+  file, with its sites and its paths taken of all possible within each
+  method (eg `9 / 28 32%`, or `-` for a file with no paths), and a Total
+  row. With groups configured, a tab bar heads the table: All files, then
+  each group, then Ungrouped for the files in no group (only when there are
+  any). Each file name opens `files/<path>.html`, the file's source with
+  its cards, as Reading the HTML shows.
 - `gaps` prints the gap lines, as above.
 - `summary` prints the totals, as coverage tools print theirs; a total
   with no path possible shows `(-)`:
 
 ```text
 Path coverage within decisions: 41 / 52 (78.85%)
-Path coverage within methods: 9 / 16 (56.25%)
+Path coverage within methods: 90 / 116 (77.59%)
 ```
 
   With groups configured, each group is a heading with its own totals
-  indented under it, and there is no total over every group:
-
-```text
-models:
-  Path coverage within decisions: 30 / 36 (83.33%)
-  Path coverage within methods: 7 / 12 (58.33%)
-routes:
-  Path coverage within decisions: 11 / 16 (68.75%)
-  Path coverage within methods: 2 / 4 (50.00%)
-```
+  indented under it, and there is no total over every group.
 
 - `post` sends the JSON report to the collector, never through a proxy,
   and gives up in silence on a collector it cannot reach within a second,
@@ -314,9 +354,9 @@ __path_coverage__.leave(
 its leaf's outcome on it and returns the leaf unchanged, and `leave` counts
 the trail as a path and returns the site's value unchanged, so
 short-circuiting and the value of the expression are preserved. Only an
-`if` statement's predicate is wrapped, as its arms may return or raise. With
-`methods` measured, each call's path starts just before a function's first
-decision, and each decision's predicate is wrapped in a `decide` call.
+`if` statement's predicate is wrapped, as its arms may return or raise.
+Each statement of a function that is no site gets a `reach` call before it,
+counting its run, for its card's row.
 
 A `match` statement's patterns are not expressions, so they cannot be
 wrapped. Instead the site is entered just before the statement. Each case
@@ -337,7 +377,7 @@ writes the bytecode cache, and no file on disk changes.
   `next((o for o in orders if o.late), None)`: whether it found an item or
   gave the default.
 - `while` loop conditions, and assert statements.
-- Conditions and arms located in the HTML grid's source highlighting (only
+- Conditions and arms located in the HTML tree's source highlighting (only
   leaves are, so far).
 
 ## Constraints
@@ -345,9 +385,8 @@ writes the bytecode cache, and no file on disk changes.
 - CPython 3.13 or later (`pathlib.PurePath.full_match`).
 - A module imported before `start` is not instrumented, and nor is the
   script run as `__main__`; all their sites show as `never reached`.
-- A leaf's truth is taken once more by the recorder (and a decision's once
-  more again), so a leaf whose `__bool__` has side effects sees it called
-  more often.
+- A leaf's truth is taken once more by the recorder, so a leaf whose
+  `__bool__` has side effects sees it called more often.
 - Counts are kept per process; the at-exit report does not run on
   `os._exit` or an uncaught signal.
 
@@ -377,10 +416,10 @@ report is:
 
 ```text
 code:
-  Path coverage within decisions: 260 / 325 (80.00%)
-  Path coverage within methods: 32 / 62 (51.61%)
+  Path coverage within decisions: 503 / 569 (88.40%)
+  Path coverage within methods: 1321 / 1414 (93.42%)
 test:
-  Path coverage within decisions: 7 / 8 (87.50%)
-  Path coverage within methods: 0 / 0 (-)
+  Path coverage within decisions: 10 / 12 (83.33%)
+  Path coverage within methods: 829 / 839 (98.81%)
 Path coverage report: .../path_coverage/reports/paths/index.html
 ```

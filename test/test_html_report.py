@@ -1,28 +1,13 @@
-from path_coverage.html_report import (
-    index_page,
-    index_row,
-    jumps,
-    listing,
-    method_cards,
-)
+from path_coverage import html_index, html_syntax, manifest, result
+from path_coverage.html_file import Card, jumps, listing, nav_cell
+from path_coverage.html_report import file_page, method_cards
+from path_coverage.html_tree import site_rows
 
-LINES = [
-    {"number": 1, "text": "def can_attest(user, flow):", "status": None, "span": None},
-    {"number": 2, "text": "    return user.active and user.admin", "status": "gaps", "span": (2, 2)},
-]
-TREES = {
-    2: [
-        {
-            "operator": "and",
-            "counts": [0, 1, 1],
-            "cells": [False, True, False],
-            "operands": [
-                {"text": "user.active", "cells": [True, True, False]},
-                {"text": "user.admin", "cells": [False, True, None]},
-            ],
-        }
-    ]
-}
+
+def _bx(branch):
+    """The cell drawing branch, as html_tree writes it."""
+    cells = "".join(f'<span class="bx" data-bx="{kind}"></span>' for kind in branch)
+    return f'<span class="branch" data-branch="" aria-hidden="true">{cells}</span>'
 
 
 def _cells(*names):
@@ -31,71 +16,55 @@ def _cells(*names):
 
 
 def test_4f08d204():
-    """Example: a = x and (y or z); b = p or q on one line, both covered
-    The span's button is collapsed and its tree hidden.
-    It shows it holds two sites.
-    The nested `or` is a row of its own, with its value on each path.
-    Its operands are indented under its branch."""
-    lines = [{"number": 7, "text": "    a = x and (y or z); b = p or q", "status": "covered", "span": (7, 7)}]
-    trees = {
-        7: [
-            {
-                "operator": "and",
-                "counts": [1, 1],
-                "cells": [True, False],
-                "operands": [
-                    {"text": "x", "cells": [True, False]},
-                    {
-                        "operator": "or",
-                        "cells": [True, None],
-                        "operands": [{"text": "y", "cells": [True, None]}, {"text": "z", "cells": [None, None]}],
-                    },
-                ],
-            },
+    """Example: a = x and (y or z), two paths taken once each
+    The nested or is a row of its own, with its value on each path.
+    Its operator is coloured as the keyword it is.
+    Its operands are indented under its branch, a tee to y."""
+    tree = {
+        "operator": "and",
+        "counts": [1, 1],
+        "cells": [True, False],
+        "operands": [
+            {"text": "x", "cells": [True, False]},
             {
                 "operator": "or",
-                "counts": [1, 1],
-                "cells": [True, False],
-                "operands": [{"text": "p", "cells": [True, False]}, {"text": "q", "cells": [None, False]}],
+                "cells": [True, None],
+                "operands": [{"text": "y", "cells": [True, None]}, {"text": "z", "cells": [None, None]}],
             },
-        ]
+        ],
     }
-    html = listing(lines, trees)
-    assert 'aria-expanded="false"' in html
-    assert '<span class="site-count" data-site-count="">2</span>' in html
-    assert '<div class="tree" id="tree-7" hidden="hidden">' in html
+    html = "".join(site_rows(tree))
     assert (
-        '<div class="row" data-subtree=""><span class="branch" data-branch="">&#9492;&#9472; </span>'
-        f'<span class="operator" data-operator="">or</span>{_cells("T", "")}</div>'
-        '<div class="row" data-operand=""><span class="branch" data-branch="">   &#9500;&#9472; </span>'
-        '<span class="text" data-text="">y</span>'
+        f'<div class="row" data-subtree="">{_bx("lhs")}'
+        f'<span class="operator" data-operator=""><span class="k">or</span></span>{_cells("T", "")}</div>'
+        f'<div class="row" data-operand="">{_bx("sssths")}<span class="text" data-text="">y</span>'
     ) in html
 
 
 def test_4f08d207():
     """Example: if order.big: ... else: ... with one of its two paths taken
     An if's arms are named then and else, as their text is statements.
-    A plain arm marks each path that takes it with a tick."""
-    lines = [{"number": 2, "text": "    if order.big:", "status": "gaps", "span": (2, 2)}]
-    trees = {
-        2: [
-            {
-                "operator": "if",
-                "counts": [0, 1],
-                "cells": [None, None],
-                "operands": [
-                    {"text": "order.big", "cells": [False, True]},
-                    {"arm": "then", "text": None, "cells": [False, True], "body": None},
-                    {"arm": "else", "text": None, "cells": [True, False], "body": None},
-                ],
-            }
-        ]
+    Its then is marked as a name, no then being written in its code.
+    Its else is coloured as the keyword it is.
+    A plain arm marks each path that takes it, for CSS to tick."""
+    tree = {
+        "operator": "if",
+        "counts": [0, 1],
+        "cells": [None, None],
+        "operands": [
+            {"text": "order.big", "cells": [False, True]},
+            {"arm": "then", "text": None, "cells": [False, True], "body": None},
+            {"arm": "else", "text": None, "cells": [True, False], "body": None},
+        ],
     }
-    html = listing(lines, trees)
+    html = "".join(site_rows(tree))
+    taken = '<span class="cell" data-cell="" data-mark="taken"></span>'
+    blank = '<span class="cell" data-cell=""></span>'
     assert (
-        '<div class="row" data-arm=""><span class="branch" data-branch="">&#9500;&#9472; </span>'
-        '<span class="arm" data-label="">then</span>'
-        '<span class="cell" data-cell=""></span><span class="cell" data-cell="">&#10003;</span></div>'
+        f'<div class="row" data-arm="">{_bx("ths")}'
+        f'<span class="arm" data-label="" data-named="">then</span>{blank}{taken}</div>'
+        f'<div class="row" data-arm="">{_bx("lhs")}'
+        f'<span class="arm" data-label=""><span class="k">else</span></span>{taken}{blank}</div>'
     ) in html
 
 
@@ -103,66 +72,202 @@ def test_4f08d20c():
     """Example: any(o.late for o in orders) with paths of 0 items, 1 item
     and 2+ items
     The items leaf's cells show 0, 1 and * for 2+."""
-    lines = [{"number": 2, "text": "    return any(o.late for o in orders)", "status": "gaps", "span": (2, 2)}]
-    trees = {
-        2: [
-            {
-                "operator": "any",
-                "counts": [0, 1, 1],
-                "cells": [False, True, False],
-                "operands": [
-                    {"text": "orders", "cells": ["0 items", "1 item", "2+ items"]},
-                    {"text": "o.late", "cells": [None, True, False]},
-                ],
-            }
-        ]
+    tree = {
+        "operator": "any",
+        "counts": [0, 1, 1],
+        "cells": [False, True, False],
+        "operands": [
+            {"text": "orders", "cells": ["0 items", "1 item", "2+ items"]},
+            {"text": "o.late", "cells": [None, True, False]},
+        ],
     }
-    html = listing(lines, trees)
-    assert f'<span class="text" data-text="">orders</span>{_cells("0", "1", "*")}' in html
+    assert f'<span class="text" data-text="">orders</span>{_cells("0", "1", "*")}' in "".join(site_rows(tree))
+
+
+def test_4f08d203():
+    """Example: user.active and user.admin, a path never taken, then two
+    taken, once and 1284 times
+    The site's row marks each path 0, never taken, or *, taken.
+    How many times shows on hover, its thousands apart.
+    Each operand row shows T or F per path, blank where not reached."""
+    tree = {
+        "operator": "and",
+        "counts": [0, 1, 1284],
+        "cells": [False, True, False],
+        "operands": [
+            {"text": "user.active", "cells": [True, True, False]},
+            {"text": "user.admin", "cells": [False, True, None]},
+        ],
+    }
+    assert site_rows(tree) == [
+        '<div class="row"><span class="operator" data-operator=""><span class="k">and</span></span>'
+        '<span class="count never" data-count="" data-hover="0 times">0</span>'
+        '<span class="count" data-count="" data-hover="1 time">*</span>'
+        '<span class="count" data-count="" data-hover="1,284 times">*</span></div>',
+        f'<div class="row" data-operand="">{_bx("ths")}'
+        f'<span class="text" data-text="">user.active</span>{_cells("T", "T", "F")}</div>',
+        f'<div class="row" data-operand="">{_bx("lhs")}'
+        f'<span class="text" data-text="">user.admin</span>{_cells("F", "T", "")}</div>',
+    ]
+
+
+FEE = (
+    "def fee(member):\n"
+    "    total = 100\n"
+    "    if member:\n"
+    "        total -= 5\n"
+    "    return total\n"
+    "\n"
+    "def pack(box):\n"
+    "    box.close()\n"
+)
 
 
 def test_4f08d208():
-    """Example: fee, a write, if member and a return, called with member,
-    and pack, a call
-    Each function's card is hidden in the page until side.js moves it
-    into the rail, one after another.
-    fee's taken comes from its if's paths and its reaches: 3 of 4.
+    """Example: fee, a write, if member, its then's write and a return,
+    called with member, and pack, a call never reached
+    Each function has a Card: its lines, its def's column, its status.
+    fee's taken comes from its if's paths and its reaches: 4 of 5.
     pack was never reached, so it has a gap too."""
-    source = (
-        "def fee(member):\n"
-        "    total = 100\n"
-        "    if member:\n"
-        "        total -= 5\n"
-        "    return total\n"
-        "\n"
-        "def pack(box):\n"
-        "    box.close()\n"
-    )
     paths = {"k.py:3:4": [{"path": [True], "count": 1}, {"path": [False], "count": 0}]}
-    reached = {"k.py:2:4": 1, "k.py:5:4": 1}
-    html = method_cards(source, "k.py", paths, reached)
-    fee, pack = html.split("\n")
-    assert fee.startswith('<div class="pathgrid statements" id="paths-1"')
-    assert '<span class="plabel">fee</span><span class="pcell">*2</span>' in fee
-    assert '<span class="pcell">4</span><span class="pcell">3</span></div>' in fee
-    assert pack.startswith('<div class="pathgrid statements" id="paths-7"')
-    assert 'data-status="gaps"' in pack
+    reached = {"k.py:2:4": 1, "k.py:4:8": 1, "k.py:5:4": 1}
+    fee, pack = method_cards(FEE, "k.py", paths, reached)
+    assert (fee.first, fee.last, fee.column, fee.status, fee.top) == (1, 5, 0, "gaps", False)
+    assert fee.html.startswith('<div class="pathgrid statements" id="paths-1"')
+    assert (
+        '<span class="plabel">fee</span><span class="pcell">*2</span>'
+        '<span class="pcell not-taken">1</span><span class="pcell was-taken">4</span></div>'
+    ) in fee.html
+    assert (pack.first, pack.status) == (7, "gaps")
+
+
+def _card(first, last, status, top=False, sites=None):
+    """A Card of lines first to last, at column 0, of status, its HTML
+    left out."""
+    return Card(first, last, 0, status, top, sites, "")
+
+
+def test_4f08d202():
+    """Example: cards with gaps at lines 9 and 2, and one covered at 5
+    The header jumps to the first line of each card with gaps, in order.
+    With none, its list is marked empty, so the header keeps its height."""
+    cards = [_card(9, 9, "gaps"), _card(5, 6, "covered"), _card(2, 3, "gaps")]
+    assert jumps(cards) == (
+        '<nav class="jumps" aria-label="Cards"><div class="jump-list">'
+        '<span class="jump-label">Gaps</span>'
+        '<a class="jump" data-status="gaps" href="#L2">2</a>'
+        '<a class="jump" data-status="gaps" href="#L9">9</a></div></nav>'
+    )
+    assert '<div class="jump-list" data-empty="">' in jumps([_card(5, 6, "covered")])
+
+
+def test_4f08d20d():
+    """Example: the same cards, the gutter of line 2's row, then line 4's
+    By a card's first line, an arrow to the card of its status before it,
+    and one to the one after, wrapping round at either end.
+    Any other row's gutter is empty, so the numbers stay aligned."""
+    cards = [_card(9, 9, "gaps"), _card(5, 6, "covered"), _card(2, 3, "gaps")]
+    assert nav_cell([2], cards) == (
+        '<span class="nav" data-nav="">'
+        '<a data-prev="" data-status="gaps" href="#L9" aria-label="Previous card with gaps, line 9"></a>'
+        '<a data-next="" data-status="gaps" href="#L9" aria-label="Next card with gaps, line 9"></a>'
+        "</span>"
+    )
+    assert nav_cell([4], cards) == '<span class="nav" data-nav=""></span>'
+
+
+def test_4f08d20e():
+    """Example: f, on lines 1 to 2, covered, then x = a or b, outside every
+    function, on line 3, its top card with gaps
+    f's def number opens its card; its body's line starts folded.
+    Its code is marked in f, its def line's with its text's length.
+    The loose line is one button, wearing its top card's status, opening
+    it."""
+    lines = [
+        {"number": 1, "text": "def f():", "status": None, "span": None},
+        {"number": 2, "text": "    return 1", "status": None, "span": None},
+        {"number": 3, "text": "x = a or b", "status": "gaps", "span": (3, 3)},
+    ]
+    cards = [_card(1, 2, "covered"), _card(3, 3, "gaps", top=True, sites=1)]
+    html = listing(lines, cards)
+    assert (
+        '<span class="lineno mdef" data-status="covered" aria-expanded="false" id="L1" data-line="1">1</span>'
+        '<span class="src in-method def-line" data-method-status="covered" style="--def-col: 0; --def-end: 8"'
+        ' data-src="">def f():</span>'
+    ) in html
+    assert '<div class="line method-folded">' in html
+    assert 'class="src in-method method-end" data-method-status="covered" style="--def-col: 0"' in html
+    assert (
+        '<button type="button" class="lnum loose" data-status="gaps" aria-expanded="false"'
+        ' aria-controls="paths-3"><span class="lineno" id="L3" data-line="3">3</span></button>'
+    ) in html
+
+
+SHOP = (
+    "RATE = 2 if FAST else 1\n"
+    "class Shop:\n"
+    "    SIZE = 3 if BIG else 1\n"
+    "    def fee(self, rush):\n"
+    "        if rush:\n"
+    "            return 9\n"
+    "        elif self.member:\n"
+    "            return 5\n"
+    "        return 7\n"
+)
+
+
+def _shop_page():
+    """SHOP's page, as if it were k.py, no path taken."""
+    sites = manifest.sites(SHOP, "k.py")
+    paths = result.paths(sites, {})
+    return file_page("k.py", SHOP, sites, result.operands(sites, {}), paths, {})
+
+
+def test_4f08d210():
+    """Example: SHOP's page, RATE at the top, SIZE in Shop, fee's if and
+    elif in its card
+    Each span of sites outside every function has a top card.
+    It is titled by its scope: the class holding it, or file.
+    A site's row folds its tree; an elif's tree is labelled elif."""
+    page = _shop_page()
+    assert '<div class="pathgrid statements top-level" id="paths-1"' in page
+    assert '<div class="pathgrid statements top-level" id="paths-3"' in page
+    assert '<span class="plabel">file</span>' in page
+    assert '<span class="plabel">Shop</span>' in page
+    assert '<div class="fold" data-site="k.py:7:8" hidden="hidden">' in page
+    assert '<span class="operator" data-operator=""><span class="k">elif</span></span>' in page
+
+
+def test_4f08d211():
+    """Example: SHOP's page
+    Its code is coloured: keywords, numbers and capitalised names.
+    Its scripts open its cards, then keep its settings and its theme."""
+    page = _shop_page()
+    assert '<span class="k">class</span> <span class="t">Shop</span>:' in page
+    assert html_syntax.html("x = 10  # ten", html_syntax.of("x = 10  # ten")[1]) == (
+        'x = <span class="n">10</span>  <span class="c"># ten</span>'
+    )
+    assert page.count("<script>") == 1
+    assert "data-theme" in page
+
+
+def test_4f08d212():
+    """Example: a string over lines 1 to 3
+    A token over many lines is coloured on each line it reaches."""
+    assert html_syntax.of('x = """a\nb\nc"""\n') == {1: [[4, 8, "s"]], 2: [[0, 1, "s"]], 3: [[0, 4, "s"]]}
 
 
 def test_4f08d201():
-    """Example: flow.py with decisions [3, 6] and methods [1, 4]
-    Its row links the file to its own page.
-    It shows each total in three cells: taken, / possible, percent.
-    So they read 3 / 6 50%.
+    """Example: flow.py with methods [1, 4]
+    Its row links the file to its own page, its id its path.
+    It shows its total in three cells: taken, / possible, percent.
+    So they read 1 / 4 25%.
     Each cell has a data-sort value, its own number."""
     row = {"path": "src/model/flow.py", "sites": 2, "decisions": [3, 6], "methods": [1, 4]}
-    assert index_row(row) == (
-        "<tr>"
+    assert html_index.row(row, anchored=True) == (
+        '<tr id="row-src/model/flow.py">'
         '<td data-sort="src/model/flow.py"><a href="files/src/model/flow.py.html">src/model/flow.py</a></td>'
         '<td data-sort="2">2</td>'
-        '<td class="taken" data-sort="3">3</td>'
-        '<td class="of" data-sort="6">/ 6</td>'
-        '<td class="percent" data-sort="50">50%</td>'
         '<td class="taken" data-sort="1">1</td>'
         '<td class="of" data-sort="4">/ 4</td>'
         '<td class="percent" data-sort="25">25%</td>'
@@ -171,79 +276,51 @@ def test_4f08d201():
 
 
 def test_4f08d205():
-    """Example: a methods total of [0, 0], then of None
-    [0, 0]: the file has no method of two or more decisions.
+    """Example: a methods total of [0, 0], then of [5, 8]
+    [0, 0]: the file has no paths to take.
     So the percent shows -, titled with why.
     Its data-sort is empty, which sort.js keeps last either way.
-    None: methods are not measured, so the row has no methods cells."""
+    5 of 8 is 62.5%, which rounds up to 63%."""
     row = {"path": "src/kata.py", "sites": 1, "decisions": [1, 2], "methods": [0, 0]}
     title = "no method with two or more decisions"
-    assert index_row(row).endswith(
+    assert html_index.row(row).endswith(
         '<td class="taken" data-sort="0">0</td>'
         '<td class="of" data-sort="0">/ 0</td>'
         f'<td class="percent" data-sort="" title="{title}">-</td></tr>'
     )
-    assert index_row({**row, "methods": None}).count("<td") == 5
+    assert html_index.row({**row, "methods": [5, 8]}).endswith('<td class="percent" data-sort="63">63%</td></tr>')
 
 
-def test_4f08d20b():
-    """Example: groups code and docs, no file in docs
-    The docs tab's Total within each decision is [0, 0].
-    So its percent shows -, titled no decisions."""
-    empty = {"sites": 0, "decisions": [0, 0], "methods": None}
-    groups = [["code", [KATA], {**KATA, "path": "Total"}], ["docs", [], empty]]
-    page = index_page([KATA], {**KATA, "path": "Total"}, groups)
-    assert (
-        '<td class="percent" data-sort="" title="no decisions">-</td></tr>\n</tfoot>'
-    ) in page
+KATA = {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": [1, 2]}
+KATA_TEST = {"path": "test/test_kata.py", "sites": 1, "decisions": [1, 2], "methods": [1, 2]}
 
 
 def test_4f08d206():
-    """Example: rows for kata.py and fee.py, methods measured
-    The table has two heading rows.
-    File and Sites span both.
-    Each total's name spans its taken, / of and % columns.
-    Every column is sortable, the within each method ones included.
+    """Example: rows for kata.py and test_kata.py
+    The table has one heading row: File, Sites, and the total within each
+    method's taken, / of and % columns.
+    Every column is sortable.
     Its footer is the Total row, which sorting leaves last."""
-    rows = [
-        {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": [0, 0]},
-        {"path": "src/fee.py", "sites": 3, "decisions": [2, 4], "methods": [1, 4]},
-    ]
-    page = index_page(rows, {"sites": 5, "decisions": [5, 10], "methods": [1, 4]})
+    page = html_index.page([KATA, KATA_TEST], {"sites": 3, "decisions": [4, 8], "methods": [2, 4]})
 
     def heading(attrs, column, kind, label):
         """A sortable th, as the page writes it."""
         button = f'<button type="button" data-column="{column}" data-type="{kind}">'
         return f'<th{attrs} aria-sort="none">{button}{label}</button></th>'
 
-    parts = [(' class="taken"', "taken"), (' class="of"', "/ of"), (' class="percent"', "%")]
-    top = [
-        heading(' rowspan="2"', 0, "text", "File"),
-        heading(' class="num" rowspan="2"', 1, "number", "Sites"),
-        '<th class="group" colspan="3">Within each decision</th>',
-        '<th class="group" colspan="3">Within each method</th>',
+    head = [
+        heading("", 0, "text", "File"),
+        heading(' class="num"', 1, "number", "Sites"),
+        heading(' class="taken"', 2, "number", "taken"),
+        heading(' class="of"', 3, "number", "/ of"),
+        heading(' class="percent"', 4, "number", "%"),
     ]
-    bottom = [
-        heading(attrs, 2 + 3 * group + i, "number", label)
-        for group in range(2)
-        for i, (attrs, label) in enumerate(parts)
-    ]
-    head = "\n".join(f"<tr>\n{chr(10).join(row)}\n</tr>" for row in (top, bottom))
-    assert f"<thead>\n{head}\n</thead>" in page
+    assert "<thead>\n<tr>\n" + "\n".join(head) + "\n</tr>\n</thead>" in page
     assert (
-        '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="5">5</td>'
-        '<td class="taken" data-sort="5">5</td><td class="of" data-sort="10">/ 10</td>'
-        '<td class="percent" data-sort="50">50%</td>'
-        '<td class="taken" data-sort="1">1</td><td class="of" data-sort="4">/ 4</td>'
-        '<td class="percent" data-sort="25">25%</td></tr>\n'
-        "</tfoot>"
+        '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="3">3</td>'
+        '<td class="taken" data-sort="2">2</td><td class="of" data-sort="4">/ 4</td>'
+        '<td class="percent" data-sort="50">50%</td></tr>\n</tfoot>'
     ) in page
-    unmeasured = index_page(rows[:1], {"sites": 2, "decisions": [3, 6], "methods": None})
-    assert "Within each method" not in unmeasured
-
-
-KATA = {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": None}
-KATA_TEST = {"path": "test/test_kata.py", "sites": 1, "decisions": [1, 2], "methods": None}
 
 
 def test_4f08d209():
@@ -253,12 +330,9 @@ def test_4f08d209():
     Each tab controls a table of its own, with its own Total row.
     Every table but the first starts hidden.
     The page's script switches tabs as well as sorting."""
-    rows = [KATA, KATA_TEST]
-    groups = [
-        ["code", [KATA], {"sites": 2, "decisions": [3, 6], "methods": None}],
-        ["test", [KATA_TEST], {"sites": 1, "decisions": [1, 2], "methods": None}],
-    ]
-    page = index_page(rows, {"sites": 3, "decisions": [4, 8], "methods": None}, groups)
+    total = {"sites": 1, "decisions": [1, 2], "methods": [1, 2]}
+    groups = [["code", [KATA], total], ["test", [KATA_TEST], total]]
+    page = html_index.page([KATA, KATA_TEST], {"sites": 3, "decisions": [4, 8], "methods": [2, 4]}, groups)
     assert (
         '<nav class="tabs" role="tablist" aria-label="Groups">'
         '<button type="button" role="tab" aria-selected="true" aria-controls="files-0">'
@@ -270,69 +344,24 @@ def test_4f08d209():
     ) in page
     assert '<table class="files" id="files-0" role="tabpanel">' in page
     assert '<table class="files" id="files-1" role="tabpanel" hidden="hidden">' in page
-    assert '<table class="files" id="files-2" role="tabpanel" hidden="hidden">' in page
     assert page.count("<tfoot>") == 3
-    assert (
-        '<tfoot>\n<tr><td data-sort="Total">Total</td><td data-sort="1">1</td>'
-        '<td class="taken" data-sort="1">1</td><td class="of" data-sort="2">/ 2</td>'
-        '<td class="percent" data-sort="50">50%</td></tr>\n</tfoot>'
-    ) in page
     assert "Switches the index page's tabs" in page
 
 
 def test_4f08d20a():
     """Example: rows for src/kata.py and test/test_kata.py, no groups
     There is no tab bar, just the one table.
-    The page's script only sorts."""
-    page = index_page([KATA, KATA_TEST], {"sites": 3, "decisions": [4, 8], "methods": None})
+    The page's script only sorts, then keeps its settings and theme."""
+    page = html_index.page([KATA, KATA_TEST], {"sites": 3, "decisions": [4, 8], "methods": [2, 4]})
     assert 'role="tablist"' not in page
     assert page.count('<table class="files"') == 1
     assert "Switches the index page's tabs" not in page
 
 
-def test_4f08d202():
-    """The header lists a link to the first line of each span: covered
-    spans, then spans with gaps."""
-    assert jumps(LINES) == (
-        '<nav class="jumps" aria-label="Sites">'
-        '<div class="jump-list" data-jumps="covered"><span class="jump-label">Covered</span></div>'
-        '<div class="jump-list" data-jumps="gaps"><span class="jump-label">Gaps</span>'
-        '<a class="jump" data-status="gaps" href="#L2">2</a></div>'
-        "</nav>"
-    )
-
-
-def test_4f08d203():
-    """Example: a plain def line, then return user.active and user.admin
-    with a path never taken
-    A plain line is its nav cell, number and code.
-    A span is a button over its numbers, expanded when it has gaps, with
-    arrows to the previous and next gap.
-    Its tree follows, open when it has gaps: the site's row counts each
-    path, never taken first, and each operand row shows T or F per path."""
-    nav = '<span class="nav" data-nav="">'
-    arrows = (
-        '<a data-prev="" href="#L2" aria-label="Previous gap, line 2">&#9650;</a>'
-        '<a data-next="" href="#L2" aria-label="Next gap, line 2">&#9660;</a>'
-    )
-    assert listing(LINES, TREES) == (
-        '<div class="code">\n'
-        '<div class="line">' + nav + "</span>"
-        '<span class="lineno" id="L1" data-line="1">1</span>'
-        '<span class="src" data-src="">def can_attest(user, flow):</span></div>\n'
-        '<div class="block">' + nav + arrows + "</span>"
-        '<button type="button" class="lnum" data-status="gaps" aria-expanded="true" aria-controls="tree-2">'
-        '<span class="lineno" id="L2" data-line="2">2</span></button>'
-        '<div class="srcs"><span class="src" data-src="">    return user.active and user.admin</span></div></div>'
-        '<div class="tree" id="tree-2">'
-        '<div class="site" data-site="">'
-        '<div class="row"><span class="operator" data-operator="">and</span>'
-        '<span class="count never" data-count="">0</span><span class="count" data-count="">1</span>'
-        '<span class="count" data-count="">1</span></div>'
-        '<div class="row" data-operand=""><span class="branch" data-branch="">&#9500;&#9472; </span>'
-        f'<span class="text" data-text="">user.active</span>{_cells("T", "T", "F")}</div>'
-        '<div class="row" data-operand=""><span class="branch" data-branch="">&#9492;&#9472; </span>'
-        f'<span class="text" data-text="">user.admin</span>{_cells("F", "T", "")}</div>'
-        "</div></div>\n"
-        "</div>"
-    )
+def test_4f08d20b():
+    """Example: groups code and docs, no file in docs
+    The docs tab's Total within each method is [0, 0].
+    So its percent shows -."""
+    empty = {"sites": 0, "decisions": [0, 0], "methods": [0, 0]}
+    page = html_index.page([KATA], KATA, [["code", [KATA], KATA], ["docs", [], empty]])
+    assert '<td class="percent" data-sort="" title="no method with two or more decisions">-</td></tr>\n</tfoot>' in page

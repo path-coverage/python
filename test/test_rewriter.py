@@ -215,9 +215,8 @@ def test_7e40b30c():
 
 def test_7e40b305():
     """Example: fee with a docstring, then if not rates: return 0, a
-    write, if member: total -= 5 and a return, called three ways,
-    measuring methods
-    Each top-level statement that is no site is reached, by its name.
+    write, if member: total -= 5 and a return, called three ways
+    Each statement that is no site is reached, by its name, an arm's too.
     The early return skips the write and the last return.
     The docstring stays the docstring.
     The fees are unchanged."""
@@ -233,21 +232,21 @@ def test_7e40b305():
     )
     recorder = Recorder()
     namespace = {RECORDER_NAME: recorder}
-    tree = rewrite(ast.parse(source), "k.py", source=source, methods=True)
+    tree = rewrite(ast.parse(source), "k.py", source=source)
     exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     fee = namespace["fee"]
     assert [fee([], True), fee([1], True), fee([1], False)] == [0, 95, 100]
     assert fee.__doc__ == "The fee."
-    assert recorder.reached == {"k.py:5:4": 2, "k.py:8:4": 2}
+    assert recorder.reached == {"k.py:4:8": 1, "k.py:5:4": 2, "k.py:7:8": 1, "k.py:8:4": 2}
     assert recorder.site_paths["k.py:6:4"] == {(True,): 1, (False,): 1}
 
 
 def _lines_run(source, rewritten, *args):
     """The (function name, line) pairs a trace sees run when fee from source,
-    rewritten measuring methods or not, is called with args."""
+    rewritten or not, is called with args."""
     tree = ast.parse(source)
     if rewritten:
-        tree = rewrite(tree, "k.py", source=source, methods=True)
+        tree = rewrite(tree, "k.py", source=source)
     namespace = {RECORDER_NAME: Recorder()}
     exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     seen = set()
@@ -270,7 +269,7 @@ def _lines_run(source, rewritten, *args):
 
 def test_7e40b306():
     """Example: fee whose first decision raises in its then arm, called
-    so that arm never runs, measuring methods
+    so that arm never runs
     The rewritten fee runs exactly the lines the original does.
     So line coverage is the same with path coverage on as off; the raise
     line in particular is not reported as run."""

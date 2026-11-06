@@ -13,15 +13,15 @@
 <body>
 <main class="page">
 <header class="head" data-head="">
-<p class="back"><a data-index="" href="{{index}}">Path coverage</a></p>
-<h1 class="path">{{path}}</h1>
+<div class="top"><p class="title"><a data-index="" href="{{index}}">Path coverage</a></p><h1 class="path"><a data-row="" href="{{index}}#row-{{path}}">{{path}}</a></h1><button type="button" class="theme" aria-label="Light or dark"></button></div>
 {{jumps}}
 </header>
 <div class="box">
-{{listing}}
+<div class="rail">
+{{rail}}
 </div>
-<div class="pathgrids" hidden="hidden">
-{{grids}}
+{{listing}}
+<div class="divider" role="separator" aria-orientation="vertical" title="Drag to share the width between paths and code"></div>
 </div>
 </main>
 <script>

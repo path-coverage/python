@@ -11,23 +11,23 @@ def test_1a6f0c01():
     Each covered file gets one row for the index page.
     Its sites, eg 2 for kata.py.
     Its decisions total as [taken, possible] paths, eg [3, 6].
-    Its methods total is None, as methods are not measured."""
+    Its methods total, its cards added up, eg [2, 3]."""
     paths = {
         "src/kata.py:3:11": _paths(2, 0, 1),
         "src/kata.py:4:11": _paths(1, 0, 0),
         "src/team.py:2:11": _paths(1, 1, 4),
     }
-    assert files(paths) == [
-        {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": None},
-        {"path": "src/team.py", "sites": 1, "decisions": [3, 3], "methods": None},
+    cards = {"src/kata.py:1:0": [2, 3], "src/team.py:0:0": [3, 3]}
+    assert files(paths, cards) == [
+        {"path": "src/kata.py", "sites": 2, "decisions": [3, 6], "methods": [2, 3]},
+        {"path": "src/team.py", "sites": 1, "decisions": [3, 3], "methods": [3, 3]},
     ]
 
 
 def test_1a6f0c02():
     """Example: fee.py's cards, fee's 3 of 6 paths taken and tax's 2 of
     3, and kata.py with no function
-    Methods are measured, so each row has a methods total.
-    fee.py's is its cards added up, [5, 9].
+    fee.py's methods total is its cards added up, [5, 9].
     kata.py's is [0, 0], as it has no card."""
     paths = {
         "src/fee.py:7:4": _paths(1, 0),
@@ -54,10 +54,10 @@ def test_1a6f0c03():
     assert total(rows) == {"sites": 5, "decisions": [5, 10], "methods": [1, 4]}
 
 
-KATA = {"path": "src/model/kata.py", "sites": 2, "decisions": [3, 6], "methods": None}
-FEE = {"path": "src/model/fee.py", "sites": 3, "decisions": [2, 4], "methods": None}
-ROUTES = {"path": "src/app/routes.py", "sites": 1, "decisions": [1, 2], "methods": None}
-SETUP = {"path": "setup.py", "sites": 1, "decisions": [0, 2], "methods": None}
+KATA = {"path": "src/model/kata.py", "sites": 2, "decisions": [3, 6], "methods": [4, 7]}
+FEE = {"path": "src/model/fee.py", "sites": 3, "decisions": [2, 4], "methods": [3, 5]}
+ROUTES = {"path": "src/app/routes.py", "sites": 1, "decisions": [1, 2], "methods": [1, 2]}
+SETUP = {"path": "setup.py", "sites": 1, "decisions": [0, 2], "methods": [0, 2]}
 
 
 def test_1a6f0c04():
@@ -69,9 +69,9 @@ def test_1a6f0c04():
     rows = [ROUTES, FEE, KATA, SETUP]
     named = {"models": ["src/model/**/*.py"], "kata": ["**/kata.py"]}
     assert groups(rows, named) == [
-        ["models", [FEE, KATA], {"sites": 5, "decisions": [5, 10], "methods": None}],
-        ["kata", [KATA], {"sites": 2, "decisions": [3, 6], "methods": None}],
-        ["Ungrouped", [ROUTES, SETUP], {"sites": 2, "decisions": [1, 4], "methods": None}],
+        ["models", [FEE, KATA], {"sites": 5, "decisions": [5, 10], "methods": [7, 12]}],
+        ["kata", [KATA], {"sites": 2, "decisions": [3, 6], "methods": [4, 7]}],
+        ["Ungrouped", [ROUTES, SETUP], {"sites": 2, "decisions": [1, 4], "methods": [1, 4]}],
     ]
 
 
@@ -86,10 +86,10 @@ def test_1a6f0c05():
 
 def test_1a6f0c06():
     """Example: a group lib (lib/**/*.py) that no file matches
-    Its total has no sites and 0 / 0 paths within each decision.
+    Its total has no sites and 0 / 0 paths.
     So its tab's Total row shows - rather than failing."""
     assert groups([KATA], {"lib": ["lib/**/*.py"]})[0] == [
         "lib",
         [],
-        {"sites": 0, "decisions": [0, 0], "methods": None},
+        {"sites": 0, "decisions": [0, 0], "methods": [0, 0]},
     ]

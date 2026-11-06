@@ -1,223 +1,38 @@
-// SPIKE: puts a file page's trees in a rail to the left of the
-// code, each level with its site, and its function cards in a
-// rail to the right. Each function gets a bar on the code's
-// right edge, from its def to its end, that opens its card. One
-// tree or card is open at a time; opening one widens its rail,
-// sliding the code away from it.
+// The behaviour of a file's page: its cards sit in the rail left
+// of the code, one open at a time, level with its first line. A
+// method's def number opens its card, unfolding its body; a loose
+// site's button, outside every method, opens its lines' top card.
+// The page's markup, as rendered, already marks every method's
+// lines, numbers and rows; this only opens, closes and places.
 (function () {
   var code = document.querySelector('.code');
   if (!code) { return; }
   var box = code.parentElement;
-  var trees = Array.prototype.slice.call(document.querySelectorAll('.tree'));
+  var rail = document.querySelector('.rail');
+  var divider = document.querySelector('.divider');
   var grids = Array.prototype.slice.call(document.querySelectorAll('.pathgrid'));
-  var ccRail = document.createElement('div');
-  ccRail.className = 'rail cc';
-  var pcRail = document.createElement('div');
-  pcRail.className = 'rail pc';
-  var bars = grids.map(function (grid) {
-    var bar = document.createElement('button');
-    bar.type = 'button';
-    bar.className = 'pathbar';
-    bar.setAttribute('data-status', grid.getAttribute('data-status'));
-    bar.setAttribute('aria-controls', grid.id);
-    bar.setAttribute('aria-expanded', 'false');
-    bar.title = grid.querySelector('.calls').title;
-    return bar;
-  });
-  // Each method's def line, lit from its def to its bar, so the
-  // two read as one bracket around the method.
-  var bands = grids.map(function (grid) {
-    var band = document.createElement('div');
-    band.className = 'methodband';
-    band.setAttribute('data-status', grid.getAttribute('data-status'));
-    return band;
-  });
 
-  // The line-number button that opens tree.
-  function buttonOf(tree) {
-    return document.querySelector('button.lnum[aria-controls="' + tree.id + '"]');
+  // True for a top card, of sites outside every method.
+  function isTop(grid) {
+    return grid.classList.contains('top-level');
   }
 
-  // The bar that opens grid.
-  function barOf(grid) {
-    return bars[grids.indexOf(grid)];
-  }
+  // A card's first and last lines.
+  function firstOf(grid) { return Number(grid.getAttribute('data-first')); }
+  function lastOf(grid) { return Number(grid.getAttribute('data-last')); }
 
   // The number span of line n.
   function lineno(n) {
     return document.getElementById('L' + n);
   }
 
-  // Element's top, middle and bottom relative to within's top.
-  function spot(element, within) {
-    var rect = element.getBoundingClientRect();
-    var top = rect.top - within.getBoundingClientRect().top;
-    return { top: top, middle: top + rect.height / 2, bottom: top + rect.height };
+  // The row, a line or a loose site's block, holding line n.
+  function rowOf(n) {
+    return lineno(n).closest('.line, .block');
   }
 
-  // Opens panel, a tree or a grid, alone; null closes all. Any
-  // path shown or pinned goes with the grid it was in.
-  function openOnly(panel) {
-    pin(null);
-    clear();
-    trees.forEach(function (tree) {
-      tree.hidden = tree !== panel;
-      buttonOf(tree).setAttribute('aria-expanded', tree === panel ? 'true' : 'false');
-    });
-    grids.forEach(function (grid, i) {
-      grid.hidden = grid !== panel;
-      barOf(grid).setAttribute('aria-expanded', grid === panel ? 'true' : 'false');
-      bands[i].classList.toggle('open', grid === panel);
-    });
-    var side = !panel ? '' : panel.classList.contains('tree') ? 'cc' : 'pc';
-    document.body.setAttribute('data-open', side);
-    slide(panel);
-  }
-
-  // Scrolls the page just enough to show all of panel when it
-  // is a tree, eg one opened from a line near the bottom of the
-  // window, so its last rows are not below the fold. Its first
-  // row stays level with its site's line.
-  function showWhole(panel) {
-    if (panel && panel.classList.contains('tree')) {
-      panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  }
-
-  // How long a rail takes to open or close, as style.css has it.
-  var SLIDE_MS = 250;
-
-  // Places everything on every frame while the rails slide, as
-  // the bars and bands follow the code across, then shows all
-  // of panel, the one just opened, once it is in its place.
-  function slide(panel) {
-    var end = performance.now() + SLIDE_MS + 50;
-    function frame(now) {
-      place();
-      if (now < end) { requestAnimationFrame(frame); } else { showWhole(panel); }
-    }
-    requestAnimationFrame(frame);
-  }
-
-  // Sets an open tree's top so its first site's row, naming its
-  // operator and path counts, is level with the first line of
-  // its site's code.
-  function placeTree(tree) {
-    var block = buttonOf(tree).closest('.block');
-    tree.style.top = '0px';
-    var line = spot(block.querySelector('.src'), ccRail).middle;
-    var row = spot(tree.querySelector('.site .row'), tree).middle;
-    tree.style.top = (line - row) + 'px';
-  }
-
-  // Sets an open grid's top level with its def, its calls row
-  // first and its decision rows straight after, with no gaps;
-  // each row's label names its decision's line.
-  // When the def has scrolled up under the sticky header, the
-  // grid slides down to stay just below it, but never past its
-  // method's last line.
-  function placeGrid(grid) {
-    var rows = Array.prototype.slice.call(grid.querySelectorAll('.prow'));
-    var first = spot(lineno(grid.getAttribute('data-first')), pcRail);
-    var last = spot(lineno(grid.getAttribute('data-last')), pcRail);
-    var height = rows[0].getBoundingClientRect().height + 2;
-    var tall = rows.length * height;
-    var head = document.querySelector('.head').getBoundingClientRect().bottom;
-    var below = head - pcRail.getBoundingClientRect().top + 8;
-    var top = first.middle - height / 2;
-    top = Math.max(top, Math.min(below, last.bottom - tall));
-    grid.style.top = top + 'px';
-    grid.style.height = tall + 'px';
-    rows.forEach(function (row, i) {
-      row.style.top = (i * height) + 'px';
-    });
-  }
-
-  // Places panel, a tree or a grid.
-  function placeOne(panel) {
-    if (panel.classList.contains('tree')) { placeTree(panel); } else { placeGrid(panel); }
-  }
-
-  // Sets each bar beside the lines from its def to its end, on
-  // the code pane's right edge, half into the gap before the
-  // rail.
-  // How many methods' lines enclose grid's: its bar sits one
-  // lane further in for each, like nested brackets.
-  function laneOf(grid) {
-    var first = Number(grid.getAttribute('data-first'));
-    var last = Number(grid.getAttribute('data-last'));
-    return grids.filter(function (other) {
-      var f = Number(other.getAttribute('data-first'));
-      var l = Number(other.getAttribute('data-last'));
-      return other !== grid && f <= first && last <= l;
-    }).length;
-  }
-
-  // The x of a bar's middle, from the code pane's right edge,
-  // for a method in lane.
-  function barInset(lane) {
-    return lane * 20;
-  }
-
-  // Sets each method's band over its def line, from the def's
-  // column to its bar; it scrolls with the code, so is placed
-  // again whenever the code scrolls.
-  function placeBands() {
-    var pane = code.getBoundingClientRect();
-    bands.forEach(function (band, i) {
-      var grid = grids[i];
-      var src = srcOf(grid.getAttribute('data-first'));
-      var text = src.firstChild;
-      var col = Number(grid.getAttribute('data-col'));
-      var range = document.createRange();
-      range.setStart(text, Math.min(col, text.length));
-      range.collapse(true);
-      var left = range.getBoundingClientRect().left - pane.left + code.scrollLeft;
-      var right = code.scrollLeft + code.clientWidth - barInset(laneOf(grid));
-      var line = src.getBoundingClientRect();
-      band.style.left = (left - 4) + 'px';
-      band.style.width = Math.max(0, right - left + 4) + 'px';
-      band.style.top = (line.top - pane.top + code.scrollTop) + 'px';
-      band.style.height = line.height + 'px';
-    });
-  }
-
-  function placeBars() {
-    var edge = code.getBoundingClientRect().right - box.getBoundingClientRect().left;
-    placeBands();
-    bars.forEach(function (bar, i) {
-      bar.style.left = (edge - 8 - barInset(laneOf(grids[i]))) + 'px';
-      var first = spot(lineno(grids[i].getAttribute('data-first')), box);
-      var last = spot(lineno(grids[i].getAttribute('data-last')), box);
-      bar.style.top = first.top + 'px';
-      bar.style.height = (last.bottom - first.top) + 'px';
-    });
-  }
-
-  // Places the bars and whichever tree or grid is open.
-  function place() {
-    placeBars();
-    trees.concat(grids).forEach(function (panel) {
-      if (!panel.hidden) { placeOne(panel); }
-    });
-  }
-
-  // The trees in the left rail, the grids in the right, the bars
-  // on the code's right edge, nothing open.
-  function beside() {
-    box.insertBefore(ccRail, code);
-    box.appendChild(pcRail);
-    trees.forEach(function (tree) { ccRail.appendChild(tree); });
-    grids.forEach(function (grid) { pcRail.appendChild(grid); });
-    bars.forEach(function (bar) { box.appendChild(bar); });
-    bands.forEach(function (band) { code.appendChild(band); });
-    code.addEventListener('scroll', placeBands);
-    openOnly(null);
-    placeBars();
-  }
-
-  // The code span of line n, whether a plain line or one of a
-  // site's lines.
+  // The code span of line n, whether a line's own or one of a
+  // loose site's lines.
   function srcOf(n) {
     var number = lineno(n);
     if (!number) { return null; }
@@ -227,98 +42,178 @@
     return button.closest('.block').querySelectorAll('.srcs > .src')[index];
   }
 
-  // [first, last] from a "first,last" attribute, null for "".
-  function span(text) {
-    return text ? text.split(',').map(Number) : null;
+  // The code of each method's lines, from its def to its end,
+  // which thickens its stripe while its card is open; none for a
+  // top card.
+  var methodSrcs = grids.map(function (grid) {
+    if (isTop(grid)) { return []; }
+    var srcs = [];
+    for (var n = firstOf(grid); n <= lastOf(grid); n++) { srcs.push(srcOf(n)); }
+    return srcs;
+  });
+
+  // The rows of each method's body, after its def line to its end,
+  // folded under its def line while its card is closed; a row
+  // holding its def line too is never folded. None for a top card.
+  var methodRows = grids.map(function (grid) {
+    if (isTop(grid)) { return []; }
+    var def = rowOf(firstOf(grid));
+    var rows = [];
+    for (var n = firstOf(grid) + 1; n <= lastOf(grid); n++) {
+      var row = rowOf(n);
+      if (row !== def && rows.indexOf(row) < 0) { rows.push(row); }
+    }
+    return rows;
+  });
+
+  // The def number of each method's card, which opens it; null for
+  // a top card, which its site's button opens.
+  var defs = grids.map(function (grid) {
+    return isTop(grid) ? null : lineno(firstOf(grid));
+  });
+
+  // The loose button opening each top card; null for a method's.
+  var buttons = grids.map(function (grid) {
+    return isTop(grid) ? document.querySelector('button.lnum[aria-controls="' + grid.id + '"]') : null;
+  });
+
+  // Element's top, middle and bottom relative to within's top.
+  function spot(element, within) {
+    var rect = element.getBoundingClientRect();
+    var top = rect.top - within.getBoundingClientRect().top;
+    return { top: top, middle: top + rect.height / 2, bottom: top + rect.height };
   }
 
+  // Opens grid alone, null closing all: a method's card opens its
+  // body, every other method's folded; its def number, or its
+  // site's button, says it is open.
+  function openOnly(open) {
+    clear();
+    grids.forEach(function (grid, i) {
+      var shown = grid === open;
+      grid.hidden = !shown;
+      methodSrcs[i].forEach(function (src) { src.classList.toggle('method-open', shown); });
+      (defs[i] || buttons[i]).setAttribute('aria-expanded', String(shown));
+    });
+    foldBodies(grids.indexOf(open));
+    document.body.toggleAttribute('data-open', open !== null);
+    place();
+    stickDef();
+  }
+
+  // True when the method of grids[inner] is defined inside that of
+  // grids[outer], eg a def inside a def.
+  function nests(inner, outer) {
+    return firstOf(grids[outer]) < firstOf(grids[inner]) && lastOf(grids[inner]) <= lastOf(grids[outer]);
+  }
+
+  // Folds every method's body but that of grids[open], none for -1:
+  // its rows show, but for those of any method inside it, which stay
+  // folded under their def lines; and its def line shows, with those
+  // of the methods it is inside, though they lie in folded bodies.
+  function foldBodies(open) {
+    var shown = [];
+    if (open >= 0) {
+      shown = methodRows[open].filter(function (row) {
+        return !grids.some(function (grid, j) {
+          return nests(j, open) && methodRows[j].indexOf(row) >= 0;
+        });
+      });
+      grids.forEach(function (grid, j) {
+        if (j === open || nests(open, j)) { shown.push(rowOf(firstOf(grid))); }
+      });
+    }
+    methodRows.forEach(function (rows) {
+      rows.forEach(function (row) { row.classList.toggle('method-folded', shown.indexOf(row) < 0); });
+    });
+  }
+
+  // The narrowest the rail drags to, and the narrowest the code
+  // beside it is left.
+  var RAIL_MIN = 240;
+  var CODE_MIN = 320;
+  var RAIL_KEY = 'path_coverage.rail';
+
+  // Sets the rail to width pixels, kept within its bounds, and
+  // places the open card again beside it.
+  function setRail(width) {
+    var most = box.getBoundingClientRect().width - CODE_MIN;
+    var wide = Math.round(Math.max(RAIL_MIN, Math.min(most, width)));
+    document.body.style.setProperty('--rail', wide + 'px');
+    place();
+    return wide;
+  }
+
+  // Dragging the divider sets the rail's width, kept in the
+  // browser, where it can be, for the next page.
+  divider.addEventListener('pointerdown', function (event) {
+    divider.setPointerCapture(event.pointerId);
+    divider.classList.add('dragging');
+    document.body.classList.add('dragging');
+    event.preventDefault();
+  });
+  divider.addEventListener('pointermove', function (event) {
+    if (!divider.classList.contains('dragging')) { return; }
+    setRail(event.clientX - box.getBoundingClientRect().left - 6);
+  });
+  divider.addEventListener('pointerup', function (event) {
+    divider.releasePointerCapture(event.pointerId);
+    divider.classList.remove('dragging');
+    document.body.classList.remove('dragging');
+    var wide = parseInt(document.body.style.getPropertyValue('--rail'), 10);
+    try { window.localStorage.setItem(RAIL_KEY, String(wide)); } catch (e) { /* this page only */ }
+  });
+
+  // The rail's width kept from an earlier page, if any.
+  function keptRail() {
+    try { return parseInt(window.localStorage.getItem(RAIL_KEY), 10); } catch (e) { return NaN; }
+  }
+
+  // Sets an open card's top so its title row is level with its
+  // first line; its rows, and any fold open among them, flow down
+  // it. When its first line has scrolled up under the sticky
+  // header, the card slides down to stay just below it, but never
+  // past its last line. The rail stretches to the card's bottom,
+  // as the card, placed absolutely, adds no height of its own, so
+  // the box grows to show a card taller than the code.
+  function placeGrid(grid) {
+    var first = spot(lineno(firstOf(grid)), rail);
+    var last = spot(lineno(lastOf(grid)), rail);
+    var title = spot(grid.querySelector('.prow'), grid).middle;
+    var tall = grid.getBoundingClientRect().height;
+    var head = document.querySelector('.head').getBoundingClientRect().bottom;
+    var below = head - rail.getBoundingClientRect().top + 8;
+    var top = first.middle - title;
+    top = Math.max(top, Math.min(below, last.bottom - tall));
+    grid.style.top = top + 'px';
+    rail.style.minHeight = (top + tall) + 'px';
+  }
+
+  // Places whichever card is open; with none open the rail is
+  // only as tall as the code.
+  function place() {
+    rail.style.minHeight = '';
+    grids.forEach(function (grid) { if (!grid.hidden) { placeGrid(grid); } });
+  }
+
+  // The code spans lit for the card row hovered.
   var lit = [];
-  var chips = [];
-  var hot = [];
 
   // Lights the code of every line in span, [first, last].
   function light(lines) {
-    if (!lines) { return; }
     for (var n = lines[0]; n <= lines[1]; n++) {
       var src = srcOf(n);
       if (src) { src.classList.add('lit'); lit.push(src); }
     }
   }
 
-  // Puts a T or F chip in the gutter of line n's row.
-  function chip(n, text) {
-    var number = lineno(n);
-    if (!number) { return; }
-    var nav = number.closest('.line, .block').querySelector('.nav');
-    nav.setAttribute('data-chip', text);
-    chips.push(nav);
-  }
-
-  // Undoes the lights and chips of the last path shown.
+  // Unlights the code lit.
   function clear() {
     lit.forEach(function (src) { src.classList.remove('lit'); });
-    chips.forEach(function (nav) { nav.removeAttribute('data-chip'); });
-    hot.forEach(function (cell) { cell.classList.remove('hot'); });
     lit = [];
-    chips = [];
-    hot = [];
   }
 
-  // Shows in the code the path in column col of grid: for each
-  // decision it makes, its if lit with the arm taken and its
-  // end, T lighting the then arm, F the else (none without
-  // one), and a T or F chip in the gutter. Decisions after a
-  // path leaves early stay unlit.
-  function show(grid, col) {
-    clear();
-    grid.querySelectorAll('.prow').forEach(function (row) {
-      var cell = row.querySelectorAll('.pcell')[col];
-      cell.classList.add('hot');
-      hot.push(cell);
-      if (row.classList.contains('calls') || cell.classList.contains('ended')) { return; }
-      var taken = cell.classList.contains('true');
-      light(span(row.getAttribute('data-head')));
-      light(span(row.getAttribute(taken ? 'data-then' : 'data-else')));
-      light(span(row.getAttribute('data-end')));
-      chip(Number(row.getAttribute('data-line')), taken ? 'T' : 'F');
-    });
-  }
-
-  // The pinned path, { grid, col }, shown whenever no other is
-  // hovered; null when none is pinned.
-  var pinned = null;
-
-  // The grid and column of a cell.
-  function columnOf(cell) {
-    var cells = Array.prototype.slice.call(cell.parentElement.querySelectorAll('.pcell'));
-    return { grid: cell.closest('.pathgrid'), col: cells.indexOf(cell) };
-  }
-
-  // Pins column, or unpins with null, outlining the pinned
-  // column's cells.
-  function pin(column) {
-    document.querySelectorAll('.pcell.pinned').forEach(function (cell) {
-      cell.classList.remove('pinned');
-    });
-    pinned = column;
-    if (!column) { return; }
-    column.grid.querySelectorAll('.prow').forEach(function (row) {
-      row.querySelectorAll('.pcell')[column.col].classList.add('pinned');
-    });
-  }
-
-  // Shows the pinned path, or nothing when none is pinned.
-  function showPinned() {
-    if (pinned) { show(pinned.grid, pinned.col); } else { clear(); }
-  }
-
-  pcRail.addEventListener('mouseover', function (event) {
-    var cell = event.target.closest('.pathgrid:not(.statements) .pcell');
-    if (!cell) { return; }
-    var column = columnOf(cell);
-    show(column.grid, column.col);
-  });
-  pcRail.addEventListener('mouseleave', showPinned);
+  rail.addEventListener('mouseleave', clear);
 
   // The code spans whose characters are marked, with the text
   // each had before.
@@ -329,60 +224,10 @@
     return text.match(/^\s*/)[0].length;
   }
 
-  // Puts back every span marked as it was, site tints and all.
+  // Puts back every span marked as it was.
   function unmarkChars() {
     markedSrcs.forEach(function (entry) { entry.src.innerHTML = entry.html; });
     markedSrcs = [];
-  }
-
-  // Tints each site's own characters by its status, gaps when
-  // any of its paths was never taken, rather than its whole
-  // lines; where sites overlap, gaps wins.
-  function tintSites() {
-    var perLine = {};
-    document.querySelectorAll('.tree .site').forEach(function (site) {
-      var row = site.querySelector('.row[data-at]');
-      if (!row) { return; }
-      var at = row.getAttribute('data-at').split(',').map(Number);
-      var gaps = site.querySelector('.count.never') !== null;
-      for (var n = at[0]; n <= at[2]; n++) {
-        (perLine[n] = perLine[n] || []).push({
-          from: n === at[0] ? at[1] : -1, to: n === at[2] ? at[3] : Infinity,
-          status: gaps ? 'gaps' : 'covered'
-        });
-      }
-    });
-    Object.keys(perLine).forEach(function (n) {
-      var src = srcOf(n);
-      if (!src) { return; }
-      var text = src.textContent;
-      var marks = text.split('').map(function () { return null; });
-      perLine[n].forEach(function (span) {
-        // A continuation line (from -1) is tinted from its first
-        // character after the indent.
-        var from = span.from < 0 ? indentOf(text) : span.from;
-        for (var i = from; i < Math.min(span.to, text.length); i++) {
-          if (marks[i] !== 'gaps') { marks[i] = span.status; }
-        }
-      });
-      src.textContent = '';
-      var i = 0;
-      while (i < text.length) {
-        var j = i;
-        while (j < text.length && marks[j] === marks[i]) { j++; }
-        var part = text.slice(i, j);
-        if (marks[i]) {
-          var mark = document.createElement('mark');
-          mark.className = 'site';
-          mark.setAttribute('data-status', marks[i]);
-          mark.textContent = part;
-          src.appendChild(mark);
-        } else {
-          src.appendChild(document.createTextNode(part));
-        }
-        i = j;
-      }
-    });
   }
 
   // Marks the characters from line l1, column c1 to line l2,
@@ -396,14 +241,65 @@
       var from = n === l1 ? c1 : indentOf(text);
       var to = n === l2 ? c2 : text.length;
       markedSrcs.push({ src: src, html: src.innerHTML });
-      var mark = document.createElement('mark');
-      mark.className = 'chars';
-      mark.textContent = text.slice(from, to);
-      src.textContent = text.slice(0, from);
-      src.appendChild(mark);
-      src.appendChild(document.createTextNode(text.slice(to)));
+      paint(src, function (i) { return i >= from && i < to ? 'chars' : null; }, function () {
+        var mark = document.createElement('mark');
+        mark.className = 'chars';
+        return mark;
+      });
     }
     reveal(document.querySelectorAll('mark.chars'));
+  }
+
+  // The colour class of each of src's characters, the class of the
+  // token span it is in, null for one in none.
+  function tokensOf(src) {
+    var tokens = [];
+    var walker = document.createTreeWalker(src, NodeFilter.SHOW_TEXT);
+    for (var node = walker.nextNode(); node; node = walker.nextNode()) {
+      var parent = node.parentNode;
+      var css = parent !== src && parent.tagName === 'SPAN' ? parent.className : null;
+      for (var i = 0; i < node.length; i++) { tokens.push(css); }
+    }
+    return tokens;
+  }
+
+  // Rebuilds src's code, each run of characters keyAt gives one key
+  // to in the element wrap makes of that key, the others bare, every
+  // character still in a span of its token's colour class.
+  function paint(src, keyAt, wrap) {
+    var text = src.textContent;
+    var tokens = tokensOf(src);
+    src.textContent = '';
+    var i = 0;
+    while (i < text.length) {
+      var j = i;
+      var key = keyAt(i);
+      while (j < text.length && keyAt(j) === key) { j++; }
+      var holder = key ? wrap(key) : src;
+      appendTokens(holder, text, tokens, i, j);
+      if (key) { src.appendChild(holder); }
+      i = j;
+    }
+  }
+
+  // Appends text's characters i to j to holder, each run of one
+  // token class in a span of that class, the rest bare.
+  function appendTokens(holder, text, tokens, i, j) {
+    var k = i;
+    while (k < j) {
+      var m = k;
+      while (m < j && tokens[m] === tokens[k]) { m++; }
+      var part = text.slice(k, m);
+      if (tokens[k]) {
+        var span = document.createElement('span');
+        span.className = tokens[k];
+        span.textContent = part;
+        holder.appendChild(span);
+      } else {
+        holder.appendChild(document.createTextNode(part));
+      }
+      k = m;
+    }
   }
 
   // The width of the code pane's left columns (gap arrows and
@@ -428,131 +324,147 @@
     if (shift !== 0) { code.scrollBy({ left: shift, behavior: 'smooth' }); }
   }
 
-  // Hovering a tree's row marks in the code the characters of
-  // its operand, or of its operator's whole condition.
+  // Hovering a row of a fold in a card marks in the code the
+  // characters of its operand, or of its operator's whole
+  // condition.
   var markedRow = null;
-  ccRail.addEventListener('mouseover', function (event) {
-    var row = event.target.closest('.tree .row[data-at]');
+  rail.addEventListener('mouseover', function (event) {
+    var row = event.target.closest('.fold .row[data-at]');
     if (row === markedRow) { return; }
     markedRow = row;
     if (!row) { unmarkChars(); return; }
     var at = row.getAttribute('data-at').split(',').map(Number);
     markChars(at[0], at[1], at[2], at[3]);
   });
-  ccRail.addEventListener('mouseleave', function () {
+  rail.addEventListener('mouseleave', function () {
     markedRow = null;
     unmarkChars();
   });
 
-  // A click on a site's row in a function card opens the tree of
-  // the block holding its line, as that block's button does.
-  pcRail.addEventListener('click', function (event) {
-    var row = event.target.closest('.statements .prow.site');
+  // Hovering a statement's row in a card lights its line in the
+  // code, scrolling the page only when that line is out of view.
+  var litRow = null;
+  rail.addEventListener('mouseover', function (event) {
+    var row = event.target.closest('.statements .prow[data-line]:not(.calls)');
+    if (row === litRow) { return; }
+    litRow = row;
+    clear();
     if (!row) { return; }
-    var block = lineno(row.getAttribute('data-line')).closest('.block');
-    var button = block && block.querySelector('button.lnum[aria-controls]');
-    if (button) { openOnly(document.getElementById(button.getAttribute('aria-controls'))); }
+    var n = Number(row.getAttribute('data-line'));
+    light([n, n]);
+    // A number's scroll margin keeps it clear of the sticky header
+    // and the def line stuck below it.
+    lineno(n).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+  rail.addEventListener('mouseleave', function () { litRow = null; });
+
+  // A click on a site's row in a card unfolds that site's tree in
+  // the row's place, folding up any other open; a click on the row
+  // of the one open, or on its fold's first row, which stands in
+  // the row's place, folds it back.
+  rail.addEventListener('click', function (event) {
+    if (event.target.closest('.fold .site > .row:first-child')) { unfold(null); return; }
+    var row = event.target.closest('.statements .prow.site');
+    var fold = row && row.nextElementSibling;
+    if (!fold || !fold.classList.contains('fold')) { return; }
+    unfold(fold.hidden ? fold : null);
   });
 
-  // A click on a cell pins its column, or unpins it when it is
-  // the one pinned.
-  pcRail.addEventListener('click', function (event) {
-    var cell = event.target.closest('.pathgrid:not(.statements) .pcell');
-    if (!cell) { return; }
-    var column = columnOf(cell);
-    var same = pinned && pinned.grid === column.grid && pinned.col === column.col;
-    pin(same ? null : column);
-    show(column.grid, column.col);
-  });
+  // Shows fold alone, null folding them all up, the arrow of each
+  // site's row pointing up while its fold shows; then places the
+  // open card again, as its height has changed.
+  function unfold(fold) {
+    rail.querySelectorAll('.fold').forEach(function (each) {
+      each.hidden = each !== fold;
+      var arrow = each.previousElementSibling.querySelector('.fold-arrow');
+      arrow.setAttribute('aria-expanded', String(each === fold));
+    });
+    place();
+  }
 
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && pinned) { pin(null); clear(); }
-  });
-
-  // Opening one tree or grid closes the others; a click on a
-  // site's code acts as one on its button; a gap arrow opens
-  // the tree of the line it jumps to.
+  // Opening one card closes the others, and a click never closes
+  // the one open, so the rail always shows one. A click on a def
+  // line opens its method's card; one on a loose site's lines opens
+  // their top card; a gutter arrow or a header jump opens the card
+  // at the line it jumps to.
   document.addEventListener('click', function (event) {
-    var bar = event.target.closest('.pathbar');
-    if (bar) {
-      var grid = document.getElementById(bar.getAttribute('aria-controls'));
-      openOnly(grid.hidden ? grid : null);
-      return;
-    }
-    var line = event.target.closest('.line');
-    if (line && !event.target.closest('button, a')) {
-      // A click on a method's def line acts as one on its bar.
-      var number = line.querySelector('.lineno').getAttribute('data-line');
-      var method = grids.filter(function (g) { return g.getAttribute('data-first') === number; })[0];
-      if (method) { openOnly(method.hidden ? method : null); }
-      return;
-    }
-    var block = event.target.closest('.block');
-    if (block && !event.target.closest('button, a')) {
-      block.querySelector('button[aria-controls]').click();
-      return;
-    }
-    var button = event.target.closest('button.lnum');
-    if (button) {
-      var tree = document.getElementById(button.getAttribute('aria-controls'));
-      openOnly(tree.hidden ? null : tree);
-      return;
-    }
-    var arrow = event.target.closest('.nav a, a.jump');
-    if (arrow) {
-      var target = document.getElementById('tree-' + arrow.hash.slice(2));
-      if (target) { openOnly(target); }
-    }
+    var link = event.target.closest('.nav a, a.jump');
+    if (link) { openOnly(document.getElementById('paths-' + link.hash.slice(2))); return; }
+    if (event.target.closest('a')) { return; }
+    var loose = event.target.closest('.block');
+    var button = loose && loose.querySelector('button.lnum.loose');
+    if (button) { openOnly(document.getElementById(button.getAttribute('aria-controls'))); return; }
+    var row = event.target.closest('.line, .block');
+    var number = row && row.querySelector('.lineno.mdef');
+    if (number) { openOnly(grids[defs.indexOf(number)]); }
   });
 
   window.addEventListener('resize', place);
-  window.addEventListener('scroll', function () {
-    grids.forEach(function (grid) { if (!grid.hidden) { placeGrid(grid); } });
-  });
 
-  // Puts every site's jump in the header into one row, labelled
-  // Conditions, in line order; each chip's edge shows its status.
-  function oneJumpRow() {
-    var lists = document.querySelectorAll('.jump-list');
-    if (lists.length === 0) { return; }
-    var jumps = Array.prototype.slice.call(document.querySelectorAll('a.jump'));
-    jumps.sort(function (a, b) { return Number(a.textContent) - Number(b.textContent); });
-    var row = lists[0];
-    row.removeAttribute('data-jumps');
-    row.querySelector('.jump-label').textContent = 'Conditions';
-    jumps.forEach(function (jump) { row.appendChild(jump); });
-    for (var i = 1; i < lists.length; i++) { lists[i].remove(); }
+  // The card of the innermost method whose def to end hold line n,
+  // or of the top card holding it, so a linked line in a body is
+  // never left folded away; null when none holds n.
+  function cardOf(n) {
+    var holding = grids.filter(function (grid) { return firstOf(grid) <= n && n <= lastOf(grid); });
+    return holding.length ? holding[holding.length - 1] : null;
   }
 
-  // The cell kind that draws each of a tree's branch glyphs.
-  // Built from char codes (vertical, tee, elbow, horizontal) so this
-  // file stays ASCII.
-  var BRANCH_CELLS = {};
-  BRANCH_CELLS[String.fromCharCode(0x2502)] = 'v';
-  BRANCH_CELLS[String.fromCharCode(0x251C)] = 't';
-  BRANCH_CELLS[String.fromCharCode(0x2514)] = 'l';
-  BRANCH_CELLS[String.fromCharCode(0x2500)] = 'h';
+  // On a page at a linked line, eg #L8, opens the card holding it.
+  // Otherwise opens the first card with gaps, or, with none, the
+  // first card, its first line scrolled into view, so one is always
+  // open, every other method's body folded under its def line;
+  // opens nothing only on a page with no card at all.
+  function openFirst() {
+    var linked = /^#L(\d+)$/.exec(window.location.hash);
+    var own = linked && cardOf(Number(linked[1]));
+    if (own) { openOnly(own); return; }
+    var jump = document.querySelector('.jump-list a.jump');
+    var card = jump ? cardOf(Number(jump.hash.slice(2))) : grids[0];
+    if (!card) { openOnly(null); return; }
+    lineno(firstOf(card)).scrollIntoView({ block: 'center' });
+    openOnly(card);
+  }
 
-  // Redraws each tree's branch glyphs as cells a whole row tall,
-  // whose lines run edge to edge, so the branches join from row
-  // to row as the glyphs, shorter than a row, cannot.
-  function drawBranches() {
-    document.querySelectorAll('.tree .branch').forEach(function (branch) {
-      var text = branch.textContent;
-      branch.setAttribute('aria-hidden', 'true');
-      branch.textContent = '';
-      text.split('').forEach(function (ch) {
-        var cell = document.createElement('span');
-        cell.className = 'bx';
-        cell.setAttribute('data-bx', BRANCH_CELLS[ch] || 's');
-        branch.appendChild(cell);
-      });
+  // Keeps the header, the open card and its def line in view as the
+  // page scrolls, and as a pinch-zoomed view pans or zooms. Pinch
+  // zoom pans a lens over the page, which CSS sticky ignores, so
+  // the header is shifted down by the lens's pan; the card and def
+  // line then follow the header's drawn bottom.
+  function followView() {
+    var pan = window.visualViewport ? window.visualViewport.offsetTop : 0;
+    document.querySelector('.head').style.transform = pan > 0 ? 'translateY(' + pan + 'px)' : '';
+    place();
+    stickDef();
+  }
+  window.addEventListener('scroll', followView);
+  window.addEventListener('resize', stickDef);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('scroll', followView);
+    window.visualViewport.addEventListener('resize', followView);
+  }
+
+  // Keeps the def line of the open method in view: once it would
+  // scroll up under the sticky header, it is shifted down to sit
+  // just below it, over the body lines passing beneath, but never
+  // past the method's last line. The code pane scrolls sideways, so
+  // CSS sticky, which would stick within the pane, cannot do this.
+  function stickDef() {
+    grids.forEach(function (grid) {
+      var row = rowOf(firstOf(grid));
+      row.style.transform = '';
+      row.classList.remove('def-stuck');
+      if (grid.hidden) { return; }
+      var head = document.querySelector('.head').getBoundingClientRect().bottom;
+      var rect = row.getBoundingClientRect();
+      var last = lineno(lastOf(grid)).getBoundingClientRect();
+      var shift = Math.min(head - rect.top, last.bottom - rect.bottom);
+      if (shift <= 0) { return; }
+      row.style.transform = 'translateY(' + shift + 'px)';
+      row.classList.add('def-stuck');
     });
   }
 
-  document.body.setAttribute('data-layout', 'beside');
-  drawBranches();
-  oneJumpRow();
-  tintSites();
-  beside();
+  var kept = keptRail();
+  if (kept > 0) { setRail(kept); }
+  openFirst();
 })();

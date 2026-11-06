@@ -7,11 +7,10 @@ from pathlib import PurePosixPath
 from . import totals
 
 
-def files(paths, cards=None):
+def files(paths, cards):
     """One row per file that has sites in paths (as result.paths gives
-    them), in path order: its sites, and its decisions total. Its methods
-    total is None unless cards, {def site: [taken, size]}, are given, as
-    they are when methods are measured."""
+    them), in path order: its sites, its decisions total, and its methods
+    total, its cards in cards, {card site: [taken, size]}, added up."""
     by_path = {}
     for site, site_paths in paths.items():
         by_path.setdefault(path_of(site), {})[site] = site_paths
@@ -20,7 +19,7 @@ def files(paths, cards=None):
             "path": path,
             "sites": len(sites),
             "decisions": totals.decisions(sites),
-            "methods": None if cards is None else _methods_of(path, cards),
+            "methods": _methods_of(path, cards),
         }
         for path, sites in sorted(by_path.items())
     ]
@@ -33,13 +32,12 @@ def _methods_of(path, cards):
 
 
 def total(rows):
-    """The sum of each column over rows, a methods total being None when
-    the rows' are."""
-    methods = [row["methods"] for row in rows]
+    """The sum of each column over rows; no rows, as for a group no file is
+    in, gives 0 sites and [0, 0] totals."""
     return {
         "sites": sum(row["sites"] for row in rows),
         "decisions": _add(row["decisions"] for row in rows),
-        "methods": _add(methods) if methods and methods[0] is not None else None,
+        "methods": _add(row["methods"] for row in rows),
     }
 
 

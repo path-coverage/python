@@ -1,4 +1,6 @@
-from path_coverage import method_statements
+from pathlib import Path
+
+from path_coverage import manifest, method_statements
 
 
 def _statements(source):
@@ -65,14 +67,15 @@ def test_b47e3a03():
 def test_b47e3a04():
     """Example: ship, an if statement then a return
     The if is a site, so its row is named by its operator, if.
-    It is at the if keyword, as decision mode names it."""
+    It is at the if keyword, as decision mode names it.
+    Its then's statement is a row after it."""
     source = (
         "def ship(order):\n"
         "    if order.paid:\n"
         "        order.pack()\n"
         "    return order\n"
     )
-    assert _placed(source) == [(2, 4, "if"), (4, 4, "return")]
+    assert _placed(source) == [(2, 4, "if"), (3, 8, "()"), (4, 4, "return")]
 
 
 def test_b47e3a05():
@@ -122,13 +125,14 @@ def test_b47e3a08():
         "    return order\n"
     )
     rows = _statements(source)["k.py:1:0"]
-    assert [(row.top, row.paths) for row in rows] == [("and", 3), ("if", 2), ("return", 1)]
+    assert [(row.top, row.paths) for row in rows] == [("and", 3), ("if", 2), ("()", 1), ("return", 1)]
 
 
 def test_b47e3a09():
     """Example: fee, a write, four ifs, then a return
-    Its size is the sum of its rows' paths, 1+2+2+2+2+1 = 10.
-    Its complexity is their product, 1*2*2*2*2*1 = 16.
+    Each if's then is a row of 1 path after it.
+    Its size is the sum of its rows' paths, 1+2+1+2+1+2+1+2+1+1 = 14.
+    Its complexity is their product, 1*2*1*2*1*2*1*2*1*1 = 16.
     Each path of one row goes on to each of the next."""
     source = (
         "def fee(user, order):\n"
@@ -144,7 +148,7 @@ def test_b47e3a09():
         "    return total\n"
     )
     rows = _statements(source)["k.py:1:0"]
-    assert [method_statements.size(rows), method_statements.complexity(rows)] == [10, 16]
+    assert [method_statements.size(rows), method_statements.complexity(rows)] == [14, 16]
 
 
 def test_b47e3a10():
@@ -161,16 +165,16 @@ def test_b47e3a10():
     )
     rows = _statements(source)["k.py:1:0"]
     paths = {"k.py:2:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
-    assert [row.site for row in rows] == ["k.py:2:4", None]
-    assert method_statements.taken(rows, paths) == [1, None]
+    assert [row.site for row in rows] == ["k.py:2:4", None, None]
+    assert method_statements.taken(rows, paths) == [1, None, None]
 
 
 def test_b47e3a11():
     """Example: labels, a comprehension, and tally, a for loop
     A comprehension's element runs once for each item.
-    So it is not looked through: labels' row is the write.
+    So labels' write is a row, and the ternary in it is a row after it.
     A for loop's body runs once for each item too.
-    So tally's for is one row, though its body holds an if."""
+    So tally's for is a row, then a row for each statement of its body."""
     source = (
         "def labels(items):\n"
         "    names = ['sale' if i.sale else 'full' for i in items]\n"
@@ -181,14 +185,14 @@ def test_b47e3a11():
         "        if item.sale:\n"
         "            item.count()\n"
     )
-    assert _placed(source) == [(2, 4, "="), (3, 4, "return")]
-    assert _placed(source, "k.py:5:0") == [(6, 4, "for")]
+    assert _placed(source) == [(2, 4, "="), (2, 13, "ternary"), (3, 4, "return")]
+    assert _placed(source, "k.py:5:0") == [(6, 4, "for"), (7, 8, "if"), (8, 12, "()")]
 
 
 def test_b47e3a12():
     """Example: load, reading a file in a try, rescuing a missing one
-    The try holds no site outside its handler, so it is one row.
-    Its handler is not looked through, as it runs only on a raise."""
+    The try is a row, then a row for each statement of its parts.
+    Its handler's are rows too, as a raise runs them."""
     source = (
         "def load(path, fallback):\n"
         "    try:\n"
@@ -197,7 +201,7 @@ def test_b47e3a12():
         "        text = fallback if fallback else ''\n"
         "    return text\n"
     )
-    assert _placed(source) == [(2, 4, "try"), (6, 4, "return")]
+    assert _placed(source) == [(2, 4, "try"), (3, 8, "="), (5, 15, "ternary"), (6, 4, "return")]
 
 
 def test_b47e3a13():
@@ -314,10 +318,11 @@ def test_b47e3a20():
 def test_b47e3a21():
     """Example: drain, a while, a with, a match, an any, a class and
     a lambda
-    A while's test is looked through; its body is not.
-    A with is looked through, so its row is the any inside it.
+    A while's test is looked through, so its row is the and.
+    A with's items are looked through; it holds none, so it is with.
     A match is a site, its row at its keyword.
-    A class and a lambda's body run in contexts of their own."""
+    Each body, and each case's, gives rows after its statement.
+    A lambda's body gives a row for each site in it."""
     source = (
         "def drain(queue, path):\n"
         "    while queue.size and queue.open:\n"
@@ -333,10 +338,15 @@ def test_b47e3a21():
     )
     assert _placed(source) == [
         (2, 10, "and"),
+        (3, 8, "ternary"),
+        (4, 4, "with"),
         (5, 15, "any"),
         (6, 4, "match"),
+        (8, 12, "value"),
         (9, 4, "class"),
+        (10, 15, "ternary"),
         (11, 4, "return"),
+        (11, 19, "ternary"),
     ]
 
 
@@ -349,3 +359,140 @@ def test_b47e3a22():
         "    ...\n"
     )
     assert _placed(source) == [(2, 4, "value")]
+
+
+def test_b47e3a23():
+    """Example: fee, an if, an elif and an else, then a return
+    Each arm's statements are rows after its if, in the order written.
+    An elif is a row of the else before it, its top elif."""
+    source = (
+        "def fee(user):\n"
+        "    if user.member:\n"
+        "        rate = 5\n"
+        "    elif user.trial:\n"
+        "        rate = 2\n"
+        "    else:\n"
+        "        rate = 9\n"
+        "    return rate\n"
+    )
+    assert _placed(source) == [
+        (2, 4, "if"),
+        (3, 8, "="),
+        (4, 4, "elif"),
+        (5, 8, "="),
+        (7, 8, "="),
+        (8, 4, "return"),
+    ]
+
+
+def test_b47e3a24():
+    """Example: size, a match of two cases
+    Each case's statements are rows after the match, case by case."""
+    source = (
+        "def size(box):\n"
+        "    match box.kind:\n"
+        '        case "big":\n'
+        "            return 3\n"
+        "        case _:\n"
+        "            return 1 if box.full else 0\n"
+    )
+    assert _placed(source) == [(2, 4, "match"), (4, 12, "return"), (6, 19, "ternary")]
+
+
+def test_b47e3a25():
+    """Example: ready, an and holding a ternary, and ship, an if whose
+    predicate holds one
+    A site inside a site's leaf is a site of its own.
+    So it is a row too, after the site holding it."""
+    source = (
+        "def ready(order):\n"
+        "    return valid(order.code if order.code else None) and order.paid\n"
+        "\n"
+        "def ship(order):\n"
+        "    if send(order.fast if order.paid else None):\n"
+        "        order.done()\n"
+    )
+    assert _placed(source) == [(2, 11, "and"), (2, 17, "ternary")]
+    assert _placed(source, "k.py:4:0") == [(5, 4, "if"), (5, 12, "ternary"), (6, 8, "()")]
+
+
+def test_b47e3a26():
+    """Example: ship, an if packing a paid order, then a return
+    A row in an arm that is no site is reached where it starts too."""
+    source = (
+        "def ship(order):\n"
+        "    if order.paid:\n"
+        "        order.pack()\n"
+        "    return order\n"
+    )
+    assert method_statements.reaches(source, "k.py") == ["k.py:3:8", "k.py:4:4"]
+
+
+SHOP = (
+    "RATE = 2 if FAST else 1\n"
+    "def ship(order):\n"
+    "    return order.paid and order.packed\n"
+    "class Shop:\n"
+    "    SIZE = 3 if BIG else 1\n"
+)
+
+
+def test_b47e3a27():
+    """Example: a ternary at the top, ship, and one in class Shop
+    A site outside every function is on no function's card.
+    Each is a top row, for the card of its own lines, in order.
+    ship's and is on its card, so it is no top row."""
+    rows = method_statements.top_rows(SHOP, "k.py")
+    assert [(row.line, row.column, row.top, row.paths) for row in rows] == [
+        (1, 7, "ternary", 2),
+        (5, 11, "ternary", 2),
+    ]
+    assert [row.site for row in rows] == ["k.py:1:7", "k.py:5:11"]
+
+
+def _then_taken(count):
+    """A ternary's paths, its then taken count times, its else never."""
+    return [{"path": [True], "count": count}, {"path": [False], "count": 0}]
+
+
+SHOP_PATHS = {
+    "k.py:1:7": _then_taken(1),
+    "k.py:3:11": [
+        {"path": [True, True], "count": 1},
+        {"path": [True, False], "count": 0},
+        {"path": [False, None], "count": 0},
+    ],
+    "k.py:5:11": _then_taken(0),
+}
+
+
+def test_b47e3a28():
+    """Example: SHOP, RATE's then taken, SIZE's never, ship's and once
+    The top level's total is [taken, possible] of its top rows' paths.
+    ship's and is on its own card, so it is not in it: [1, 4]."""
+    assert method_statements.top_level(SHOP, "k.py", SHOP_PATHS) == [1, 4]
+
+
+def test_b47e3a29():
+    """Example: SHOP's cards
+    Each file's top level has a total too, named for line 0.
+    No function is on line 0, so every site is in some total."""
+    files = {"k.py": (SHOP, manifest.sites(SHOP, "k.py"))}
+    cards = method_statements.cards(files, SHOP_PATHS, None)
+    assert cards == {"k.py:2:0": [1, 3], "k.py:0:0": [1, 4]}
+
+
+def test_b47e3a30():
+    """Example: every file of this repo's src and test
+    Each site is a row of a function's card, or a top row."""
+    root = Path(__file__).parent.parent
+    missed = {}
+    for file in sorted([*root.glob("src/**/*.py"), *root.glob("test/**/*.py")]):
+        source = file.read_text()
+        path = file.relative_to(root).as_posix()
+        carded = {row.site for rows in method_statements.of(source, path).values() for row in rows}
+        tops = {row.site for row in method_statements.top_rows(source, path)}
+        lost = set(manifest.sites(source, path)) - carded - tops
+        if lost:
+            missed[path] = sorted(lost)
+    assert missed == {}

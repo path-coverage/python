@@ -9,37 +9,68 @@
   --rule: #D5DAE2;
   --ok: #1F5FBF;
   --ok-tint: #E6EEFA;
-  --warn: #A35200;
   --bad: #B54708;
   --on-status: #FFFFFF;
   --link: #1F5FBF;
-  /* The tree is inverted from the page, so it never reads as
-     more source lines. */
-  --tree-bg: #1E2638;
-  --tree-fg: #E8ECF4;
-  --tree-muted: #A3AEC2;
-  --tree-rule: #3A4560;
-  --tree-gap: #F5A25D;
   --font-body: "Helvetica Neue", Arial, sans-serif;
   --font-code: Menlo, Consolas, "DejaVu Sans Mono", monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12151C; --surface: #181C25; --panel: #212633; --fg: #E4E8EF;
-    --muted: #9AA4B5; --rule: #323949; --ok: #7FB0FF; --ok-tint: #1A2740;
-    --warn: #F0A35E; --bad: #F08A3C; --on-status: #12151C; --link: #7FB0FF;
-    --tree-bg: #E6EAF2; --tree-fg: #1C2230; --tree-muted: #4E5869;
-    --tree-rule: #BCC4D2; --tree-gap: #A8480A;
-    color-scheme: dark;
-  }
+/* Dark, unless the page's html element names light, as the theme
+   button does when pressed; so a page draws dark before any script
+   runs. */
+:root:not([data-theme="light"]) {
+  --bg: #12151C; --surface: #181C25; --panel: #212633; --fg: #E4E8EF;
+  --muted: #9AA4B5; --rule: #323949; --ok: #7FB0FF; --ok-tint: #1A2740;
+  --bad: #F08A3C; --on-status: #12151C; --link: #7FB0FF;
+  --syn-k: #C79BEA; --syn-s: #9CCB9E; --syn-c: #7F8A99;
+  --syn-n: #E9A3C9; --syn-t: #AEB5F5; --syn-v: #7FCFC4; --syn-o: #E6D27A;
+  color-scheme: dark;
 }
+/* Code's syntax colours, each muted so the orange, blue and green
+   of coverage still stand out: keywords, strings, comments,
+   numbers, capitalised names, and, in bold gold, the marks of a
+   ternary's arms, ? and :. */
+:root {
+  --syn-k: #7E3BA0; --syn-s: #3B7550; --syn-c: #77808F;
+  --syn-n: #9E4A78; --syn-t: #4B52A0; --syn-v: #2A7570; --syn-o: #7A6600;
+}
+/* The same colours in the code and in a site's tree, its fold, and
+   a card's rows, which quote the code. */
+:is(.src, .fold, .statements .prow) .k { color: var(--syn-k); }
+:is(.src, .fold, .statements .prow) .s { color: var(--syn-s); }
+:is(.src, .fold, .statements .prow) .c { color: var(--syn-c); font-style: italic; }
+:is(.src, .fold, .statements .prow) .n { color: var(--syn-n); }
+:is(.src, .fold, .statements .prow) .t { color: var(--syn-t); }
+:is(.src, .fold, .statements .prow) .v { color: var(--syn-v); }
+:is(.src, .fold, .statements .prow) .o { color: var(--syn-o); font-weight: 700; }
+/* Everything a site's tree or a method's grid draws has this one
+   tint, in either mode; status is only ever the orange or blue of
+   an edge. A lit line, on a path being shown, is yellow. */
+:root { --cond-tint: #E2F2D3; --lit: #FFE98A; }
+:root:not([data-theme="light"]) { --cond-tint: #26361A; --lit: #5A4A12; }
+/* --rail is the width of the column of trees and grids left of the
+   code; dragging the divider changes it. */
+body { --rail: 560px; }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; }
 a { color: var(--link); }
 .page {
-  max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;
-  padding: 40px max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px));
+  max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px));
 }
+/* A file's page is wider, to hold its rail beside its code. */
+.page:has(.code) { max-width: 1800px; }
 h1 { margin: 0; font-size: 24px; font-weight: 600; }
+/* Every page's top line: the Path coverage title, a link back to
+   the index on a file's page, then, on a file's page, its path. */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
+.title { margin: 0; font-size: 24px; font-weight: 600; }
+.title a { color: inherit; text-decoration: none; }
+.title a:hover { text-decoration: underline; }
+/* A file's path links back to its row on the index, which stops
+   clear of the index's sticky header. */
+h1.path a { color: inherit; text-decoration: none; }
+h1.path a:hover { text-decoration: underline; }
+table.files tr[id] { scroll-margin-top: 72px; }
 .box { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 th, td { padding: 10px 16px; text-align: left; }
@@ -58,14 +89,14 @@ tfoot td:first-child { font-family: inherit; }
 .tabs [role="tab"]:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .num, td:not(:first-child) { text-align: right; }
 /* A total's taken, / of and % sit close, so a row still reads
-   3 / 4 75%; its name heads all three. The File column takes
-   the table's spare width, so it never spreads them apart. */
+   3 / 4 75%. The File column takes the table's spare width, so
+   it never spreads them apart. These rules name the files table,
+   so a path grid's taken cells are never matched. */
 table.files tr > :first-child { width: 100%; }
 table.files th, table.files td:not(:first-child) { white-space: nowrap; }
-th.group { text-align: center; padding-bottom: 0; }
-.taken { text-align: right; padding-left: 32px; padding-right: 4px; }
-td.of, th.of { text-align: left; padding-left: 0; padding-right: 6px; }
-.percent { text-align: right; padding-left: 6px; }
+table.files .taken { text-align: right; padding-left: 32px; padding-right: 4px; }
+table.files .of { text-align: left; padding-left: 0; padding-right: 6px; }
+table.files .percent { text-align: right; padding-left: 6px; }
 th button {
   font: 600 13px var(--font-body); color: var(--fg); background: none; border: 0;
   padding: 4px 0; cursor: pointer;
@@ -78,16 +109,24 @@ th button:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 /* A file's page: plain source; on lines holding a condition the
    line numbers are one button. Every number has the same box, so
    digits stay aligned whether or not they are on a button. */
-.back { margin: 0; font-size: 13px; }
 h1.path { font-family: var(--font-code); font-size: 18px; }
-/* The back link, path and site lists stick together as one
-   header. */
+/* The top line, and on a file's page its path and site lists,
+   stick together as one header. */
 .head {
   position: sticky; top: 0; z-index: 5;
   display: flex; flex-direction: column; gap: 10px;
   margin: 0 -16px; padding: 12px 16px; background: var(--bg);
   border-bottom: 1px solid var(--rule);
 }
+/* The theme button, small, at the title bar's right end, showing
+   the theme it switches to: a moon for dark, a sun for light. */
+.theme {
+  margin-left: auto; width: 30px; height: 30px; padding: 0; font-size: 16px; line-height: 1;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--surface);
+  color: var(--fg); cursor: pointer;
+}
+.theme:hover { background: var(--panel); }
+.theme:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .jumps { display: flex; flex-direction: column; gap: 8px; }
 .jump-list { display: flex; gap: 6px; align-items: center; overflow-x: auto; white-space: nowrap; min-width: 0; }
 .jump-label { width: 64px; flex-shrink: 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -101,12 +140,20 @@ a.jump[data-status] { background: var(--cond-tint); border-right-color: transpar
 a.jump[data-status="covered"] { color: var(--ok); border-top-color: var(--ok); border-left-color: var(--ok); }
 a.jump[data-status="gaps"] { color: var(--bad); border-top-color: var(--bad); border-left-color: var(--bad); }
 a.jump:focus-visible, .nav a:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
-/* The source pane's border and background start after the nav
-   column, so the arrows sit outside the pane yet scroll with
-   their line. */
-.box:has(> .code) { position: relative; isolation: isolate; border: 0; background: none; border-radius: 0; }
+/* The code sits right of the rail of cards. The rail's column is
+   always there, --rail wide, and the divider in the gap after it
+   drags to change that. */
+.box:has(> .code) {
+  position: relative; isolation: isolate; border: 0; background: none; border-radius: 0;
+  display: grid; column-gap: 12px; grid-template-columns: var(--rail) minmax(0, 1fr);
+}
+.box > .rail { grid-column: 1; grid-row: 1; }
+.box > .code { grid-column: 2; grid-row: 1; }
+/* The source pane's border and background start after the rail,
+   the gap and the nav column, so the arrows sit outside the pane
+   yet scroll with their line. */
 .box:has(> .code)::before {
-  content: ""; position: absolute; inset: 0 0 0 26px; z-index: -1;
+  content: ""; position: absolute; inset: 0 0 0 calc(var(--rail) + 38px); z-index: -1;
   border: 1px solid var(--rule); border-radius: 8px;
   background: var(--surface); pointer-events: none;
 }
@@ -114,29 +161,62 @@ a.jump:focus-visible, .nav a:focus-visible { outline: 3px solid var(--link); out
    tall, keeping the gutter narrow. */
 .nav { display: flex; flex-direction: column; justify-content: center; width: 26px; flex-shrink: 0; }
 .nav a { width: 22px; text-align: center; line-height: 14px; font-size: 12px; color: var(--bad); text-decoration: none; }
+/* A covered card's arrows, between the covered cards' lines, are
+   blue, as their numbers are. */
+.nav a[data-status="covered"] { color: var(--ok); }
 .nav a:hover { color: var(--fg); }
-/* Clears the sticky header when a link jumps to a line. */
-.lineno { scroll-margin-top: 190px; }
-button.lnum:has(.lineno:target) { outline: 3px solid var(--link); outline-offset: 1px; }
-.code { font-family: var(--font-code); font-size: 13px; line-height: 32px; padding: 10px 0; min-width: 720px; }
+.nav a[data-prev]::before { content: "\25B2"; }
+.nav a[data-next]::before { content: "\25BC"; }
+/* Every row is as wide as the longest line (or the pane, if
+   wider), so a method's band, and a lit line, reach past the code
+   when it scrolls sideways. */
+.code {
+  font-family: var(--font-code); font-size: 13px; line-height: 32px; padding: 10px 0;
+  position: relative; isolation: isolate; min-width: 0; overflow-x: auto;
+  display: grid; grid-template-columns: minmax(max-content, 1fr); align-content: start;
+}
 .line, .block { display: flex; align-items: flex-start; }
+/* A loose site's whole block, its lines' code included, opens its
+   top card. */
+.block { cursor: pointer; border-radius: 6px; }
+.block:hover { filter: brightness(0.97); }
+.line:has(.lineno) { cursor: default; }
 .srcs { display: flex; flex-direction: column; }
+.block .srcs { flex: 1; }
 .src { white-space: pre; }
+/* A lit line's background spans the code pane's full width. */
+.line .src { flex: 1; }
+/* Each line's code is as tall as its row, even an empty line's, so
+   a method's stripe runs unbroken from row to row. */
+.line > .src, .block > .srcs { align-self: stretch; }
+.srcs > .src:last-child { flex-grow: 1; }
+/* scroll-margin-top clears the sticky header when a link jumps to
+   a line. */
 .lineno {
   display: block; width: 52px; padding-right: 20px; text-align: right;
   color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0;
+  scroll-margin-top: 190px;
 }
+/* A loose site's button, its 9px right margin included, takes the
+   72px a plain number takes, so its lines' code starts where every
+   other line's does. Its 63px includes its borders, so at any zoom,
+   where a border is rounded to whole screen pixels, its width
+   holds. */
 button.lnum {
-  display: flex; flex-direction: column; flex-shrink: 0; margin: 4px 8px 4px 0; padding: 0;
+  position: relative; display: flex; flex-direction: column; flex-shrink: 0;
+  box-sizing: border-box; width: 63px;
+  margin: 4px 9px 4px 0; padding: 0;
   border: 1px solid transparent; border-radius: 6px; cursor: pointer;
   font: 600 13px/24px var(--font-code); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
 }
-button.lnum { position: relative; }
+/* A loose site's top card opens in the left rail: a closed button
+   points left, where its card will open; an open one has no arrow,
+   as a click leaves it open. */
 button.lnum::before {
-  content: "\25B8"; position: absolute; left: 7px; top: 4px;
-  font-size: 11px; line-height: 24px; transition: transform 120ms;
+  content: "\25C2"; position: absolute; left: 7px; top: 4px;
+  font-size: 11px; line-height: 24px;
 }
-button.lnum[aria-expanded="true"]::before { transform: rotate(90deg); }
+button.lnum[aria-expanded="true"]::before { content: none; }
 /* With a site count the count and the triangle share the
    button's height, one 11px line each. */
 button.lnum:has(.site-count)::before { top: 12px; line-height: 11px; }
@@ -147,213 +227,241 @@ button.lnum:has(.lineno + .lineno)::before { top: auto; bottom: 2px; line-height
   position: absolute; left: 7px; top: 1px;
   font-size: 9px; line-height: 11px; font-weight: 700;
 }
-/* The rule between sites spans the tree's full width, through
-   its 16px side padding. */
-.site + .site {
-  border-top: 1px solid var(--tree-rule); margin: 6px -16px 0; padding: 6px 16px 0;
-}
 button.lnum .lineno { width: 50px; padding-right: 11px; color: inherit; line-height: 32px; margin: -4px 0; }
 /* A site's button wears the condition tint, edged in its
-   status colour on the top and left only, as a method's bar is. */
+   status colour on the top and left only. */
 button.lnum[data-status] { box-shadow: none; background: var(--cond-tint); border-right-color: transparent; border-bottom-color: transparent; }
 button.lnum[data-status="covered"] { color: var(--ok); border-top-color: var(--ok); border-left-color: var(--ok); }
 button.lnum[data-status="gaps"] { color: var(--bad); border-top-color: var(--bad); border-left-color: var(--bad); }
 button.lnum:hover { filter: brightness(1.1); }
 button.lnum:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
-.tree {
-  margin: 4px 20px 12px 120px; padding: 10px 16px; border: 1px solid var(--tree-rule);
-  border-radius: 8px; background: var(--tree-bg); color: var(--tree-fg); line-height: 30px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+/* An open loose site has its button's status edges, top and left,
+   doubled to 2px. A jump to it opens its card, so its button has
+   no outline of the jump to it. */
+button.lnum[aria-expanded="true"][data-status="gaps"] { box-shadow: inset 1px 1px 0 var(--bad); }
+button.lnum[aria-expanded="true"][data-status="covered"] { box-shadow: inset 1px 1px 0 var(--ok); }
+button.lnum:has(.lineno:target) { outline: none; }
+/* While a card is open, no button keeps a focus outline. */
+body[data-open] button.lnum:focus-visible { outline: none; }
+.rail { position: relative; min-width: 0; }
+/* Each row lays its branch and label out at their own width, the
+   label pushing its cells to the row's right edge, so a site's
+   cells line up in columns however long or deep its labels. */
+.row { display: flex; align-items: center; gap: 8px; }
+.row > :is(.text, .arm, .operator) { margin-right: auto; padding-right: 8px; }
+/* An explicit width, not just a flex basis, so a row's natural
+   width counts each cell as 26px, not as its one letter. */
+.row > :is(.cell, .count) { flex: none; width: 26px; }
+/* A thin rule under each site's counts row, across the tree's
+   full width through its 16px side padding. */
+.site > .row:first-child {
+  border-bottom: 1px solid var(--rule); margin: 0 -16px 6px; padding: 0 16px 4px;
 }
-/* A row is its branch and label, then one fixed-width column per
-   path: flowing by column, each cell after the label takes the
-   next path's column, however many paths the site has. */
-.row {
-  display: grid; grid-template-columns: auto minmax(200px, 1fr);
-  grid-auto-flow: column; grid-auto-columns: 32px; column-gap: 16px;
-}
-.operator { grid-column: span 2; font-weight: 600; }
-.row[data-subtree] .operator { grid-column: auto; }
+.operator { font-weight: 600; }
 .row .arm { white-space: pre; font-weight: 600; }
-.branch { white-space: pre; color: var(--tree-muted); margin-right: -16px; }
+/* An if's then names its arm, quoting no code, so is italic. */
+.row .arm[data-named] { font-style: italic; }
+.branch { white-space: pre; color: var(--muted); margin-right: -16px; }
 .row .text { white-space: pre; }
-/* A branch glyph drawn as a cell a whole row tall: v a vertical
-   line, t a vertical with a stub right, l the top half of a
-   vertical with a stub right, h a horizontal, s nothing. */
+/* A branch's cell, of the kind its data-bx names, drawn a whole
+   row tall so branches join from row to row: v a vertical line,
+   t a vertical with a stub right, l the top half of a vertical
+   with a stub right, h a horizontal, s nothing. */
 .bx { display: inline-block; width: 1ch; height: 30px; vertical-align: top; --stroke: linear-gradient(currentColor, currentColor); }
 .bx[data-bx="v"] { background: var(--stroke) 50% 0 / 1px 100% no-repeat; }
 .bx[data-bx="t"] { background: var(--stroke) 50% 0 / 1px 100% no-repeat, var(--stroke) 100% 50% / 50% 1px no-repeat; }
 .bx[data-bx="l"] { background: var(--stroke) 50% 0 / 1px 50% no-repeat, var(--stroke) 100% 50% / 50% 1px no-repeat; }
 .bx[data-bx="h"] { background: var(--stroke) 0 50% / 100% 1px no-repeat; }
-/* Each path's count heads its column, orange for a path never
-   taken; a leaf's T or F on that path sits in a chip, as in a
-   path grid, and a blank means the path never reached it. */
+/* Each path heads its column with a snake, a vertical ~ standing
+   for the path below it, then 0, orange, for a path never taken,
+   or *, blue, for one taken, its count on hover; a leaf's T or F
+   on that path sits in a chip, as in a path grid, and a blank
+   means the path never reached it. */
 .row .count { text-align: center; font-variant-numeric: tabular-nums; color: var(--ok); font-weight: 600; }
-.row .count.never { color: var(--tree-gap); }
+.row .count::before { content: "\2240"; }
+.row .count.never { color: var(--bad); }
 .row .cell { text-align: center; }
-.row .cell:not(:empty) {
+.row .cell:is(:not(:empty), [data-mark]) {
   align-self: center; line-height: 22px; border-radius: 3px;
   background: var(--surface); color: var(--fg); font: 600 12px var(--font-code);
 }
+/* A cell's mark, drawn in place of a letter: a tick for a path
+   that took an arm. */
+.row .cell[data-mark="taken"]::before { content: "\2713"; }
+/* Hovering a cell with hover text, eg a path's count, shows that
+   text in a chip above it. */
+.row [data-hover] { position: relative; cursor: default; }
+.row [data-hover]:hover::after {
+  content: attr(data-hover); position: absolute; bottom: 100%; left: 50%;
+  transform: translateX(-50%); z-index: 4; padding: 0 7px; border-radius: 4px;
+  white-space: nowrap; font: 700 11px/20px var(--font-body); background: var(--fg); color: var(--bg);
+}
 
-/* SPIKE: the code and a rail share the box; each tree sits in
-   the rail, level with its site (its top set by side.js). */
-body[data-layout="beside"] .page { max-width: 1800px; }
-/* The code sits between two rails, condition trees on the left
-   and path grids on the right, each as wide as --cc-rail or
-   --pc-rail. Both are 0 until one opens; registered, so they
-   animate, sliding the code and its frame aside together. */
-@property --cc-rail { syntax: "<length>"; inherits: true; initial-value: 0px; }
-@property --pc-rail { syntax: "<length>"; inherits: true; initial-value: 0px; }
-body[data-layout="beside"] { transition: --cc-rail 250ms ease, --pc-rail 250ms ease; }
-body[data-open="cc"] { --cc-rail: 560px; }
-body[data-open="pc"] { --pc-rail: 560px; }
-body[data-layout="beside"] .box:has(> .code) {
-  display: grid; column-gap: 12px;
-  grid-template-columns: var(--cc-rail) minmax(0, 1fr) var(--pc-rail);
+/* The divider: the gap between the rail and the code, a line down
+   its middle that darkens as it is hovered or dragged. */
+.divider {
+  position: absolute; top: 0; bottom: 0; left: var(--rail); width: 12px;
+  cursor: col-resize; z-index: 4; touch-action: none;
 }
-/* Every row is as wide as the longest line (or the pane, if
-   wider), so a site's band and outline, and a lit line, reach
-   past the code when it scrolls sideways. */
-body[data-layout="beside"] .code {
-  min-width: 0; overflow-x: auto;
-  display: grid; grid-template-columns: minmax(max-content, 1fr);
+.divider::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px;
+  background: var(--rule);
 }
-body[data-layout="beside"] .box:has(> .code)::before {
-  left: calc(var(--cc-rail) + 38px); right: calc(var(--pc-rail) + 12px);
-}
-.rail { position: relative; min-width: 0; }
-/* The rail's tree sits on the condition tint, in the page's own
-   text colours, as a path grid sits on the path tint. */
-.rail .tree {
-  --tree-bg: var(--cond-tint); --tree-fg: var(--fg); --tree-muted: var(--muted);
-  --tree-rule: var(--rule); --tree-gap: var(--bad);
-}
-/* The rail's tree has narrower columns, to fit its width; a
-   thin rule under each site's counts row, across the tree's
-   full width through its 16px side padding. */
-.rail .row { grid-template-columns: auto minmax(120px, 1fr); grid-auto-columns: 26px; column-gap: 8px; }
-.rail .site > .row:first-child {
-  border-bottom: 1px solid var(--tree-rule); margin: 0 -16px 6px; padding: 0 16px 4px;
-}
-.rail .tree { position: absolute; left: 0; right: 0; margin: 0; z-index: 2; font-family: var(--font-code); font-size: 13px; }
-/* Beside, a site's whole block, its lines' code included, is
-   tinted by status and opens its tree, so each tree lines up
-   with a band the eye can follow across. */
-:root { --bad-tint: #FBE6D6; }
-@media (prefers-color-scheme: dark) { :root { --bad-tint: #3A2416; } }
-/* Everything a site's grid draws has this tint, as everything
-   a method's grid draws has --path-tint; status is only ever
-   the orange or blue of an edge. */
-:root { --cond-tint: #E2F2D3; }
-@media (prefers-color-scheme: dark) { :root { --cond-tint: #26361A; } }
-body[data-layout="beside"] .block { cursor: pointer; border-radius: 6px; }
-/* A site's own characters are tinted, not its whole lines: the
-   expression is what its grid is about. */
-/* The padding stretches the tint to the full 32px line, as tall
-   as a method's band, without moving the text. */
-mark.site { color: inherit; border-radius: 3px; padding: 8px 0; }
-mark.site { background: var(--cond-tint); }
-mark.site[data-status="gaps"] { box-shadow: inset 0 -1px 0 var(--bad); }
-mark.site[data-status="covered"] { box-shadow: inset 0 -1px 0 var(--ok); }
-/* An open site, like an open method's bar, has its status edges
-   doubled to 2px: its button's top and left, and its
-   expressions' underlines. */
-body[data-layout="beside"] button.lnum[aria-expanded="true"][data-status="gaps"] { box-shadow: inset 1px 1px 0 var(--bad); }
-body[data-layout="beside"] button.lnum[aria-expanded="true"][data-status="covered"] { box-shadow: inset 1px 1px 0 var(--ok); }
-body[data-layout="beside"] .block:has(> button.lnum[aria-expanded="true"]) mark.site[data-status="gaps"] { box-shadow: inset 0 -2px 0 var(--bad); }
-body[data-layout="beside"] .block:has(> button.lnum[aria-expanded="true"]) mark.site[data-status="covered"] { box-shadow: inset 0 -2px 0 var(--ok); }
-/* Beside, a jump to a site opens its tree, whose doubled edges
-   mark it, so its button has no outline of the jump to it; and
-   while a method's paths are open, none keeps a focus outline. */
-body[data-layout="beside"] button.lnum:has(.lineno:target) { outline: none; }
-body[data-open="pc"] button.lnum:focus-visible { outline: none; }
-body[data-layout="beside"] .block .srcs { flex: 1; }
-body[data-layout="beside"] .block:hover { filter: brightness(0.97); }
-/* Beside, an open site's triangle points left, showing that a
-   click closes its tree, rather than down. */
-/* A site's tree opens in the left rail: a closed button points
-   left, where its tree will open, an open one right, the way it
-   will close. */
-body[data-layout="beside"] button.lnum::before { content: "\25C2"; transform: none; }
-body[data-layout="beside"] button.lnum[aria-expanded="true"]::before { content: "\25B8"; transform: none; }
+.divider:hover::after, .divider.dragging::after { background: var(--link); }
+body.dragging { cursor: col-resize; user-select: none; }
 
-/* SPIKE: a path method's bar on the code pane's right edge,
-   def to end, which opens its grid out into the rail: a column
-   per path, never-taken first, each row level with its line. */
-.pathbar {
-  position: absolute; width: 16px; padding: 0; z-index: 3;
-  border: 0; border-radius: 4px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--on-status); font-size: 11px;
+/* Within each method, each line of a method has a stripe in the
+   method's status colour, just left of its def's d, from its def
+   line to its last; its def line also has a band of the one tint,
+   from its def to the end of its text. Both are backgrounds of the
+   lines' code, placed in characters (side.js gives each line its
+   def's column), so the code's own layout keeps them aligned. Open,
+   a method's stripe thickens. */
+/* Within each method, a method's body is folded under its def line
+   until its def's number opens it, so the page starts as a list of
+   def lines. */
+.method-folded { display: none; }
+/* The open method's def line, shifted down by side.js to stay just
+   below the sticky header, covers the body lines passing under it. */
+.def-stuck {
+  position: relative; z-index: 3; background: var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
-.pathbar::after { content: "\25B8"; }
-.pathbar[aria-expanded="true"]::after { content: "\25C2"; }
-/* A method's def line, lit from its def to its bar, under the
-   code's text; the code is its own stacking context so the band
-   can sit beneath its rows. */
-body[data-layout="beside"] .code { position: relative; isolation: isolate; }
-.methodband { position: absolute; z-index: -1; border-radius: 6px 0 0 6px; pointer-events: none; }
-/* A method's band is violet, whatever its status, so it never
-   reads as a site's band; its status is its bar's colour and its
-   bottom line's. */
-:root { --path-tint: #E9E0FB; }
-@media (prefers-color-scheme: dark) { :root { --path-tint: #33284F; } }
-.methodband { background: var(--path-tint); }
-.methodband[data-status="gaps"] { box-shadow: inset 0 1px 0 var(--bad); }
-.methodband[data-status="covered"] { box-shadow: inset 0 1px 0 var(--ok); }
-.line:has(.lineno) { cursor: default; }
-/* A bar is violet like its method's band, so violet always means
-   paths; its status is a line down its right edge, as the band's
-   is a line along its top. */
-.pathbar {
-  background: var(--path-tint); color: var(--fg);
-  border-radius: 0 0 4px 4px; align-items: flex-start; line-height: 32px;
+.src.in-method {
+  --method-colour: var(--bad); --stripe: 2px;
+  --at: calc(var(--def-col) * 1ch - 4px);
+  background-image: linear-gradient(var(--method-colour), var(--method-colour));
+  background-size: var(--stripe) 100%;
+  background-position: var(--at) 0;
+  background-repeat: no-repeat;
 }
-.pathbar[data-status="gaps"] { box-shadow: inset -1px 0 0 var(--bad), inset 0 1px 0 var(--bad); }
-.pathbar[data-status="covered"] { box-shadow: inset -1px 0 0 var(--ok), inset 0 1px 0 var(--ok); }
-/* Open, a method's status lines thicken, on its bar and band. */
-.pathbar[aria-expanded="true"][data-status="gaps"] { box-shadow: inset -2px 0 0 var(--bad), inset 0 2px 0 var(--bad); }
-.pathbar[aria-expanded="true"][data-status="covered"] { box-shadow: inset -2px 0 0 var(--ok), inset 0 2px 0 var(--ok); }
-.methodband.open[data-status="gaps"] { box-shadow: inset 0 2px 0 var(--bad); }
-.methodband.open[data-status="covered"] { box-shadow: inset 0 2px 0 var(--ok); }
-.pathbar:hover { filter: brightness(1.15); }
+.src.in-method[data-method-status="covered"] { --method-colour: var(--ok); }
+.src.in-method.method-open { --stripe: 3px; }
+/* A def line's band stops 1px short of its line's bottom, so the
+   bands of def lines one after another, eg one-line methods, stay
+   apart. Its stripe runs the full height, on into its body, but on
+   its method's last line, where it too stops 1px short, so the
+   stripes of methods one after another stay apart as well. */
+.src.def-line {
+  --band: calc((var(--def-end) - var(--def-col)) * 1ch + 8px) calc(100% - 1px);
+  background-image:
+    linear-gradient(var(--method-colour), var(--method-colour)),
+    linear-gradient(var(--cond-tint), var(--cond-tint));
+  background-size: var(--stripe) 100%, var(--band);
+  background-position: var(--at) 0, var(--at) 0;
+}
+.src.in-method.method-end { background-size: var(--stripe) calc(100% - 1px); }
+.src.def-line.method-end { background-size: var(--stripe) calc(100% - 1px), var(--band); }
+/* A card floats in the rail, level with its first line (its top
+   set by side.js), framed by a border, rounded corners and a
+   shadow, its rows 16px in from its sides. */
 .rail .pathgrid {
   position: absolute; left: 0; right: 0; z-index: 2; overflow-x: auto; overflow-y: hidden;
-  background: var(--path-tint); border-radius: 6px; font: 600 12px var(--font-code);
+  background: var(--cond-tint); font: 600 12px var(--font-code);
+  border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
-.prow { position: absolute; left: 0; display: flex; gap: 2px; white-space: nowrap; }
-.plabel { width: 48px; flex-shrink: 0; text-align: right; padding-right: 8px; color: var(--muted); line-height: 24px; }
+.prow { position: absolute; left: 16px; display: flex; gap: 2px; white-space: nowrap; }
+/* A statement card's rows flow down it, 10px above the first and
+   below the last, so a fold open under a row pushes the rows after
+   it down. */
+.statements { padding: 10px 0; }
+.statements .prow { position: static; padding: 0 16px; margin-bottom: 2px; }
+/* A site's fold draws the site's tree in the code's font, its
+   rows as tall as the card's. Open, it takes its row's
+   place right of the row's arrow and line:col, 88px in (the card's
+   16px padding, the arrow's 16px, the label's 52px and two 2px
+   gaps): its first row, the site's operator and its count on each
+   path, stands where the row's top and counts were, which hide,
+   and its other rows are indented as far, so they stay aligned
+   with the operator. The rows it reveals, below its first row
+   (24px and 2px padding), are tinted a shade off the card,
+   toward the text colour, so in either theme they stand out as
+   opened, with no rule needed above or below them. Lying over
+   its row, it takes no click itself, so one on the row's arrow
+   or line:col beneath reaches the row and folds it back; its
+   tree's rows take theirs. */
+.fold {
+  position: relative; margin: -26px 0 6px; padding: 0 16px 4px 88px;
+  font: 400 13px var(--font-code); line-height: 24px; color: var(--fg);
+  pointer-events: none;
+  background: linear-gradient(transparent 26px,
+    color-mix(in srgb, var(--cond-tint), var(--fg) 6%) 26px);
+}
+.fold:last-child { margin-bottom: 0; }
+.fold .site { pointer-events: auto; }
+.fold .bx { height: 24px; }
+.fold .site > .row:first-child {
+  border-bottom: 0; margin: 0 0 4px; padding: 0 0 2px; cursor: pointer;
+}
+.statements .prow.site:has(> .fold-arrow[aria-expanded="true"]) > .pcell { visibility: hidden; }
+/* A site row's arrow, left of its line:col, points down while its
+   fold is shut and up while it is open; every other row's label
+   is indented by the arrow's width and the gap after it, so the
+   labels line up. */
+.fold-arrow {
+  flex: none; width: 16px; padding: 0; border: none; background: none;
+  font: inherit; font-size: 10px; line-height: 24px; color: var(--muted); cursor: pointer;
+}
+.fold-arrow::before { content: "\25BC"; }
+.fold-arrow[aria-expanded="true"]::before { content: "\25B2"; }
+.prow.site:hover .fold-arrow, .fold-arrow[aria-expanded="true"] { color: var(--link); }
+.fold-arrow:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.statements .prow > .plabel:first-child { margin-left: 18px; }
+/* A grid's line labels sit at its left padding, as a tree's labels
+   do, their fixed width keeping the cells in columns. */
+.plabel { width: 48px; flex-shrink: 0; text-align: left; padding-right: 8px; color: var(--muted); line-height: 24px; }
 .pcell { width: 24px; flex-shrink: 0; text-align: center; line-height: 24px; border-radius: 3px; }
-/* A function card's cells hold words, eg return, not T or F. */
-.statements .pcell { width: 56px; cursor: default; }
-.statements .plabel { width: 120px; overflow: hidden; text-overflow: ellipsis; }
+/* A statement card's cells hold words, eg return, not T or F. Its
+   line:col labels are narrow, so each row's top follows close
+   after, left aligned, its paths and taken at the card's right
+   edge; the title row's name is as wide as it needs. */
+.statements .pcell { width: 72px; cursor: default; }
+.statements .plabel { width: 44px; padding-right: 8px; overflow: visible; }
+.statements .prow.calls .plabel { width: auto; }
+.statements .plabel + .pcell { flex: 1; min-width: 56px; text-align: left; }
 .statements .prow.site, .statements .prow.site .pcell { cursor: pointer; }
 .statements .prow.site:hover .pcell, .statements .prow.site:hover .plabel { color: var(--link); }
 .statements .prow.columns .plabel, .statements .prow.columns .pcell { color: var(--muted); }
-.pcell.ended { background: transparent; }
-.pcell.true, .pcell.false { background: var(--surface); color: var(--fg); }
-.prow.calls .pcell.taken { background: var(--ok-tint); color: var(--ok); }
-.prow.calls .pcell.never { background: var(--bad); color: var(--on-status); }
+/* A card's paths not taken are orange and those taken blue, as a
+   status always is; its column titles are too, as their key. None
+   not taken, 0, is no gap, so is blue. */
+.statements .pcell.not-taken { color: var(--bad); }
+.statements .pcell.was-taken,
+.statements .pcell.not-taken.none { color: var(--ok); }
 .prow.calls .plabel { color: var(--fg); }
-/* SPIKE: hovering a path's column shows it in the code: the
-   column outlined, skipped lines faded, each decision's line
-   chipped with its outcome. */
-.pcell { cursor: default; }
-.pcell { cursor: pointer; }
-.pcell.hot { outline: 2px solid var(--fg); outline-offset: -1px; }
-.pcell.pinned { outline: 3px solid var(--link); outline-offset: -2px; }
-:root { --lit: #FFE98A; }
-@media (prefers-color-scheme: dark) { :root { --lit: #5A4A12; } }
-/* A lit line's background spans the code pane's full width. */
-.line .src { flex: 1; }
-.src.lit { background: var(--path-tint); }
+/* Hovering a card's row lights its line in the code; hovering a
+   fold's row marks the characters of its operand. */
+.src.lit { background: var(--cond-tint); }
 mark.chars { background: var(--lit); color: inherit; border-radius: 3px; box-shadow: 0 0 0 2px var(--lit); }
-.tree .row[data-at] { cursor: default; }
-.tree .row[data-at]:hover { background: rgba(255, 255, 255, 0.08); }
-.nav[data-chip] { flex-direction: row; align-items: center; justify-content: flex-end; padding-right: 2px; box-sizing: border-box; }
-.nav[data-chip] a { display: none; }
-.nav[data-chip]::after {
-  content: attr(data-chip); padding: 0 7px; border-radius: 4px;
-  font: 700 11px/20px var(--font-body); background: var(--fg); color: var(--bg);
+.fold .row[data-at] { cursor: default; }
+.fold .row[data-at]:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* A row of jumps with none keeps its height, though hidden, so the
+   sticky header, and the code below it, never move. */
+.jump-list[data-empty] { visibility: hidden; }
+/* The number of each method's def line wears a loose site's
+   button's look: the one tint, edged on the top and left in its
+   status colour, orange for gaps and blue for covered, with an
+   arrow pointing left while its card is closed, and none while it
+   is open. Its 63px and its 9px right margin take the 72px a plain
+   number takes, as a loose site's button does, so its line's code
+   starts where every other line's does and its digits end where
+   theirs do. */
+.lineno.mdef {
+  position: relative; box-sizing: border-box; width: 63px; padding-right: 11px;
+  margin: 4px 9px 4px 0; line-height: 24px; cursor: pointer;
+  font: 600 13px/24px var(--font-code); border: 1px solid transparent;
+  border-radius: 6px; background: var(--cond-tint);
+  --mdef-status: var(--bad); color: var(--mdef-status);
+  border-top-color: var(--mdef-status); border-left-color: var(--mdef-status);
 }
+.lineno.mdef[data-status="covered"] { --mdef-status: var(--ok); }
+.lineno.mdef::before {
+  content: "\25C2"; position: absolute; left: 7px; top: 0; font-size: 11px;
+}
+.lineno.mdef[aria-expanded="true"]::before { content: none; }
+.lineno.mdef[aria-expanded="true"] { box-shadow: inset 1px 1px 0 var(--mdef-status); }
+.lineno.mdef:hover { filter: brightness(1.1); }
+/* A line's gap arrows sit in the middle of its row, level with its
+   number, however tall its row is. */
+.nav { align-self: stretch; }

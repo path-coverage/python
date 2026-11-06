@@ -72,14 +72,17 @@ class _Rewriter(ast.NodeTransformer):
         self.keywords = keywords
         self.builtins = builtins
 
-    def visit_FunctionDef(self, node):
-        """node with its own sites rewritten and each statement of its body
-        in reaches preceded by a reach call naming it."""
-        self.generic_visit(node)
-        node.body = [part for statement in node.body for part in self._reached(statement)]
-        return node
-
-    visit_AsyncFunctionDef = visit_FunctionDef
+    def reach_all(self, tree):
+        """tree with each statement in reaches, in any list of statements,
+        a body, an else or a finally, preceded by a reach call naming it.
+        Run once every site is rewritten, as a match's rewrite adds a
+        statement before it."""
+        for node in list(ast.walk(tree)):
+            for field in ("body", "orelse", "finalbody"):
+                statements = getattr(node, field, None)
+                if isinstance(statements, list):
+                    setattr(node, field, [part for statement in statements for part in self._reached(statement)])
+        return tree
 
     def _reached(self, statement):
         """[statement], preceded by its reach call when it is in reaches."""
@@ -221,13 +224,14 @@ class _Rewriter(ast.NodeTransformer):
         return _call("record", [ast.Constant(site), ast.Constant(index), value], value)
 
 
-def rewrite(tree, path, *, source, methods=False):
+def rewrite(tree, path, *, source):
     """tree, changed in place and returned, with every site entered and left
-    around it and every leaf of it recorded, and, when methods is true,
-    each run of every function statement that is no site counted. source
-    is tree's source, str or the bytes a loader reads, where the if
-    keywords that name filters' sites are found."""
+    around it and every leaf of it recorded, and each run of every function
+    statement that is no site counted. source is tree's source, str or the
+    bytes a loader reads, where the if keywords that name filters' sites
+    are found."""
     if isinstance(source, bytes):
         source = importlib.util.decode_source(source)
-    reached = set(reaches(source, path)) if methods else set()
-    return _Rewriter(path, reached, if_keywords(source), builtin_blocks(tree)).visit(tree)
+    reached = set(reaches(source, path))
+    rewriter = _Rewriter(path, reached, if_keywords(source), builtin_blocks(tree))
+    return rewriter.reach_all(rewriter.visit(tree))

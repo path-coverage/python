@@ -66,9 +66,7 @@ def _asserting_loader(kernel):
             path = self.get_filename(fullname)
             source = self.get_data(path)
             relative = self.config.relative(path)
-            tree = kernel.rewrite(
-                ast.parse(source, path), relative, source=source, methods=self.config.methods
-            )
+            tree = kernel.rewrite(ast.parse(source, path), relative, source=source)
             if Path(path).name.startswith("test_"):
                 rewrite_asserts(tree, source, path)
             return compile(tree, path, "exec", dont_inherit=True)
@@ -92,7 +90,6 @@ def start():
         cover=["src/**/*.py", "test/**/*.py"],
         skip=["test/projects/**", "test/self_coverage.py"],
         coverage_dir=REPORTS,
-        measure=["decisions", "methods"],
         report=["html"],
         groups={"code": ["src/**/*.py"], "test": ["test/**/*.py"]},
         on_exit=_reports.append,
