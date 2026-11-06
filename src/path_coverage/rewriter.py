@@ -15,6 +15,7 @@ in tracebacks and in line coverage are those of the file as written."""
 import ast
 import importlib.util
 
+from .columns import Columns
 from .manifest import (
     block_generator,
     builtin_blocks,
@@ -78,8 +79,9 @@ class _Rewriter(ast.NodeTransformer):
     """Wraps every decision, numbering its leaves as the manifest does, and
     precedes each function statement in reaches with a reach call."""
 
-    def __init__(self, path, reaches, keywords, builtins, operators):
-        """Names decisions after path; reaches holds the names of the function
+    def __init__(self, path, columns, reaches, keywords, builtins, operators):
+        """Names decisions after path, in the source's columns; reaches
+        holds the names of the function
         statements whose runs are counted, as method_statements.reaches
         gives them; keywords are where the source's if keywords are,
         builtins the block calls' names the module leaves as builtins, and
@@ -87,6 +89,7 @@ class _Rewriter(ast.NodeTransformer):
         operator_keywords gives them, so decisions are named as the manifest
         names them."""
         self.path = path
+        self.columns = columns
         self.reaches = reaches
         self.keywords = keywords
         self.builtins = builtins
@@ -110,7 +113,7 @@ class _Rewriter(ast.NodeTransformer):
     def _reached(self, statement):
         """[statement], preceded by its reach call when it is in reaches;
         a def is counted on entry, not where it is defined."""
-        name = f"{self.path}:{statement.lineno}:{statement.col_offset}"
+        name = self.columns.name(self.path, statement.lineno, statement.col_offset)
         if isinstance(statement, FUNCTIONS) or name not in self.reaches:
             return [statement]
         return [_reach(name, statement), statement]
@@ -120,7 +123,7 @@ class _Rewriter(ast.NodeTransformer):
         reaches always holds, in its body after its first statement when
         that is a constant, so a docstring stays its docstring, even one
         that is the whole body; else first. Each call is counted."""
-        name = f"{self.path}:{function.lineno}:{function.col_offset}"
+        name = self.columns.name(self.path, function.lineno, function.col_offset)
         body = function.body
         at = 1 if _constant(body[0]) else 0
         function.body = [*body[:at], _reach(name, body[min(at, len(body) - 1)]), *body[at:]]
@@ -131,7 +134,7 @@ class _Rewriter(ast.NodeTransformer):
         leave call whose first argument enters the decision before any leaf
         runs. It is named where decision_at says, as the manifest names it."""
         line, col = decision_at(self.operators, node)
-        decision = f"{self.path}:{line}:{col}"
+        decision = self.columns.name(self.path, line, col)
         counter = [0]
         self._fold(node, decision, counter)
         enter = _call("enter", [ast.Constant(decision), ast.Constant(counter[0])], node)
@@ -158,7 +161,7 @@ class _Rewriter(ast.NodeTransformer):
         generator = block_generator(node, self.builtins)
         if generator is None:
             return self.generic_visit(node)
-        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = self.columns.name(self.path, node.lineno, node.col_offset)
         self.visit(generator)
         args = [ast.Constant(decision), ast.Constant(0), generator.elt]
         generator.elt = _call("answer", args, generator.elt)
@@ -173,7 +176,7 @@ class _Rewriter(ast.NodeTransformer):
         case is added after it whose guard notes that none matched. The
         added code takes the subject's location, so the lines a trace sees
         run are the file's own."""
-        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = self.columns.name(self.path, node.lineno, node.col_offset)
         node.subject = self.visit(node.subject)
         counter = [0]
         patterns = []
@@ -213,7 +216,7 @@ class _Rewriter(ast.NodeTransformer):
         named at at, (line, col), as the value of a leave call whose first
         argument enters the decision before the leaf runs; an `and`/`or` that is
         the whole test is a decision of its own."""
-        decision = f"{self.path}:{at[0]}:{at[1]}"
+        decision = self.columns.name(self.path, *at)
         counter = [0]
         wrapped = self._leaf(test, decision, counter)
         enter = _call("enter", [ast.Constant(decision), ast.Constant(counter[0])], test)
@@ -271,5 +274,5 @@ def rewrite(tree, path, *, source):
         source = importlib.util.decode_source(source)
     reached = set(reaches(source, path))
     operators = operator_keywords(source)
-    rewriter = _Rewriter(path, reached, if_keywords(source), builtin_blocks(tree), operators)
+    rewriter = _Rewriter(path, Columns(source), reached, if_keywords(source), builtin_blocks(tree), operators)
     return rewriter.reach_all(rewriter.visit(tree))

@@ -205,8 +205,8 @@ src/kata.py:4:11 never reached
 ### Decisions
 
 A decision is named by the `path:line:column` where it starts: the path relative
-to `root`, the line 1-based, the column a 0-based byte offset, as Python's
-`ast` gives it. A decision in a covered file the run never imported is still
+to `root`, the line 1-based, the column 0-based, in characters, as an editor
+shows it. A decision in a covered file the run never imported is still
 reported, as `never reached`.
 
 A path is the outcome of each leaf one evaluation of the decision reached, in

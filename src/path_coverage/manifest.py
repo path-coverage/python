@@ -7,6 +7,8 @@ import io
 import tokenize
 from dataclasses import dataclass, field
 
+from .columns import Columns
+
 OPERATORS = {ast.And: "and", ast.Or: "or"}
 
 
@@ -76,13 +78,14 @@ FOLDABLE = (ast.BoolOp,)
 class _DecisionFinder(ast.NodeVisitor):
     """Collects each decision, in source order, and its Condition."""
 
-    def __init__(self, path, keywords, builtins, operators):
-        """Starts with no decisions found, naming decisions after path; keywords are
-        where the source's if keywords are, as if_keywords gives them,
-        builtins the block calls' names the module leaves as builtins, and
-        operators where its and, or and if keywords are, as
-        operator_keywords gives them."""
+    def __init__(self, path, columns, keywords, builtins, operators):
+        """Starts with no decisions found, naming decisions after path, in
+        the source's columns; keywords are where the source's if keywords
+        are, as if_keywords gives them, builtins the block calls' names the
+        module leaves as builtins, and operators where its and, or and if
+        keywords are, as operator_keywords gives them."""
         self.path = path
+        self.columns = columns
         self.keywords = keywords
         self.builtins = builtins
         self.operators = operators
@@ -98,7 +101,7 @@ class _DecisionFinder(ast.NodeVisitor):
         if generator is None:
             self.generic_visit(node)
             return
-        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = self.columns.name(self.path, node.lineno, node.col_offset)
         self.decisions[decision] = None
         self.visit(generator)
         operands = (_leaf(generator.generators[0].iter), _leaf(generator.elt))
@@ -109,7 +112,7 @@ class _DecisionFinder(ast.NodeVisitor):
         cases, in order, each its pattern's leaf, true when it matches, and,
         when guarded, a `case` of that leaf and its guard. The decisions inside
         its subject and its cases' bodies follow it."""
-        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = self.columns.name(self.path, node.lineno, node.col_offset)
         self.decisions[decision] = None
         self.visit(node.subject)
         clauses = []
@@ -134,7 +137,7 @@ class _DecisionFinder(ast.NodeVisitor):
         self.visit(node.iter)
         for test in node.ifs:
             line, col = keyword_before(self.keywords, test)
-            decision = f"{self.path}:{line}:{col}"
+            decision = self.columns.name(self.path, line, col)
             self.decisions[decision] = None
             predicate = self._leaf(test)
             extent = (line, col, test.end_lineno, test.end_col_offset)
@@ -145,7 +148,7 @@ class _DecisionFinder(ast.NodeVisitor):
         """Notes node as a decision, named where decision_at says. It claims its
         place first, so a decision found inside one of its leaves follows it."""
         line, col = decision_at(self.operators, node)
-        decision = f"{self.path}:{line}:{col}"
+        decision = self.columns.name(self.path, line, col)
         self.decisions[decision] = None
         self.decisions[decision] = self._condition(node)
 
@@ -156,7 +159,7 @@ class _DecisionFinder(ast.NodeVisitor):
         predicate, then its then arm, then its else arm when it has one (an
         elif being the else arm of the if before it). Its arms are plain, as
         they are statements; the decisions inside them follow it."""
-        decision = f"{self.path}:{node.lineno}:{node.col_offset}"
+        decision = self.columns.name(self.path, node.lineno, node.col_offset)
         self.decisions[decision] = None
         predicate = self._leaf(node.test)
         then = Arm("then", extent=_statements_extent(node.body))
@@ -318,10 +321,10 @@ def _display(items, plain):
 
 def decisions(source, path):
     """{decision: Condition} for each decision in source, each decision named
-    "path:line:col" of where decision_at places it."""
+    "path:line:col" of where decision_at places it, its col in characters."""
     tree = ast.parse(source)
     operators = operator_keywords(source)
-    finder = _DecisionFinder(path, if_keywords(source), builtin_blocks(tree), operators)
+    finder = _DecisionFinder(path, Columns(source), if_keywords(source), builtin_blocks(tree), operators)
     finder.visit(tree)
     return finder.decisions
 

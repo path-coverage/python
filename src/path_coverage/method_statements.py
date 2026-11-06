@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from . import decision_paths
 from . import totals as path_totals
+from .columns import Columns
 from .manifest import (
     Arm,
     block_generator,
@@ -22,12 +23,14 @@ from .manifest import (
 @dataclass(frozen=True)
 class Statement:
     """One row of a function's card, a top-level statement or a decision at its
-    top: where it starts; its top, what it is as written, eg = for a write;
-    how many paths it has; the name of its decision, None when it is no decision;
-    and its own name, by where it is, eg "k.py:2:4"."""
+    top: where it starts, its column in UTF-8 bytes, as ast counts it, and in
+    characters, as the reports give it; its top, what it is as written, eg =
+    for a write; how many paths it has; the name of its decision, None when it
+    is no decision; and its own name, by where it is, eg "k.py:2:4"."""
 
     line: int
     column: int
+    char_column: int
     top: str
     paths: int
     decision: str | None
@@ -119,10 +122,11 @@ def top_rows(source, path):
 def _top_row(lines, name, condition):
     """The Statement row of the decision named name, its Condition condition,
     outside every function of the source of lines."""
-    line, column = (int(part) for part in name.rsplit(":", 2)[1:])
+    line, char_column = (int(part) for part in name.rsplit(":", 2)[1:])
+    column = len(lines[line - 1][:char_column].encode())
     top = _top_of_decision(lines, line, column, condition)
     paths = len(decision_paths.possible(condition))
-    return Statement(line, column, top, paths, name, name)
+    return Statement(line, column, char_column, top, paths, name, name)
 
 
 def top_level(source, path, paths):
@@ -157,9 +161,9 @@ def cards(files, paths, reached):
 
 
 def label(statement):
-    """statement's line:column as its card shows it, the column two digits,
-    so a card's columns line up. Example: "3:04"."""
-    return f"{statement.line}:{statement.column:02d}"
+    """statement's line:column as its card shows it, the column in
+    characters, two digits, so a card's columns line up. Example: "3:04"."""
+    return f"{statement.line}:{statement.char_column:02d}"
 
 
 def size(rows):
@@ -200,8 +204,9 @@ def _collect(source, path):
     order."""
     tree = ast.parse(source)
     finder = _Rows(path, source, decisions(source, path), tree)
+    columns = Columns(source)
     found = {
-        f"{path}:{node.lineno}:{node.col_offset}": (node, finder.rows(node))
+        columns.name(path, node.lineno, node.col_offset): (node, finder.rows(node))
         for node in ast.walk(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
@@ -254,6 +259,7 @@ class _Rows:
         """Names rows after path; found is the {decision: Condition} of source,
         and tree its parse."""
         self.path = path
+        self.columns = Columns(source)
         self.found = found
         self.builtins = builtin_blocks(tree)
         self.keywords = if_keywords(source)
@@ -389,7 +395,7 @@ class _Rows:
     def _name(self, node):
         """The name of where node is, as _at places it, eg "k.py:2:4"."""
         line, column = self._at(node)
-        return f"{self.path}:{line}:{column}"
+        return self.columns.name(self.path, line, column)
 
     def _at(self, node):
         """(line, column) of node's row: where its decision is named, as
@@ -407,12 +413,13 @@ class _Rows:
         decision = self._decision_of(node)
         name = self._name(node)
         line, column = self._at(node)
+        char_column = self.columns.char(line, column)
         if decision is None:
-            return Statement(line, column, _top(node), 1, None, name)
+            return Statement(line, column, char_column, _top(node), 1, None, name)
         condition = self.found[decision]
         top = _top_of_decision(self.lines, line, column, condition)
         paths = len(decision_paths.possible(condition))
-        return Statement(line, column, top, paths, decision, name)
+        return Statement(line, column, char_column, top, paths, decision, name)
 
 
 def _arms_of(node):

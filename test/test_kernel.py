@@ -589,6 +589,31 @@ def test_e5a70c11(tmp_path):
     }
 
 
+def test_e5a70c18(tmp_path, capsys):
+    """Example: return "café" if a and b else "x", é one character of two
+    bytes, called once
+    Every column the reports give counts characters, as the leaf spans
+    do: the conditional is named at its if, column 18, the and at its
+    keyword, column 23, and the return's two rows, its two decisions, are
+    at the same columns."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "cafe_label.py").write_text(
+        'def label(a, b):\n    return "café" if a and b else "x"\n', encoding="utf-8"
+    )
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        assert _imported(tmp_path, "cafe_label").label(True, True) == "café"
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert sorted(report["decisions"]) == ["src/cafe_label.py:2:18", "src/cafe_label.py:2:23"]
+    rows = report["cards"]["src/cafe_label.py:1:0"]["rows"]
+    assert [row["at"] for row in rows] == ["2:18", "2:23"]
+    assert list(report["tree"]["src/cafe_label.py"]["1:0"]) == ["2:18", "2:23"]
+
+
 def test_e5a70c13(tmp_path):
     """Example: fee never called
     The JSON report says no statement was reached: reached is {}.
