@@ -11,9 +11,10 @@ Usage: bin/build_demo.sh
 
 Runs demo/run.py, a mock source tree under path coverage, with the
 repo's .venv python (override with PYTHON=...), writing its JSON
-reports to site/, emptied first, then draws its HTML report there
-(index.html first) with the html-reporter image, in Docker. The same
-site is what the GitHub Pages workflow publishes.
+reports to site/, emptied first, checks them against their schemas with
+the schemas image, then draws its HTML report there (index.html first)
+with the html-reporter image, each in Docker. The same site is what the
+GitHub Pages workflow publishes.
 
 Options:
   -h    Show this help
@@ -28,6 +29,9 @@ rm -rf "${ROOT}/site"
 mkdir -p "${ROOT}/site"
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${ROOT}/src" COVERAGE_DIR="${ROOT}/site" \
   "${PYTHON}" "${ROOT}/demo/run.py"
+docker run --rm \
+  --volume "${ROOT}/site:/paths:ro" \
+  ghcr.io/path-coverage/schemas /paths > /dev/null
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --volume "${ROOT}/site:/site" \

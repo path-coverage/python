@@ -27,6 +27,9 @@ from .rewriter import RECORDER_NAME, rewrite
 
 REPORTERS = ("gaps", "post", "summary")
 
+# The URL of the schema the JSON report follows.
+SCHEMA_URL = "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json"
+
 _recorder = Recorder()
 _finder = None
 
@@ -332,11 +335,17 @@ def _taken(report):
 
 
 def _report_json(operands, paths, files, reached):
-    """The JSON report: {"decisions": operands, "paths": {decision: {"leaves":
-    [...], "taken": [...]}}, "kinds": [name, ...]}, the kinds naming what
-    was measured, and "reached": {name: runs} when reached is known, even
-    empty, as a run that reached no statement says so."""
-    report = {"decisions": operands, "paths": paths_report.of(paths, files), "kinds": kinds.names()}
+    """The JSON report: {"$schema": its schema's URL, "decisions": operands,
+    "paths": {decision: {"leaves": [...], "taken": [...]}}, "kinds": [name,
+    ...]}, the kinds naming what was measured, and "reached": {name: runs}
+    when reached is known, even empty, as a run that reached no statement
+    says so."""
+    report = {
+        "$schema": SCHEMA_URL,
+        "decisions": operands,
+        "paths": paths_report.of(paths, files),
+        "kinds": kinds.names(),
+    }
     if reached is not None:
         report["reached"] = reached
     return report

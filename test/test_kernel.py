@@ -64,6 +64,7 @@ def test_e5a70c01(tmp_path, capsys):
     report()
     decision = "src/single_and_trails.py:6:30"
     assert json.loads((tmp_path / "path_coverage.json").read_text()) == {
+        "$schema": "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json",
         "decisions": {
             decision: [
                 {"truthy": 1, "falsy": 1},

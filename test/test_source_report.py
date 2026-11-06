@@ -52,6 +52,7 @@ def test_5e2a9130():
     }
     groups = {"Katas": ["k*.py"], "Other": ["x.py"]}
     assert source_report.of(files, {"k.py:2:18": PATHS}, cards, groups) == {
+        "$schema": "https://path-coverage.github.io/schemas/v1/path_coverage.source.schema.json",
         "schema": 1,
         "ignored": [],
         "groups": {"Katas": ["k.py"], "Other": []},

@@ -7,17 +7,22 @@ from . import code_tokens, fold_rows, decision_locations, decision_tree, summary
 # The version of the source report's shape.
 SCHEMA = 1
 
+# The URL of the schema the source report follows.
+SCHEMA_URL = "https://path-coverage.github.io/schemas/v1/path_coverage.source.schema.json"
+
 
 def of(files, paths, cards, groups):
-    """The source report of a run: no operators ignored, the covered files
-    of each of groups, {name: [glob, ...]} or None, each top of the rows of
-    cards, {card decision: card}, coloured, and each of files', {path: (source,
-    decisions)}, lines and decisions, each decision's paths as paths has them, its fold
-    headed by its row's top."""
+    """The source report of a run, headed by its schema's URL and version:
+    no operators ignored, the covered files of each of groups, {name: [glob,
+    ...]} or None, each top of the rows of cards, {card decision: card},
+    coloured, and each of files', {path: (source, decisions)}, lines and
+    decisions, each decision's paths as paths has them, its fold headed by
+    its row's top."""
     rows = [row for card in cards.values() for row in card["rows"]]
     tops = {row["decision"]: row["top"] for row in rows}
     shown = {path: _file(source, decisions, paths, tops) for path, (source, decisions) in files.items()}
     return {
+        "$schema": SCHEMA_URL,
         "schema": SCHEMA,
         "ignored": [],
         "groups": {name: [path for path in shown if summary.matches(path, globs)] for name, globs in (groups or {}).items()},

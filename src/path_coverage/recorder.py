@@ -51,7 +51,7 @@ class Recorder:
 
     def leave(self, trail, value):
         """Ends trail's evaluation, counting its path, and returns value, the
-        site's, unchanged. An evaluation of the same site still entered above
+        decision's, unchanged. An evaluation of the same decision still entered above
         trail, as one that raised leaves, took trail's later outcomes, so
         trail's path is not counted; the stack is cleared down to trail
         either way."""
