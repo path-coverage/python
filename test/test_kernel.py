@@ -73,7 +73,7 @@ def test_e5a70c01(tmp_path, capsys):
         "paths": {site: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
         "kinds": ["block", "case", "chain", "choice"],
         "reached": {"src/single_and_trails.py:4:0": 2},
-        "totals": {"decisions": [2, 3], "methods": [2, 3]},
+        "totals": {"alone": [2, 3], "combined": [2, 3]},
         "cards": {
             "src/single_and_trails.py:4:0": {
                 "name": "is_new",
@@ -290,8 +290,8 @@ def test_e5a70c09(tmp_path, capsys):
     path_coverage.stop()
     exits[0]()
     assert capsys.readouterr().out == (
-        "Path coverage within decisions: 0 / 3 (0.00%)\n"
-        "Path coverage within methods: 0 / 3 (0.00%)\n"
+        "Paths alone: 0 / 3 (0.00%)\n"
+        "Paths combined: 0 / 3 (0.00%)\n"
     )
 
 
@@ -301,8 +301,8 @@ def test_e5a70c0a(tmp_path, capsys):
     Each call of fee is counted, as its entry reached, and each run of a
     row that is no site, its return; its writes are no rows.
     The report prints each if's own path never taken, as a site.
-    The JSON totals are [taken, possible]: decisions [2, 4], one of each
-    if's two paths, and methods [3, 5], fee's card: 1+1+1 of 2+2+1."""
+    The JSON totals are [taken, possible]: alone [2, 4], one of each if's
+    two paths, and combined [3, 5], fee's card: 1+1+1 of 2+2+1."""
     project = PROJECTS / "two_decisions"
     exits = []
     path_coverage.start(
@@ -326,12 +326,12 @@ def test_e5a70c0a(tmp_path, capsys):
         "src/two_decisions_shop.py:4:0": 1,
         "src/two_decisions_shop.py:11:4": 1,
     }
-    assert report["totals"] == {"decisions": [2, 4], "methods": [3, 5]}
+    assert report["totals"] == {"alone": [2, 4], "combined": [3, 5]}
 
 
 def test_e5a70c0b(tmp_path):
     """Example: measure=["decisions", "methods"]
-    Every run measures paths within each decision and each method.
+    Every run measures paths alone and combined.
     So there is no measure to choose, and the setting is refused."""
     with pytest.raises(TypeError) as refused:
         path_coverage.start(
@@ -350,7 +350,7 @@ def test_e5a70c0c(tmp_path, capsys):
     At exit the run POSTs its JSON report to the collector, printing
     nothing.
     render merges every saved run's counts and reaches, then runs the
-    reporters as a run would: here big's gap, and the methods total."""
+    reporters as a run would: here big's gap, and the combined total."""
     import socket
     import threading
 
@@ -395,7 +395,7 @@ def test_e5a70c0c(tmp_path, capsys):
         "src/two_decisions_shop.py:4:0": 2,
         "src/two_decisions_shop.py:11:4": 2,
     }
-    assert report["totals"] == {"decisions": [3, 4], "methods": [4, 5]}
+    assert report["totals"] == {"alone": [3, 4], "combined": [4, 5]}
 
 
 def test_e5a70c12(tmp_path, capsys):
@@ -489,8 +489,8 @@ def _is_public_twice(project, start):
 def test_e5a70c0f(tmp_path, capsys):
     """Example: report=["summary"], no groups, flows taking 2 of its 3
     paths and policies none of its 3
-    The summary reporter prints the paths taken of all possible within
-    decisions, then within methods, over every covered file."""
+    The summary reporter prints the paths taken of all possible alone,
+    then combined, over every covered file."""
     project = PROJECTS / "never_imported"
     _is_public_twice(
         project,
@@ -503,8 +503,8 @@ def test_e5a70c0f(tmp_path, capsys):
         ),
     )
     assert capsys.readouterr().out == (
-        "Path coverage within decisions: 2 / 6 (33.33%)\n"
-        "Path coverage within methods: 2 / 6 (33.33%)\n"
+        "Paths alone: 2 / 6 (33.33%)\n"
+        "Paths combined: 2 / 6 (33.33%)\n"
     )
 
 
@@ -540,19 +540,19 @@ def test_e5a70c10(tmp_path, capsys):
         _is_public_twice(project, start)
         assert capsys.readouterr().out == (
             "flows:\n"
-            "  Path coverage within decisions: 2 / 3 (66.67%)\n"
-            "  Path coverage within methods: 2 / 3 (66.67%)\n"
+            "  Paths alone: 2 / 3 (66.67%)\n"
+            "  Paths combined: 2 / 3 (66.67%)\n"
             "policies:\n"
-            "  Path coverage within decisions: 0 / 3 (0.00%)\n"
-            "  Path coverage within methods: 0 / 3 (0.00%)\n"
+            "  Paths alone: 0 / 3 (0.00%)\n"
+            "  Paths combined: 0 / 3 (0.00%)\n"
         )
         report = json.loads((tmp_path / "path_coverage.json").read_text())
         assert report["totals"] == {
-            "decisions": [2, 6],
-            "methods": [2, 6],
+            "alone": [2, 6],
+            "combined": [2, 6],
             "groups": {
-                "flows": {"decisions": [2, 3], "methods": [2, 3]},
-                "policies": {"decisions": [0, 3], "methods": [0, 3]},
+                "flows": {"alone": [2, 3], "combined": [2, 3]},
+                "policies": {"alone": [0, 3], "combined": [0, 3]},
             },
         }
         source = json.loads((tmp_path / "path_coverage.source.json").read_text())
@@ -564,7 +564,7 @@ def test_e5a70c10(tmp_path, capsys):
 
 def test_e5a70c11(tmp_path):
     """Example: groups shop and none, fee called once
-    Each group's JSON totals have a methods total too.
+    Each group's JSON totals have a combined total too.
     none matches no file, so its totals are all 0 / 0."""
     project = PROJECTS / "two_decisions"
     exits = []
@@ -583,15 +583,15 @@ def test_e5a70c11(tmp_path):
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["totals"]["groups"] == {
-        "shop": {"decisions": [2, 4], "methods": [3, 5]},
-        "none": {"decisions": [0, 0], "methods": [0, 0]},
+        "shop": {"alone": [2, 4], "combined": [3, 5]},
+        "none": {"alone": [0, 0], "combined": [0, 0]},
     }
 
 
 def test_e5a70c13(tmp_path):
     """Example: fee never called
     The JSON report says no statement was reached: reached is {}.
-    So fee's rows are known, and not taken: methods [0, 5]."""
+    So fee's rows are known, and not taken: combined [0, 5]."""
     project = PROJECTS / "two_decisions"
     exits = []
     path_coverage.start(
@@ -605,7 +605,7 @@ def test_e5a70c13(tmp_path):
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["reached"] == {}
-    assert report["totals"] == {"decisions": [0, 4], "methods": [0, 5]}
+    assert report["totals"] == {"alone": [0, 4], "combined": [0, 5]}
 
 
 def test_e5a70c14(tmp_path):
@@ -613,7 +613,7 @@ def test_e5a70c14(tmp_path):
     then dropped, as a run that counted no statement writes it, then
     render of that report
     So render cannot say fee's return, a row that is no site, was reached.
-    It counts as not taken: methods [2, 5], never more than ran.
+    It counts as not taken: combined [2, 5], never more than ran.
     Its merged report has no reached either."""
     project = PROJECTS / "two_decisions"
     exits = []
@@ -637,7 +637,7 @@ def test_e5a70c14(tmp_path):
     )
     report = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())
     assert "reached" not in report
-    assert report["totals"] == {"decisions": [2, 4], "methods": [2, 5]}
+    assert report["totals"] == {"alone": [2, 4], "combined": [2, 5]}
 
 
 def test_e5a70c03():

@@ -5,8 +5,8 @@ GROUPS = {"code": ["src/**/*.py"], "test": ["test/**/*.py"]}
 
 def test_7c3d9101():
     """Example: src/kata.py's site taking 2 of its 3 paths, no groups
-    The summary is one line of the paths taken within decisions.
-    Methods are not measured, so there is no methods line."""
+    The summary is one line of the paths taken alone.
+    Methods are not measured, so there is no combined line."""
     paths = {
         "src/kata.py:3:11": [
             {"path": [True, True], "count": 2},
@@ -14,7 +14,7 @@ def test_7c3d9101():
             {"path": [False, None], "count": 0},
         ]
     }
-    assert lines(paths) == ["Path coverage within decisions: 2 / 3 (66.67%)"]
+    assert lines(paths) == ["Paths alone: 2 / 3 (66.67%)"]
 
 
 def test_7c3d9102():
@@ -35,25 +35,25 @@ def test_7c3d9102():
     }
     assert lines(paths, groups=GROUPS) == [
         "code:",
-        "  Path coverage within decisions: 2 / 3 (66.67%)",
+        "  Paths alone: 2 / 3 (66.67%)",
         "test:",
-        "  Path coverage within decisions: 1 / 2 (50.00%)",
+        "  Paths alone: 1 / 2 (50.00%)",
     ]
 
 
 def test_7c3d9103():
     """Example: fee's card in src/fee.py, 1 of its 4 paths taken, and
     groups code and test
-    Each group has a methods line too: code has fee's 1 / 4.
+    Each group has a combined line too: code has fee's 1 / 4.
     test, with no function, has 0 / 0, shown as -."""
     cards = {"src/fee.py:1:0": [1, 4]}
     assert lines({}, cards, GROUPS) == [
         "code:",
-        "  Path coverage within decisions: 0 / 0 (-)",
-        "  Path coverage within methods: 1 / 4 (25.00%)",
+        "  Paths alone: 0 / 0 (-)",
+        "  Paths combined: 1 / 4 (25.00%)",
         "test:",
-        "  Path coverage within decisions: 0 / 0 (-)",
-        "  Path coverage within methods: 0 / 0 (-)",
+        "  Paths alone: 0 / 0 (-)",
+        "  Paths combined: 0 / 0 (-)",
     ]
 
 
@@ -63,8 +63,8 @@ def test_7c3d9104():
     taken_once = {"path": [True], "count": 1}
     paths = {"src/a.py:1:0": [taken_once], "src/b.py:1:0": [taken_once]}
     assert group_totals(paths, None, GROUPS) == {
-        "code": {"decisions": [2, 2]},
-        "test": {"decisions": [0, 0]},
+        "code": {"alone": [2, 2]},
+        "test": {"alone": [0, 0]},
     }
 
 
@@ -74,14 +74,14 @@ def test_7c3d9105():
     summary reporter prints them."""
     assert grouped_lines(
         {
-            "code": {"decisions": [260, 325], "methods": [32, 62]},
-            "test": {"decisions": [7, 8], "methods": [0, 0]},
+            "code": {"alone": [260, 325], "combined": [32, 62]},
+            "test": {"alone": [7, 8], "combined": [0, 0]},
         }
     ) == [
         "code:",
-        "  Path coverage within decisions: 260 / 325 (80.00%)",
-        "  Path coverage within methods: 32 / 62 (51.61%)",
+        "  Paths alone: 260 / 325 (80.00%)",
+        "  Paths combined: 32 / 62 (51.61%)",
         "test:",
-        "  Path coverage within decisions: 7 / 8 (87.50%)",
-        "  Path coverage within methods: 0 / 0 (-)",
+        "  Paths alone: 7 / 8 (87.50%)",
+        "  Paths combined: 0 / 0 (-)",
     ]

@@ -1,5 +1,5 @@
 """The summary reporter's lines: each total as coverage tools print theirs,
-eg "Path coverage within decisions: 519 / 623 (83.31%)". With groups
+eg "Paths alone: 519 / 623 (83.31%)". With groups
 configured each group is a heading, its own totals indented under it, and
 there is no total over every group."""
 
@@ -28,11 +28,11 @@ def grouped_lines(named):
 
 
 def totals(paths, cards):
-    """{"decisions": [taken, possible]} of paths, with "methods": [taken,
+    """{"alone": [taken, possible]} of paths, with "combined": [taken,
     possible] of cards when cards are given."""
-    result = {"decisions": path_totals.decisions(paths)}
+    result = {"alone": path_totals.alone(paths)}
     if cards is not None:
-        result["methods"] = path_totals.methods(cards)
+        result["combined"] = path_totals.combined(cards)
     return result
 
 
@@ -51,9 +51,8 @@ def _own(sites, globs):
 
 
 def _totals_lines(named):
-    """A line per total, eg "Path coverage within methods: 1 / 4
-    (25.00%)"."""
-    return [f"Path coverage within {name}: {figure(pair)}" for name, pair in named.items()]
+    """A line per total, eg "Paths combined: 1 / 4 (25.00%)"."""
+    return [f"Paths {name}: {figure(pair)}" for name, pair in named.items()]
 
 
 def figure(pair):

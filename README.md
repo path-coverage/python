@@ -26,8 +26,8 @@ has three paths: true then true, true then false, and false alone, as
 `and` then skips its right side.
 
 Line and branch coverage can be 100% while a path was never taken.
-path_coverage counts how often each path was taken: within each site, and
-within each function, through its statements.
+path_coverage counts how often each path was taken: alone, each site's
+paths on their own, and combined, through each function's statements.
 
 As the run exits it writes its report:
 - `path_coverage.json`, for AIs and other tools.
@@ -35,8 +35,8 @@ As the run exits it writes its report:
 
 The HTML report, for people, is drawn from those two by
 [html-reporter](https://github.com/path-coverage/html-reporter):
-`index.html`, a sortable row per covered file with its paths taken
-within each function, and a page per file with its cards.
+`index.html`, a sortable row per covered file with its paths
+combined taken, and a page per file with its cards.
 
 ```sh
 docker run --rm -v "$PWD/coverage:/paths" ghcr.io/path-coverage/html-reporter /paths
@@ -185,7 +185,7 @@ As the process exits (or, under the pytest plugin, as pytest finishes):
   covered file, with each leaf's true and false counts under `sites`, each
   site's paths under `paths`, each card under `cards`, the statements
   reached under `reached`, and the paths taken of all possible under
-  `totals`, as [taken, possible]: `decisions`, `methods`, and, with groups,
+  `totals`, as [taken, possible]: `alone`, `combined`, and, with groups,
   each group's own under `groups`. It also names the kinds of site
   measured under `kinds`.
 - `path_coverage.source.json` is written beside it: each covered file's
@@ -204,10 +204,10 @@ As the process exits (or, under the pytest plugin, as pytest finishes):
   }
 },
 "totals": {
-  "decisions": [41, 52], "methods": [90, 116],
+  "alone": [41, 52], "combined": [90, 116],
   "groups": {
-    "models": { "decisions": [30, 36], "methods": [70, 82] },
-    "routes": { "decisions": [11, 16], "methods": [20, 34] }
+    "models": { "alone": [30, 36], "combined": [70, 82] },
+    "routes": { "alone": [11, 16], "combined": [20, 34] }
   }
 }
 ```
@@ -333,8 +333,8 @@ The JSON report's `cards` hold each card's rows:
   with no path possible shows `(-)`:
 
 ```text
-Path coverage within decisions: 41 / 52 (78.85%)
-Path coverage within methods: 90 / 116 (77.59%)
+Paths alone: 41 / 52 (78.85%)
+Paths combined: 90 / 116 (77.59%)
 ```
 
   With groups configured, each group is a heading with its own totals
@@ -432,10 +432,10 @@ report is:
 
 ```text
 code:
-  Path coverage within decisions: 503 / 569 (88.40%)
-  Path coverage within methods: 1321 / 1414 (93.42%)
+  Paths alone: 503 / 569 (88.40%)
+  Paths combined: 1321 / 1414 (93.42%)
 test:
-  Path coverage within decisions: 10 / 12 (83.33%)
-  Path coverage within methods: 829 / 839 (98.81%)
+  Paths alone: 10 / 12 (83.33%)
+  Paths combined: 829 / 839 (98.81%)
 Path coverage report: .../path_coverage/reports/paths/index.html
 ```

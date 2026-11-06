@@ -130,7 +130,7 @@ def top_level(source, path, paths):
     function's card, as top_rows gives them; paths as result.paths gives
     them. Example: RATE = 2 if FAST else 1, its then taken, gives [1, 2]."""
     names = [row.site for row in top_rows(source, path)]
-    return path_totals.decisions({name: paths[name] for name in names})
+    return path_totals.alone({name: paths[name] for name in names})
 
 
 def totals(source, path, paths, reached):
