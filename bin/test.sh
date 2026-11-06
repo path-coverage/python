@@ -13,9 +13,12 @@ Runs the tests in test/ against src/, using the repo's .venv python
 test/ (a renamed copy of src/path_coverage, test/self_coverage.py, does the
 measuring), its report written to reports/paths/index.html.
 
-A full run, given no PYTEST_ARGS, ends by printing each group's path totals
-(code and test) and where the report is. With PYTEST_ARGS, a partial run,
-the totals cover only part of the code, so they are not printed.
+A full run, given no PYTEST_ARGS, also measures line and branch coverage
+of src/ and test/ with coverage.py, as pyproject.toml configures it,
+listing each file with lines or branches missed, and writing
+reports/coverage.json; then it prints each group's path totals (code and
+test) and where the report is. With PYTEST_ARGS, a partial run, the totals
+cover only part of the code, so none of this is done.
 
 Options:
   -h    Show this help
@@ -31,8 +34,13 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PYTHON="${PYTHON:-${ROOT}/.venv/bin/python}"
 cd "${ROOT}"
 export PYTHONDONTWRITEBYTECODE=1
+coverage=()
+if [ $# -eq 0 ]; then
+  mkdir -p "${ROOT}/reports"
+  coverage=(--cov --cov-report=term-missing:skip-covered --cov-report=json)
+fi
 PYTHONPATH="${ROOT}/src:${ROOT}/test" \
-  "${PYTHON}" -m pytest -p no:cacheprovider -p self_coverage --quiet "$@"
+  "${PYTHON}" -m pytest -p no:cacheprovider -p self_coverage --quiet "${coverage[@]}" "$@"
 
 if [ $# -eq 0 ]; then
   PYTHONPATH="${ROOT}/src" "${PYTHON}" bin/print_path_totals.py

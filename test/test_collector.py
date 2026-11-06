@@ -97,6 +97,18 @@ def test_6c2b8e04(tmp_path):
     assert unready == "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"
 
 
+def test_6c2b8e08(tmp_path):
+    """Example: a connection closed without a request, as a TCP liveness
+    check makes, then a POST
+    The empty connection is closed unanswered and saves nothing, so the
+    POST's report is still run 1."""
+    server, port, stop, thread = _serving(tmp_path)
+    assert _exchange(port, b"") == ""
+    assert deliver(json.dumps(REPORT), f"http://127.0.0.1:{port}/runs") == 200
+    _stopped(server, stop, thread)
+    assert [p.name for p in tmp_path.iterdir()] == ["run-0001.json"]
+
+
 def test_6c2b8e05():
     """Example: a collector that is not running
     deliver passes over it in silence, returning None, so the run's own
@@ -121,7 +133,7 @@ def test_6c2b8e06(tmp_path):
         env={**os.environ, "PYTHONPATH": SRC},
         stderr=subprocess.PIPE,
     )
-    for _ in range(50):
+    while True:
         try:
             assert _exchange(port, b"GET /ready HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200")
             break

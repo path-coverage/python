@@ -3,6 +3,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 import path_coverage
 
 PROJECTS = Path(__file__).parent / "projects"
@@ -250,7 +252,7 @@ def test_e5a70c07(tmp_path, capsys):
 
 def test_e5a70c08(tmp_path):
     """An unknown reporter is refused by name, listing the known ones."""
-    try:
+    with pytest.raises(ValueError) as refused:
         path_coverage.start(
             root=PROJECTS / "single_and",
             cover=["src/**/*.py"],
@@ -258,13 +260,7 @@ def test_e5a70c08(tmp_path):
             report=["gaps", "htm"],
             on_exit=lambda report: None,
         )
-    except ValueError as error:
-        assert str(error) == (
-            "unknown reporter 'htm'; the reporters are: gaps, html, post, summary"
-        )
-    else:
-        path_coverage.stop()
-        raise AssertionError("start accepted reporter 'htm'")
+    assert str(refused.value) == "unknown reporter 'htm'; the reporters are: gaps, html, post, summary"
 
 
 def test_e5a70c09(tmp_path, capsys):
@@ -324,7 +320,7 @@ def test_e5a70c0b(tmp_path):
     """Example: measure=["decisions", "methods"]
     Every run measures paths within each decision and each method.
     So there is no measure to choose, and the setting is refused."""
-    try:
+    with pytest.raises(TypeError) as refused:
         path_coverage.start(
             root=PROJECTS / "single_and",
             cover=["src/**/*.py"],
@@ -332,11 +328,7 @@ def test_e5a70c0b(tmp_path):
             measure=["decisions", "methods"],
             on_exit=lambda report: None,
         )
-    except TypeError as error:
-        assert str(error) == "start() got an unexpected keyword argument 'measure'"
-    else:
-        path_coverage.stop()
-        raise AssertionError("start accepted measure")
+    assert str(refused.value) == "start() got an unexpected keyword argument 'measure'"
 
 
 def test_e5a70c0c(tmp_path, capsys):
@@ -412,19 +404,16 @@ def test_e5a70c12(tmp_path, capsys):
     report = json.loads(run.read_text())
     report["kinds"] = ["chain", "choice", "contains"]
     run.write_text(json.dumps(report))
-    try:
+    with pytest.raises(ValueError) as refused:
         path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
-    except ValueError as error:
-        assert str(error) == f"{run} measured other kinds"
-    else:
-        raise AssertionError("render accepted a run measuring other kinds")
+    assert str(refused.value) == f"{run} measured other kinds"
     assert not (tmp_path / "merged").exists()
 
 
 def test_e5a70c0d(tmp_path):
     """Example: report=["post"] with no collector
     The post reporter needs a collector to send to, so it is refused."""
-    try:
+    with pytest.raises(ValueError) as refused:
         path_coverage.start(
             root=PROJECTS / "single_and",
             cover=["src/**/*.py"],
@@ -432,11 +421,7 @@ def test_e5a70c0d(tmp_path):
             report=["post"],
             on_exit=lambda report: None,
         )
-    except ValueError as error:
-        assert str(error) == "the post reporter needs a collector url"
-    else:
-        path_coverage.stop()
-        raise AssertionError("start accepted post with no collector")
+    assert str(refused.value) == "the post reporter needs a collector url"
 
 
 def test_e5a70c0e(tmp_path, capsys):

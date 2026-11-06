@@ -1,4 +1,4 @@
-from path_coverage.gaps import code, lines
+from path_coverage.gaps import code, lines, operand_gap
 
 SITE = "src/model/flow.py:2:11"
 TEXTS = {SITE: ["user.active", "user.admin", "flow.public"]}
@@ -31,6 +31,15 @@ def test_d40e6a02():
     operands = {SITE: [{"truthy": 0, "falsy": 0}] * 3}
     paths = {SITE: [{"path": [True, True, None], "count": 0}]}
     assert lines(operands, paths, TEXTS) == [f"{SITE} never reached"]
+
+
+def test_d40e6a04():
+    """Example: tags or [], its tags once truthy and once falsy, so its []
+    evaluated once
+    [] can only be falsy, so having run it has no gap, though it was never
+    true; tags, taken both ways, has none either."""
+    counts = [{"truthy": 1, "falsy": 1}, {"truthy": 0, "falsy": 1, "only": "falsy"}]
+    assert [operand_gap(each) for each in counts] == [[], []]
 
 
 def test_d40e6a03():

@@ -88,17 +88,14 @@ def _ranges(lengths, start, end):
 
 def _classed(source):
     """[((start, end), class), ...], where each coloured token of source
-    starts and ends, as tokenize gives them, and its class; the tokens
-    found before any it cannot read, as a fragment of code may stop in the
-    middle of a bracket."""
+    starts and ends, as tokenize gives them, and its class. source is
+    always whole code: a file that parsed, or the text of one ast node or
+    keyword."""
     found = []
-    try:
-        for token in tokenize.generate_tokens(io.StringIO(source).readline):
-            css = _class_of(token)
-            if css:
-                found.append(((token.start, token.end), css))
-    except (tokenize.TokenError, SyntaxError):
-        pass
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        css = _class_of(token)
+        if css:
+            found.append(((token.start, token.end), css))
     return found
 
 

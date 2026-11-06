@@ -232,15 +232,13 @@ def _statements_extent(statements):
 
 
 def block_generator(node, builtins):
-    """The generator of node when node is a call of one of builtins, eg
-    any(o.late for o in orders); else None, as for any(flags), whose items
-    have no answer to note."""
-    if not (isinstance(node.func, ast.Name) and node.func.id in builtins):
-        return None
-    if node.keywords or len(node.args) != 1:
-        return None
-    [argument] = node.args
-    return argument if isinstance(argument, ast.GeneratorExp) else None
+    """The generator of node when node is a call of one of builtins whose
+    one argument is a generator, eg any(o.late for o in orders); else None,
+    as for any(flags), whose items have no answer to note."""
+    called = isinstance(node.func, ast.Name) and node.func.id in builtins
+    if called and not node.keywords and len(node.args) == 1 and isinstance(node.args[0], ast.GeneratorExp):
+        return node.args[0]
+    return None
 
 
 def builtin_blocks(tree):
@@ -349,15 +347,13 @@ def operator_keywords(source):
 
 
 def site_at(operators, node):
-    """The (line, col) that names node's site, operators being where
-    operator_keywords finds them: an and or an or at its first keyword,
-    after its first operand; a conditional expression at its if, after its
-    then value; any other node where it starts. So no two sites share a
-    name, eg any(...) or b, whose any starts where the or does. Example:
-    a or b at line 2, col 4 gives (2, 6)."""
-    first = node.values[0] if isinstance(node, ast.BoolOp) else node.body if isinstance(node, ast.IfExp) else None
-    if first is None:
-        return (node.lineno, node.col_offset)
+    """The (line, col) that names node's site, an and, an or or a
+    conditional expression, operators being where operator_keywords finds
+    them: an and or an or at its first keyword, after its first operand; a
+    conditional expression at its if, after its then value. So no two sites
+    share a name, eg any(...) or b, whose any starts where the or does.
+    Example: a or b at line 2, col 4 gives (2, 6)."""
+    first = node.values[0] if isinstance(node, ast.BoolOp) else node.body
     return operators[bisect.bisect_left(operators, (first.end_lineno, first.end_col_offset))]
 
 

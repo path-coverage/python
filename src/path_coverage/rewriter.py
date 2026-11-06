@@ -110,12 +110,10 @@ class _Rewriter(ast.NodeTransformer):
         return [_reach(name, statement), statement]
 
     def _entered(self, function):
-        """function, when its def's site is in reaches, with a reach call
-        naming it as the first statement of its body, after its docstring,
-        which stays its docstring, so each call is counted."""
+        """function with a reach call naming it, by its def's site, which
+        reaches always holds, as the first statement of its body, after its
+        docstring, which stays its docstring, so each call is counted."""
         name = f"{self.path}:{function.lineno}:{function.col_offset}"
-        if name not in self.reaches:
-            return
         body = function.body
         first = body[0]
         docstring = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)

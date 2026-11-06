@@ -255,13 +255,10 @@ def _lines_run(source, rewritten, *args):
     namespace = {RECORDER_NAME: Recorder()}
     exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
     seen = set()
-
-    def trace(frame, event, _arg):
-        """Notes each line event of code compiled from k.py."""
-        if frame.f_code.co_filename == "k.py" and event == "line":
-            seen.add((frame.f_code.co_name, frame.f_lineno))
-        return trace
-
+    # Notes each line event of code compiled from k.py. Code that runs inside
+    # a trace function is never measured by coverage.py, so the tracer is one
+    # expression, on a line that runs.
+    trace = lambda frame, event, _arg: (event == "line" and frame.f_code.co_filename == "k.py" and seen.add((frame.f_code.co_name, frame.f_lineno))) or trace  # noqa: E731, E501
     sys.settrace(trace)
     try:
         namespace["fee"](*args)
@@ -301,6 +298,34 @@ def test_7e40b302():
     assert can_attest(user, None) is False
     assert recorder.site_paths == {SITE: {(False, None, None): 1}}
     assert list(recorder.counts) == [(SITE, 0)]
+
+
+def test_7e40b30e():
+    """Example: depth(1), whose and's second leaf calls depth(0), whose
+    first leaf raises, caught back in the outer leaf
+    The inner evaluation of the and raised, so never left; the outer one
+    then took its later outcome after it, so neither path is counted, and
+    the outer one leaves the and's stack clear. The if in check, which
+    left each time, is counted both ways."""
+    source = (
+        "def check(n):\n"
+        "    if n == 0:\n"
+        "        raise ValueError(n)\n"
+        "    return True\n"
+        "def attempt(call):\n"
+        "    try:\n"
+        "        return call()\n"
+        "    except ValueError:\n"
+        "        return False\n"
+        "def depth(n):\n"
+        "    return check(n) and attempt(lambda: depth(n - 1))\n"
+    )
+    recorder = Recorder()
+    tree = rewrite(ast.parse(source), "k.py", source=source)
+    namespace = {RECORDER_NAME: recorder}
+    exec(compile(tree, "k.py", "exec"), namespace)  # noqa: S102 - running rewritten code is the point
+    assert namespace["depth"](1) is False
+    assert recorder.site_paths == {"k.py:2:4": {(False,): 1, (True,): 1}}
 
 
 def test_7e40b30d():

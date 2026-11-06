@@ -433,10 +433,8 @@ def test_b47e3a30():
         path = file.relative_to(root).as_posix()
         carded = {row.site for rows in method_statements.of(source, path).values() for row in rows}
         tops = {row.site for row in method_statements.top_rows(source, path)}
-        lost = set(manifest.sites(source, path)) - carded - tops
-        if lost:
-            missed[path] = sorted(lost)
-    assert missed == {}
+        missed[path] = sorted(set(manifest.sites(source, path)) - carded - tops)
+    assert missed == {path: [] for path in missed}
 
 
 def test_b47e3a31():

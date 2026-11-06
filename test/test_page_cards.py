@@ -1,4 +1,5 @@
-from path_coverage import manifest, page_cards, site_paths
+from path_coverage import manifest, page_cards, result, site_paths
+from path_coverage.source_lines import lines_of
 
 
 def test_7d61a401():
@@ -15,9 +16,87 @@ def test_7d61a401():
         "        case count if count > 10:\n"
         '            return "many"\n'
     )
-    sites = manifest.sites(source, "k.py")
-    site = "k.py:2:4"
-    paths = {site: [{"path": path, "count": 0} for path in site_paths.possible(sites[site])]}
-    rows = page_cards.folds(source, sites, paths)(site, "match")
+    rows = _fold(source, "k.py:2:4", "match")
     [case] = [row for row in rows if row["kind"] == "subtree"]
     assert [case["label"]["text"], case["at"]] == ["case", [5, 13, 5, 32]]
+
+
+def test_7d61a402():
+    """Example: RATE = 2 if FAST else 1, outside every function, no path
+    taken
+    Its card is a top card: its lines, column 0, a gap as no path was
+    taken, and one site."""
+    source = "RATE = 2 if FAST else 1\n"
+    sites = manifest.sites(source, "k.py")
+    operands = result.operands(sites, {})
+    [card] = page_cards.of("k.py", source, sites, lines_of(source, sites, operands), (_untaken(sites), {}))
+    place = {key: card[key] for key in ("first", "last", "column", "status", "top", "sites")}
+    assert place == {"first": 1, "last": 1, "column": 0, "status": "gaps", "top": True, "sites": 1}
+
+
+def test_7d61a403():
+    """Example: pick, an if whose else returns
+    The if's fold names where its else keyword is, line 4, columns 4 to 8,
+    so hovering that else can open the fold, as hovering its if does; its
+    else arm returns, so it has a return row, placed at that return."""
+    source = (
+        "def pick(a):\n"
+        "    if a:\n"
+        "        a = 2\n"
+        "    else:\n"
+        "        return 2\n"
+    )
+    rows = _fold(source, "k.py:2:4", "if/else")
+    [leaves] = [row for row in rows if row["kind"] == "leaves"]
+    assert [rows[0]["else"], leaves["at"]] == [[4, 4, 4, 8], [5, 8, 5, 16]]
+
+
+def test_7d61a404():
+    """Example: size, an if whose else is an elif, and tidy, an if whose
+    else keyword has a comment after it
+    An elif is a site of its own, so the if names no else; nor does an if
+    whose else is followed by a comment, as its arm's code does not follow
+    the keyword."""
+    source = (
+        "def size(a):\n"
+        "    if a > 9:\n"
+        "        return 2\n"
+        "    elif a > 1:\n"
+        "        return 1\n"
+        "def tidy(a):\n"
+        "    if a:\n"
+        "        return 1\n"
+        "    else:  # the rest\n"
+        "        return 2\n"
+    )
+    elses = [_fold(source, site, "if")[0]["else"] for site in ("k.py:2:4", "k.py:7:4")]
+    assert elses == [None, None]
+
+
+def test_7d61a405():
+    """Example: 1 if a else (b or c), its else arm an or
+    Each row is placed at its code: the predicate, each arm, and the or's
+    operands, under the else arm whose row stands for the or."""
+    source = "def pick(a, b, c):\n    return 1 if a else (b or c)\n"
+    rows = _fold(source, "k.py:2:13", "ternary")
+    placed = [(row["kind"], row["label"]["text"], row["at"]) for row in rows[1:]]
+    assert placed == [
+        ("operand", "a", [2, 16, 2, 17]),
+        ("arm", "? 1", [2, 11, 2, 12]),
+        ("arm", ": or", [2, 24, 2, 30]),
+        ("operand", "b", [2, 24, 2, 25]),
+        ("operand", "c", [2, 29, 2, 30]),
+    ]
+
+
+def _untaken(sites):
+    """Each of sites' possible paths, none taken, as result.paths gives
+    them."""
+    return {site: [{"path": path, "count": 0} for path in site_paths.possible(condition)] for site, condition in sites.items()}
+
+
+def _fold(source, site, top):
+    """The rows of the fold of site in source, as if it were k.py, no path
+    taken, headed by top."""
+    sites = manifest.sites(source, "k.py")
+    return page_cards.folds(source, sites, _untaken(sites))(site, top)

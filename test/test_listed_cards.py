@@ -70,6 +70,17 @@ def test_d3c9a101():
     }
 
 
+def test_d3c9a103():
+    """Example: SHOP's tree
+    How each card's rows nest is listed for ship's card and for each top
+    card, RATE's and Shop's, each by its line:col; each row here at the
+    top, inside no other site."""
+    top = {"parent": None, "in": None, "on": None, "leaf": None, "gives": None}
+    sites = manifest.sites(SHOP, "k.py")
+    tree = listed_cards.tree({"k.py": (SHOP, sites)}, result.operands(sites, {}))
+    assert tree == {"k.py": {"2:0": {"3:22": top}, "1:0": {"1:9": top}, "5:0": {"5:13": top}}}
+
+
 def test_d3c9a102():
     """Example: ship, a write then a return, the return reached
     The write is no row. The return is a row that has no site, and its
