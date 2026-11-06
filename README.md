@@ -1,4 +1,4 @@
-# path_coverage
+# <img src="https://avatars.githubusercontent.com/u/353243247?v=4" alt="" width="32" height="32"> path-coverage/python
 
 Path coverage for Python, to run alongside coverage.py's line and branch
 coverage.
