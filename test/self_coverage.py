@@ -90,7 +90,7 @@ def start():
         cover=["src/**/*.py", "test/**/*.py"],
         skip=["test/projects/**", "test/self_coverage.py"],
         coverage_dir=REPORTS,
-        report=["html"],
+        report=[],
         groups={"code": ["src/**/*.py"], "test": ["test/**/*.py"]},
         on_exit=_reports.append,
     )

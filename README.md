@@ -31,7 +31,16 @@ within each function, through its statements.
 
 As the run exits it writes its report:
 - `path_coverage.json`, for AIs and other tools.
-- `index.html`, with a page per file, for people.
+- `path_coverage.source.json`, what drawing each file's code needs.
+
+The HTML report, for people, is drawn from those two by
+[html-reporter](https://github.com/path-coverage/html-reporter):
+`index.html`, a sortable row per covered file with its paths taken
+within each function, and a page per file with its cards.
+
+```sh
+docker run --rm -v "$PWD/coverage:/paths" ghcr.io/path-coverage/html-reporter /paths
+```
 
 ## Reading the HTML
 
@@ -91,7 +100,7 @@ path_coverage.start(
     cover=["src/**/*.py"],             # each matching module is instrumented as it is imported
     skip=["src/migrations/**/*.py"],   # except these, though a cover glob matches them
     coverage_dir="/tmp/coverage",      # where path_coverage.json is written
-    report=["gaps", "html", "summary"],  # the reporters run at exit (default ["gaps"])
+    report=["gaps", "summary"],        # the reporters run at exit (default ["gaps"])
     groups={                           # optional: each group's own tab, summary and totals
         "models": ["src/models/**/*.py"],
         "routes": ["src/routes/**/*.py"],
@@ -111,7 +120,7 @@ export PATH_COVERAGE_ROOT=/app
 export PATH_COVERAGE_COVER=src/**/*.py,lib/*.py   # comma-separated
 export PATH_COVERAGE_SKIP=src/migrations/**/*.py  # optional, comma-separated
 export PATH_COVERAGE_DIR=/tmp/coverage
-export PATH_COVERAGE_REPORT=gaps,html,summary     # optional, default gaps
+export PATH_COVERAGE_REPORT=gaps,summary          # optional, default gaps
 export PATH_COVERAGE_GROUPS=models:src/models/**/*.py,routes:src/routes/**/*.py
 python -m pytest -p path_coverage.pytest_plugin test/
 ```
@@ -137,7 +146,8 @@ export PATH_COVERAGE_COLLECTOR=http://host.docker.internal:4570/runs
 With a collector the reporters default to `post`. The package's
 `path_coverage_collector` command (or `python -m path_coverage.collector`)
 is that collector. It saves each report POSTed to it as a numbered file,
-and once every run is done they render as one report:
+and once every run is done they render as one report, its two JSON files
+written to `coverage_dir` for html-reporter to draw:
 
 ```sh
 path_coverage_collector 4570 /tmp/paths/runs   # until sent TERM
@@ -149,7 +159,7 @@ import path_coverage
 
 path_coverage.render(
     root="/app", cover=["src/**/*.py"], coverage_dir="/tmp/coverage",
-    report=["gaps", "html"],
+    report=["gaps"],
     runs=sorted(Path("/tmp/paths/runs").glob("*.json")),
 )
 ```
@@ -178,6 +188,9 @@ As the process exits (or, under the pytest plugin, as pytest finishes):
   `totals`, as [taken, possible]: `decisions`, `methods`, and, with groups,
   each group's own under `groups`. It also names the kinds of site
   measured under `kinds`.
+- `path_coverage.source.json` is written beside it: each covered file's
+  lines and their coloured tokens, and where each site is and its fold's
+  rows, so html-reporter can draw the pages without parsing Python.
 
 ```json
 "paths": {
@@ -315,13 +328,6 @@ The JSON report's `cards` hold each card's rows:
 
 ### Reporters
 
-- `html` writes `index.html` to `coverage_dir`: a sortable row per covered
-  file, with its sites and its paths taken of all possible within each
-  method (eg `9 / 28 32%`, or `-` for a file with no paths), and a Total
-  row. With groups configured, a tab bar heads the table: All files, then
-  each group, then Ungrouped for the files in no group (only when there are
-  any). Each file name opens `files/<path>.html`, the file's source with
-  its cards, as Reading the HTML shows.
 - `gaps` prints the gap lines, as above.
 - `summary` prints the totals, as coverage tools print theirs; a total
   with no path possible shows `(-)`:

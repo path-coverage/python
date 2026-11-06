@@ -1,5 +1,5 @@
 """Runs the demo source tree under path coverage, as a test suite would,
-writing the report to COVERAGE_DIR at exit."""
+writing the JSON reports to COVERAGE_DIR at exit."""
 
 import os
 import sys
@@ -13,7 +13,7 @@ path_coverage.start(
     root=HERE,
     cover=["source/*.py"],
     coverage_dir=Path(os.environ["COVERAGE_DIR"]),
-    report=["gaps", "html"],
+    report=["gaps"],
 )
 sys.path.insert(0, str(HERE / "source"))
 

@@ -12,7 +12,6 @@ from pathlib import Path
 from . import (
     console_summary,
     gaps,
-    html_report,
     kinds,
     listed_cards,
     manifest,
@@ -20,12 +19,13 @@ from . import (
     paths_report,
     post,
     result,
+    source_report,
 )
 from .merge import merge, merge_paths
 from .recorder import Recorder
 from .rewriter import RECORDER_NAME, rewrite
 
-REPORTERS = ("gaps", "html", "post", "summary")
+REPORTERS = ("gaps", "post", "summary")
 
 _recorder = Recorder()
 _finder = None
@@ -142,10 +142,11 @@ def start(
     exit, counting afresh: the paths within each decision, and within each
     method. skip lists globs of files not covered though a cover glob
     matches them. report names the reporters: "gaps" (the default) prints the
-    paths never taken, "html" writes pages, "summary" prints the totals,
-    and "post" sends the JSON report to collector, a url. groups, {name:
-    [glob, ...]}, names groups of covered files: each gets a tab of the
-    index page, its own summary lines and its own JSON totals. A run given
+    paths never taken, "summary" prints the totals, and "post" sends the
+    JSON report to collector, a url. groups, {name: [glob, ...]}, names
+    groups of covered files: each gets its own summary lines, its own JSON
+    totals, and its list of files in the source report, which
+    html-reporter makes a tab of its index page. A run given
     a part name (eg an xdist worker's) writes only its part file; the main
     run clears stale parts now and adds every part to its own report at
     exit. on_exit is atexit.register except in tests, which must not print
@@ -276,9 +277,9 @@ def _report(config, recorder, part):
 
 
 def _finish(config, files, operands, paths, reached):
-    """Writes the JSON report, with its totals, into coverage_dir, then runs
-    the chosen reporters. reached is each statement's runs, None when not
-    known."""
+    """Writes the JSON report, with its totals, and the source report into
+    coverage_dir, then runs the chosen reporters. reached is each
+    statement's runs, None when not known."""
     cards = method_statements.cards(files, paths, reached)
     report = _report_json(operands, paths, files, reached)
     report["totals"] = console_summary.totals(paths, cards)
@@ -289,13 +290,11 @@ def _finish(config, files, operands, paths, reached):
     text = json.dumps(report, indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)
+    source = source_report.of(files, paths, report["cards"], config.groups)
+    (config.coverage_dir / "path_coverage.source.json").write_text(json.dumps(source))
     if "gaps" in config.report:
         for line in gaps.lines(operands, paths, paths_report.texts(files)):
             print(line)
-    if "html" in config.report:
-        html_report.write(
-            operands, files, config.coverage_dir, paths, cards, reached, config.groups
-        )
     if "summary" in config.report:
         for line in console_summary.lines(paths, cards, config.groups):
             print(line)

@@ -1,5 +1,4 @@
-from path_coverage import manifest, page_cards, result, site_paths
-from path_coverage.source_lines import lines_of
+from path_coverage import manifest, site_paths, source_report
 
 
 def test_7d61a401():
@@ -19,19 +18,6 @@ def test_7d61a401():
     rows = _fold(source, "k.py:2:4", "match")
     [case] = [row for row in rows if row["kind"] == "subtree"]
     assert [case["label"]["text"], case["at"]] == ["case", [5, 13, 5, 32]]
-
-
-def test_7d61a402():
-    """Example: RATE = 2 if FAST else 1, outside every function, no path
-    taken
-    Its card is a top card: its lines, column 0, a gap as no path was
-    taken, and one site."""
-    source = "RATE = 2 if FAST else 1\n"
-    sites = manifest.sites(source, "k.py")
-    operands = result.operands(sites, {})
-    [card] = page_cards.of("k.py", source, sites, lines_of(source, sites, operands), (_untaken(sites), {}))
-    place = {key: card[key] for key in ("first", "last", "column", "status", "top", "sites")}
-    assert place == {"first": 1, "last": 1, "column": 0, "status": "gaps", "top": True, "sites": 1}
 
 
 def test_7d61a403():
@@ -105,14 +91,10 @@ def test_7d61a407():
     assert _fold(source, "k.py:2:4", "if")[0]["else"] is None
 
 
-def _untaken(sites):
-    """Each of sites' possible paths, none taken, as result.paths gives
-    them."""
-    return {site: [{"path": path, "count": 0} for path in site_paths.possible(condition)] for site, condition in sites.items()}
-
-
 def _fold(source, site, top):
-    """The rows of the fold of site in source, as if it were k.py, no path
-    taken, headed by top."""
+    """The rows of the fold of site in source, as if it were k.py, as the
+    source report has them, headed by top, a column for each of its
+    possible paths."""
     sites = manifest.sites(source, "k.py")
-    return page_cards.folds(source, sites, _untaken(sites))(site, top)
+    paths = [{"path": path, "count": 0} for path in site_paths.possible(sites[site])]
+    return source_report.site(source, sites, site, paths, top)["fold"]

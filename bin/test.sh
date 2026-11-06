@@ -11,7 +11,8 @@ Usage: bin/test.sh [PYTEST_ARGS...]
 Runs the tests in test/ against src/, using the repo's .venv python
 (override with PYTHON=...), with path_coverage measuring its own src/ and
 test/ (a renamed copy of src/path_coverage, test/self_coverage.py, does the
-measuring), its report written to reports/paths/index.html.
+measuring), its JSON reports written to reports/paths, then drawn there as
+reports/paths/index.html by the html-reporter image, in Docker.
 
 A full run, given no PYTEST_ARGS, also measures line and branch coverage
 of src/ and test/ with coverage.py, as pyproject.toml configures it,
@@ -41,6 +42,11 @@ if [ $# -eq 0 ]; then
 fi
 PYTHONPATH="${ROOT}/src:${ROOT}/test" \
   "${PYTHON}" -m pytest -p no:cacheprovider -p self_coverage --quiet "${coverage[@]}" "$@"
+
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "${ROOT}/reports/paths:/paths" \
+  ghcr.io/path-coverage/html-reporter /paths
 
 if [ $# -eq 0 ]; then
   PYTHONPATH="${ROOT}/src" "${PYTHON}" bin/print_path_totals.py

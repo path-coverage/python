@@ -1,8 +1,0 @@
-{
-  "template": "page.html",
-  "style": "style.css",
-  "scripts": {
-    "index": ["render.js", "sort.js", "tabs.js", "settings.js", "theme.js"],
-    "file": ["render.js", "side.js", "settings.js", "theme.js"]
-  }
-}

@@ -10,9 +10,10 @@ if [ "${1:-}" = '-h' ]; then
 Usage: bin/build_demo.sh
 
 Runs demo/run.py, a mock source tree under path coverage, with the
-repo's .venv python (override with PYTHON=...), writing its HTML
-report to site/ (index.html first), emptied first. The same site is
-what the GitHub Pages workflow publishes.
+repo's .venv python (override with PYTHON=...), writing its JSON
+reports to site/, emptied first, then draws its HTML report there
+(index.html first) with the html-reporter image, in Docker. The same
+site is what the GitHub Pages workflow publishes.
 
 Options:
   -h    Show this help
@@ -27,4 +28,8 @@ rm -rf "${ROOT}/site"
 mkdir -p "${ROOT}/site"
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${ROOT}/src" COVERAGE_DIR="${ROOT}/site" \
   "${PYTHON}" "${ROOT}/demo/run.py"
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "${ROOT}/site:/site" \
+  ghcr.io/path-coverage/html-reporter /site
 echo "${ROOT}/site/index.html"

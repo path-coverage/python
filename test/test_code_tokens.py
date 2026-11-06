@@ -39,3 +39,13 @@ def test_c0d7e302():
         {"text": "elif", "tokens": [[0, 4, "k"]]},
     ]
     assert code_tokens.ternary_arm_code("? n > 1") == {"text": "? n > 1", "tokens": [[0, 1, "o"], [6, 7, "n"]]}
+
+
+def test_c0d7e306():
+    """Example: RATE = Fee(2)
+    A name starting with a capital, as a constant's or a class's does, is
+    coloured t; a name starting with a small letter is not coloured."""
+    assert code_tokens.of("RATE = Fee(2)\nrate = fee(2)\n") == {
+        1: [[0, 4, "t"], [7, 10, "t"], [11, 12, "n"]],
+        2: [[11, 12, "n"]],
+    }

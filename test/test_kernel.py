@@ -1,5 +1,4 @@
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -20,14 +19,6 @@ def _imported(project, module_name):
     finally:
         sys.path.remove(src)
         sys.modules.pop(module_name, None)
-
-
-def _page_data(page):
-    """The data of the report's page in the file page, as it holds it
-    inline, for the shared renderer to draw. Example: index.html gives its
-    tables."""
-    inline = re.search(r"^window\.pathCoverage = (.*);$", page.read_text(), re.MULTILINE).group(1)
-    return json.loads(inline.replace("<\\/", "</"))
 
 
 NEW = '`trails[trail_id]["new"]`'
@@ -104,6 +95,30 @@ def test_e5a70c01(tmp_path, capsys):
     assert capsys.readouterr().out == (
         f"{site} path never taken: `trail_id in trails` true, {NEW} false\n"
     )
+
+
+def test_e5a70c17(tmp_path, capsys):
+    """Example: trail_id in trails and trails[trail_id]["new"], called
+    with a new trail
+    The report at exit writes the source report beside the JSON report:
+    each covered file's lines, all 6 of single_and_trails.py's, and its
+    sites, and each card row's top coloured, and here."""
+    project = PROJECTS / "single_and"
+    exits = []
+    path_coverage.start(root=project, cover=["src/**/*.py"], coverage_dir=tmp_path, on_exit=exits.append)
+    try:
+        trails = _imported(project, "single_and_trails")
+        assert trails.is_new("T1", {"T1": {"new": True}}) is True
+    finally:
+        path_coverage.stop()
+    [report] = exits
+    report()
+    capsys.readouterr()
+    source = json.loads((tmp_path / "path_coverage.source.json").read_text())
+    file = source["files"]["src/single_and_trails.py"]
+    assert len(file["lines"]) == 6
+    assert list(file["sites"]) == ["src/single_and_trails.py:6:30"]
+    assert source["labels"] == {"and": {"text": "and", "tokens": [[0, 3, "k"]]}}
 
 
 def test_e5a70c02(tmp_path, capsys):
@@ -219,18 +234,16 @@ def test_e5a70c06(tmp_path, capsys):
 
 
 def test_e5a70c07(tmp_path, capsys):
-    """report=["html"] writes index.html, listing each covered file, and
-    files/<path>.html, its source beside its cards, each site's tree
-    folded under its row, coloured as code, each page its data for the
-    shared renderer to draw; with no "gaps" in report nothing is
-    printed."""
+    """report=[] writes the JSON report and the source report, and prints
+    nothing. The source report has each site's tree folded under it,
+    coloured as code."""
     project = PROJECTS / "single_and"
     exits = []
     path_coverage.start(
         root=project,
         cover=["src/**/*.py"],
         coverage_dir=tmp_path,
-        report=["html"],
+        report=[],
         on_exit=exits.append,
     )
     try:
@@ -240,46 +253,46 @@ def test_e5a70c07(tmp_path, capsys):
         path_coverage.stop()
     exits[0]()
     assert capsys.readouterr().out == ""
-    index = _page_data(tmp_path / "index.html")
-    assert [row["path"] for row in index["tables"][0]["rows"]] == ["src/single_and_trails.py"]
-    page = _page_data(tmp_path / "files" / "src" / "single_and_trails.py.html")
-    assert page["path"] == "src/single_and_trails.py"
-    [card] = page["cards"]
-    [row] = card["rows"]
-    leaf = row["fold"][2]["label"]
+    source = json.loads((tmp_path / "path_coverage.source.json").read_text())
+    sites = source["files"]["src/single_and_trails.py"]["sites"]
+    leaf = sites["src/single_and_trails.py:6:30"]["fold"][2]["label"]
     assert leaf == {"text": 'trails[trail_id]["new"]', "tokens": [[17, 22, "s"]]}
 
 
 def test_e5a70c08(tmp_path):
-    """An unknown reporter is refused by name, listing the known ones."""
+    """An unknown reporter is refused by name, listing the known ones, eg
+    html, whose report html-reporter draws from the JSON."""
     with pytest.raises(ValueError) as refused:
         path_coverage.start(
             root=PROJECTS / "single_and",
             cover=["src/**/*.py"],
             coverage_dir=tmp_path,
-            report=["gaps", "htm"],
+            report=["gaps", "html"],
             on_exit=lambda report: None,
         )
-    assert str(refused.value) == "unknown reporter 'htm'; the reporters are: gaps, html, post, summary"
+    assert str(refused.value) == "unknown reporter 'html'; the reporters are: gaps, post, summary"
 
 
 def test_e5a70c09(tmp_path, capsys):
     """start_from_env takes the reporters, comma-separated, from
-    PATH_COVERAGE_REPORT."""
+    PATH_COVERAGE_REPORT: summary alone prints the totals, none of the and's
+    3 paths taken as nothing was imported, and no gaps."""
     exits = []
     path_coverage.start_from_env(
         {
             "PATH_COVERAGE_ROOT": str(PROJECTS / "single_and"),
             "PATH_COVERAGE_COVER": "src/**/*.py",
             "PATH_COVERAGE_DIR": str(tmp_path),
-            "PATH_COVERAGE_REPORT": "html",
+            "PATH_COVERAGE_REPORT": "summary",
         },
         on_exit=exits.append,
     )
     path_coverage.stop()
     exits[0]()
-    assert capsys.readouterr().out == ""
-    assert (tmp_path / "index.html").exists()
+    assert capsys.readouterr().out == (
+        "Path coverage within decisions: 0 / 3 (0.00%)\n"
+        "Path coverage within methods: 0 / 3 (0.00%)\n"
+    )
 
 
 def test_e5a70c0a(tmp_path, capsys):
@@ -496,20 +509,19 @@ def test_e5a70c0f(tmp_path, capsys):
 
 
 def test_e5a70c10(tmp_path, capsys):
-    """Example: groups flows and policies, report summary and html, once
-    as groups=, once as PATH_COVERAGE_GROUPS
+    """Example: groups flows and policies, report summary, once as
+    groups=, once as PATH_COVERAGE_GROUPS
     The summary prints each group as a heading, its totals indented under
     it, with no total over every group.
     The JSON report's totals hold each group's own totals too.
-    The index page has a tab per group after All files, and no Ungrouped
-    tab, as every file is in a group."""
+    The source report lists each group's files."""
     project = PROJECTS / "never_imported"
     starts = [
         lambda on_exit: path_coverage.start(
             root=project,
             cover=["src/*.py"],
             coverage_dir=tmp_path,
-            report=["summary", "html"],
+            report=["summary"],
             groups={"flows": ["src/*_flows.py"], "policies": ["src/*_policies.py"]},
             on_exit=on_exit,
         ),
@@ -518,7 +530,7 @@ def test_e5a70c10(tmp_path, capsys):
                 "PATH_COVERAGE_ROOT": str(project),
                 "PATH_COVERAGE_COVER": "src/*.py",
                 "PATH_COVERAGE_DIR": str(tmp_path),
-                "PATH_COVERAGE_REPORT": "summary,html",
+                "PATH_COVERAGE_REPORT": "summary",
                 "PATH_COVERAGE_GROUPS": "flows:src/*_flows.py,policies:src/*_policies.py",
             },
             on_exit=on_exit,
@@ -543,8 +555,11 @@ def test_e5a70c10(tmp_path, capsys):
                 "policies": {"decisions": [0, 3], "methods": [0, 3]},
             },
         }
-        tables = _page_data(tmp_path / "index.html")["tables"]
-        assert [table["name"] for table in tables] == ["All files", "flows", "policies"]
+        source = json.loads((tmp_path / "path_coverage.source.json").read_text())
+        assert source["groups"] == {
+            "flows": ["src/never_imported_flows.py"],
+            "policies": ["src/never_imported_policies.py"],
+        }
 
 
 def test_e5a70c11(tmp_path):

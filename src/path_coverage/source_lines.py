@@ -1,5 +1,5 @@
-"""The lines of one file's HTML page, each with the status of the
-conditions on it."""
+"""The lines of one file, each with the status of the conditions on it,
+and the span of lines it shares with them."""
 
 from .gaps import operand_gap
 
