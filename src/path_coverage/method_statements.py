@@ -198,8 +198,7 @@ def body_of(node):
 
 def runs_no_code(statement):
     """True for a statement that is a constant alone, eg a docstring or
-    ...: the one place this is decided, for the rows and the rewrite's
-    entry reach alike."""
+    ...: the one place this is decided, for the rows."""
     return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 

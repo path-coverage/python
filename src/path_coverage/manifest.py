@@ -94,6 +94,15 @@ class _DecisionFinder(ast.NodeVisitor):
         self.builtins = builtins
         self.operators = operators
         self.decisions = {}
+        # {decision: the node it is}, eg the BoolOp of an `and`; a
+        # filter's is its test.
+        self.nodes = {}
+
+    def _claim(self, decision, node):
+        """Claims decision's place in source order, before any decision found
+        inside it, noting node as the one it is."""
+        self.decisions[decision] = None
+        self.nodes[decision] = node
 
     def visit_Call(self, node):
         """Notes a block call, eg any(o.late for o in orders), as a decision,
@@ -106,7 +115,7 @@ class _DecisionFinder(ast.NodeVisitor):
             self.generic_visit(node)
             return
         decision = self.columns.name(self.path, node.lineno, node.col_offset)
-        self.decisions[decision] = None
+        self._claim(decision, node)
         self.visit(generator)
         operands = (_leaf(generator.generators[0].iter), _leaf(generator.elt))
         self.decisions[decision] = Condition(node.func.id, operands, _extent(node))
@@ -117,7 +126,7 @@ class _DecisionFinder(ast.NodeVisitor):
         when guarded, a `case` of that leaf and its guard. The decisions inside
         its subject and its cases' bodies follow it."""
         decision = self.columns.name(self.path, node.lineno, node.col_offset)
-        self.decisions[decision] = None
+        self._claim(decision, node)
         self.visit(node.subject)
         clauses = []
         for case in node.cases:
@@ -142,7 +151,7 @@ class _DecisionFinder(ast.NodeVisitor):
         for test in node.ifs:
             line, col = keyword_before(self.keywords, test)
             decision = self.columns.name(self.path, line, col)
-            self.decisions[decision] = None
+            self._claim(decision, test)
             predicate = self._leaf(test)
             extent = (line, col, test.end_lineno, test.end_col_offset)
             operands = (predicate, Arm("then"), Arm("else"))
@@ -153,7 +162,7 @@ class _DecisionFinder(ast.NodeVisitor):
         place first, so a decision found inside one of its leaves follows it."""
         line, col = decision_at(self.operators, node)
         decision = self.columns.name(self.path, line, col)
-        self.decisions[decision] = None
+        self._claim(decision, node)
         self.decisions[decision] = self._condition(node)
 
     visit_IfExp = visit_BoolOp
@@ -164,7 +173,7 @@ class _DecisionFinder(ast.NodeVisitor):
         elif being the else arm of the if before it). Its arms are plain, as
         they are statements; the decisions inside them follow it."""
         decision = self.columns.name(self.path, node.lineno, node.col_offset)
-        self.decisions[decision] = None
+        self._claim(decision, node)
         predicate = self._leaf(node.test)
         then = _statement_arm("then", node.body)
         arms = (then, _statement_arm("else", node.orelse)) if node.orelse else (then,)
@@ -306,7 +315,7 @@ def irrefutable(pattern):
 def matches_anything(case):
     """True for a match statement's case that is taken whatever the
     subject: an irrefutable pattern with no guard. The one place this is
-    decided, for the manifest's paths and the rewriter's added case alike."""
+    decided, for the manifest's paths and code_map's marks alike."""
     return case.guard is None and irrefutable(case.pattern)
 
 
@@ -353,11 +362,19 @@ def _display(items, plain):
 def decisions(source, path):
     """{decision: Condition} for each decision in source, each decision named
     "path:line:col" of where decision_at places it, its col in characters."""
+    return found(source, path)[1]
+
+
+def found(source, path):
+    """(tree, decisions, nodes) of source: its parse; {decision: Condition},
+    as decisions gives it; and {decision: the node of tree it is}, a
+    filter's being its test, so what Python compiled from a node can be
+    traced to its decision."""
     tree = ast.parse(source)
     operators = operator_keywords(source)
     finder = _DecisionFinder(path, Columns(source), if_keywords(source), builtin_blocks(tree), operators)
     finder.visit(tree)
-    return finder.decisions
+    return tree, finder.decisions, finder.nodes
 
 
 def if_keywords(source):

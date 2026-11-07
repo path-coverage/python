@@ -14,12 +14,10 @@ repo, `git log -p 1959981..8217215`):
   inside the arm does not count.
 - `manifest.irrefutable()` and `manifest.matches_anything()` are the
   one answer to "does this case match anything?", for the manifest
-  and the rewriter alike.
-- The rewrite compiles exactly when the source does.
+  and code_map alike.
 - `test/property/` is a seeded generator of small functions. Its
-  tests check that each function behaves the same imported plainly
-  and under path coverage, and that the rewrite compiles exactly when
-  the source does.
+  test checks that each function behaves the same imported plainly
+  and under path coverage.
 - `test/suites.py` defines the suites all, core and property. It is
   used by `bin/test.sh --suite NAME` and `make test_core`.
 
@@ -55,12 +53,9 @@ Current state:
   no guard and an irrefutable pattern.
 - `manifest.py:313` `_pattern_leaf` marks such a pattern's leaf
   "truthy" only.
-- `src/path_coverage/rewriter.py:166` `visit_Match` uses
-  `matches_anything`:
-  - at line 179 (`open_ended`) to decide whether to append the
-    "unmatched" case;
-  - in the guard loop, to leave a non-last catch-all case unguarded,
-    so invalid code stays invalid.
+- `src/path_coverage/code_map.py` `_match_marks` uses
+  `matches_anything` to decide whether to mark where the match is left
+  with no case taken.
 - At base 4013a4b, only a bare `_` or a bare name counted as
   irrefutable.
 
@@ -102,10 +97,8 @@ Options:
     [None, None, None, None].
   - Remove the README text at README.md ~250 ("A last case with no
     guard whose pattern Python finds irrefutable ...").
-  - `rewriter.visit_Match` again appends an unmatched case after
-    `2 | _:`. That is harmless, as the case is unreachable.
-  - `test_rewriter.py::test_7e40b312` passes either way (inferred:
-    only the guard loop matters there).
+  - `code_map._match_marks` again marks where no case is taken after
+    `2 | _:`. That is harmless, as no case is ever left untaken.
 
 Recommendation: A. README.md already says that reporting a gap that
 can never be closed is an error, and Python itself treats these

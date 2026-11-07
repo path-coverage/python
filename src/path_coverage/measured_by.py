@@ -10,6 +10,6 @@ from .version import __version__
 
 
 def versions():
-    """{tool name: its version} of this process, eg {"python": "3.13.5",
-    "path_coverage": "0.0.1"}, the tools a report merges only with."""
+    """{tool name: its version} of this process, eg {"python": "3.14.8",
+    "path_coverage": "0.0.2"}, the tools a report merges only with."""
     return {"python": platform.python_version(), "path_coverage": __version__}

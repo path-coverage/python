@@ -9,7 +9,7 @@ def paths(decisions, decision_paths):
     """{decision: [{"path": [outcome, ...], "count": n}, ...]} for decisions
     ({decision: Condition}, from the manifest), listing every possible path of
     each, in decision_paths.possible order, with the count decision_paths ({decision:
-    {(outcome, ...): n}}, from the recorder) has for it, or 0."""
+    {(outcome, ...): n}}, from Evaluations) has for it, or 0."""
     return {
         decision: [
             {"path": path, "count": decision_paths.get(decision, {}).get(tuple(path), 0)}
@@ -22,7 +22,7 @@ def paths(decisions, decision_paths):
 def operands(decisions, counts):
     """{decision: [counts of operand 0, counts of operand 1, ...]} for decisions
     ({decision: Condition}, from the manifest) and counts ({(decision, index): counts},
-    from the recorder), with zero counts for an operand that never ran, and
+    from Evaluations), with zero counts for an operand that never ran, and
     only naming the one outcome a fixed leaf can have."""
     return {
         decision: [_leaf(counts, decision, index, leaf) for index, leaf in enumerate(condition.leaves())]

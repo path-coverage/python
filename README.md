@@ -320,40 +320,41 @@ Paths combined: 90 / 116 (77.59%)
 
 ## How it works
 
-A meta path finder, placed first on `sys.meta_path`, hands each covered
-module to a loader that parses its source, rewrites its tree, and compiles
-the changed tree, with the recorder bound in the module as
-`__path_coverage__`:
+Nothing is rewritten: the code that runs is the code Python compiled.
+While measuring, `sys.monitoring` offers each module's code as it starts
+(`monitor.py`); a covered module's code objects, nested functions, lambdas
+and generators included, have their own events turned on, and no other
+code has any.
 
-```python
-ok(id) and new(id)
-# compiles as
-__path_coverage__.leave(
-    __path_coverage__.enter("k.py:2:11", 2),
-    __path_coverage__.record("k.py:2:11", 0, ok(id)) and
-    __path_coverage__.record("k.py:2:11", 1, new(id)))
-```
+Before a covered module runs, `code_map.py` maps each of its code objects
+once, from where Python says each instruction came from
+(`co_positions`) and the file's own parse:
 
-`enter` starts a trail for one evaluation of the decision, each `record` notes
-its leaf's outcome on it and returns the leaf unchanged, and `leave` counts
-the trail as a path and returns the decision's value unchanged, so
-short-circuiting and the value of the expression are preserved. Only an
-`if` statement's predicate is wrapped, as its arms may return or raise.
-Each statement of a function that is no decision gets a `reach` call before it,
-counting its run, for its card's row.
+- each branch, left or right, gives the outcome of the leaf whose value
+  its jump tests, and of each leaf holding it whose outcome that decides,
+  eg an `if` whose predicate is an `and`;
+- an instruction marks where a `match` starts trying its cases, where a
+  case's guard or body starts (its pattern matched), and where the match is
+  left with no case taken; where each return or raise starts; and where a
+  write of a decision's value is done, so the value can be read;
+- a value returned or yielded tells the outcome of an `and`/`or`'s last
+  leaf, which no branch tests when the value is used, as in
+  `return a and b`;
+- a function's start counts its entry.
 
-A `match` statement's patterns are not expressions, so they cannot be
-wrapped. Instead the decision is entered just before the statement. Each case
-gets a guard, a `matched` call, which notes that its pattern matched and
-returns the case's own guard, or True when it has none. Unless the last
-case matches anything, a case is added after it. Its guard, an `unmatched`
-call, notes that no case was taken and returns False, so the added case is
-never taken itself.
+`any` and `all` of a generator Python 3.14 runs in the caller: its check
+that `any` is the builtin begins the evaluation, its loop gives each item
+and its end, and its test of each answer ends it when the answer decides.
 
-Each inserted node takes the location of the code it wraps, so line numbers
-in tracebacks, and coverage.py's line and branch figures, are those of the
-file as written. The rewrite happens in memory: the loader neither reads nor
-writes the bytecode cache, and no file on disk changes.
+Each callback looks up what its event means and logs it, by the id of the
+frame it happened in; an event that means nothing is disabled where it
+happened. `evaluations.py` rebuilds each evaluation from the log, in
+order, keeping each frame's evaluation of a decision apart, so a leaf
+that calls the function holding the decision, or a generator resumed in
+another thread, does not mix two evaluations. An evaluation is complete
+when its outcomes are one of the decision's possible paths, as the
+manifest gives them; a leaf whose form fixes its outcome and that Python
+compiles to no test, eg `True` in `a and True`, takes that outcome.
 
 ## Roadmap
 
@@ -373,11 +374,20 @@ Next:
 
 ## Constraints
 
-- CPython 3.13 or later (`pathlib.PurePath.full_match`).
-- A module imported before `start` is not instrumented, and nor is the
+- CPython 3.14 or later (`sys.monitoring`'s `BRANCH_LEFT` and
+  `BRANCH_RIGHT` events, and how 3.14 compiles `any` and `all`).
+- A module that started before `start` is not measured, and nor is the
   script run as `__main__`; all their decisions show as `never reached`.
-- A leaf's truth is taken once more by the recorder, so a leaf whose
-  `__bool__` has side effects sees it called more often.
+- The last leaf of an `and`/`or` whose value is used is tested by no
+  branch. Its outcome is read from the value when the value is returned,
+  yielded, or written to a name; anywhere else, eg a list's item, a call's
+  argument or a comprehension's element, it cannot be seen, so that
+  evaluation's path is not counted, though its earlier leaves' outcomes
+  are. Such a value's truth is taken once more when it is read, so a value
+  whose `__bool__` has side effects sees it called more often.
+- Python 3.14 drops an instruction event at the start of a line once
+  another tool, eg coverage.py, disables its own line event there, so
+  path_coverage keeps a line event wherever it marks an instruction.
 - Counts are kept per process; the at-exit report does not run on
   `os._exit` or an uncaught signal.
 
@@ -397,16 +407,13 @@ Every run measures path_coverage's own `src/` and `test/` with
 path_coverage. The code measured and the tool measuring are the same
 package in one process, so `test/self_coverage.py`, a pytest plugin that
 `bin/test.sh` loads with `-p` before any test module is imported, copies
-`src/path_coverage` into a temporary dir as `path_coverage_self`, renaming
-the names its rewritten code calls (`__path_coverage_self__`,
-`__path_coverage_self_path__`), and starts the copy, with groups `code`
-(`src/**`) and `test` (`test/**`), skipping `test/projects/**` and the
-files the suite leaves out. The tests
-start and stop `path_coverage` as they always do, its finder in front of
-the copy's while they run. The copy's finder sits in front of pytest's
-assertion rewriting, so the copy's loader rewrites a test module's asserts
-as pytest would, after its own rewrite; an assert holding a condition
-shows the inserted calls in its failure message.
+`src/path_coverage` into a temporary dir as `path_coverage_self`, and starts
+the copy, with groups `code` (`src/**`) and `test` (`test/**`), skipping
+`test/projects/**` and the files the suite leaves out. Each claims a
+`sys.monitoring` tool id of its own, so the tests start and stop
+`path_coverage` as they always do. Code that runs inside a monitoring
+callback is never itself monitored, by the copy or by coverage.py, so the
+tests call `monitor`'s callbacks, and measure code, directly.
 
 The report is written to `reports/paths/index.html` (gitignored). A full
 run, with no arguments, ends by printing each group's totals and where the
@@ -434,5 +441,4 @@ runs and measures, and whether its coverage is checked:
 
 `test/property` generates small functions from a seeded grammar and checks
 that each imports under path coverage and returns or raises exactly as it
-does compiled plainly, on every combination of its boolean parameters;
-and that the rewrite compiles exactly when the source does.
+does compiled plainly, on every combination of its boolean parameters.

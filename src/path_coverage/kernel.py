@@ -1,15 +1,12 @@
-"""The kernel: an import hook that instruments each covered module as it is
-imported, and the report at exit. It is never itself instrumented, since an
-instrumented recorder would record itself."""
+"""The kernel: measures each covered module, with sys.monitoring, as it
+starts, changing none of its code, and writes the report at exit."""
 
-import ast
 import atexit
-import importlib.machinery
 import json
-import sys
 from pathlib import Path
 
 from . import (
+    code_map,
     console_summary,
     gaps,
     kinds,
@@ -17,22 +14,19 @@ from . import (
     manifest,
     measured_by,
     method_statements,
+    monitor,
     paths_report,
     post,
     result,
     source_report,
 )
+from .evaluations import Evaluations
 from .merge import merge, merge_paths
-from .recorder import Recorder
-from .rewriter import RECORDER_NAME, rewrite
 
 REPORTERS = ("gaps", "post", "summary")
 
 # The URL of the schema the JSON report follows.
 SCHEMA_URL = "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json"
-
-_recorder = Recorder()
-_finder = None
 
 
 class _Config:
@@ -71,47 +65,19 @@ class _Config:
         return any(map(Path(relative).full_match, self.skip))
 
 
-class _Loader(importlib.machinery.SourceFileLoader):
-    """Loads a covered module from its rewritten source, never from (or into)
-    the bytecode cache, which holds the uninstrumented code."""
+def _adopter(config, evaluations):
+    """What a starting module's code is offered to: a function that
+    measures it, logging on evaluations, when its file is one config
+    covers, parsing the file as it is now; and ignores it otherwise, as
+    for code compiled from text under a name that is no file."""
 
-    def __init__(self, fullname, path, config):
-        """A loader for the covered file at path."""
-        super().__init__(fullname, path)
-        self.config = config
+    def adopt(code):
+        """Measures code, a module's, when config covers its file."""
+        if Path(code.co_filename).is_file() and config.covers(code.co_filename):
+            path = Path(code.co_filename)
+            monitor.measure(code, code_map.Source(path.read_text(), config.relative(path)), evaluations)
 
-    def get_code(self, fullname):
-        """The covered file's code, compiled from its rewritten AST."""
-        path = self.get_filename(fullname)
-        source = self.get_data(path)
-        relative = self.config.relative(path)
-        tree = rewrite(ast.parse(source, path), relative, source=source)
-        return compile(tree, path, "exec", dont_inherit=True)
-
-    def exec_module(self, module):
-        """Runs module with the recorder its rewritten code calls."""
-        module.__dict__[RECORDER_NAME] = _recorder
-        super().exec_module(module)
-
-
-class _Finder:
-    """A meta path finder that hands each covered module to _Loader and
-    leaves every other import to the finders after it."""
-
-    def __init__(self, config):
-        """A finder for the files config covers."""
-        self.config = config
-
-    def find_spec(self, fullname, path, target=None):
-        """The spec of a covered module, with _Loader as its loader; None
-        for any other module."""
-        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
-        if spec is None or not isinstance(spec.loader, importlib.machinery.SourceFileLoader):
-            return None
-        if not self.config.covers(spec.origin):
-            return None
-        spec.loader = _Loader(fullname, spec.origin, self.config)
-        return spec
+    return adopt
 
 
 def _check(setting, names, known):
@@ -142,7 +108,7 @@ def start(
     part=None,
     on_exit=atexit.register,
 ):
-    """Instruments every covered module imported from now on and reports at
+    """Measures every covered module that starts from now on and reports at
     exit, counting afresh: the paths within each decision, and within each
     method. skip lists globs of files not covered though a cover glob
     matches them. report names the reporters: "gaps" (the default) prints the
@@ -155,15 +121,13 @@ def start(
     run clears stale parts now and adds every part to its own report at
     exit. on_exit is atexit.register except in tests, which must not print
     a report as their own process exits."""
-    global _finder, _recorder
     config = _config(root, cover, coverage_dir, report, collector, skip, groups)
-    recorder = _recorder = Recorder()
+    evaluations = Evaluations()
     if part is None:
         for stale in _parts(config):
             stale.unlink()
-    _finder = _Finder(config)
-    sys.meta_path.insert(0, _finder)
-    on_exit(lambda: _report(config, recorder, part))
+    monitor.start(_adopter(config, evaluations))
+    on_exit(lambda: _report(config, evaluations, part))
 
 
 def start_from_env(env, part=None, on_exit=atexit.register):
@@ -206,8 +170,9 @@ def _env_groups(text):
 
 
 def stop():
-    """Stops instrumenting modules imported from now on."""
-    sys.meta_path.remove(_finder)
+    """Stops measuring modules that start from now on; those already
+    started are still measured."""
+    monitor.stop()
 
 
 def render(
@@ -264,15 +229,17 @@ def _same_measuring(path):
     return report
 
 
-def _report(config, recorder, part):
-    """For a part, writes recorder's counts as that part's JSON file. For
-    the main run, adds every part's counts to recorder's, writes the JSON
-    report into coverage_dir, then runs the chosen reporters."""
+def _report(config, evaluations, part):
+    """For a part, writes evaluations' counts, every logged event rebuilt,
+    as that part's JSON file. For the main run, adds every part's counts to
+    evaluations', writes the JSON report into coverage_dir, then runs the
+    chosen reporters."""
+    evaluations.flush()
     files = _files(config)
     decisions = _decisions(files)
-    operands = result.operands(decisions, recorder.counts)
-    paths = result.paths(decisions, recorder.decision_paths)
-    reached = recorder.reached
+    operands = result.operands(decisions, evaluations.counts)
+    paths = result.paths(decisions, evaluations.decision_paths)
+    reached = evaluations.reached
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     if part is not None:
         part_file = config.coverage_dir / f"path_coverage.{part}.json"

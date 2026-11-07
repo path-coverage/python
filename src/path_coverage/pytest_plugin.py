@@ -1,6 +1,6 @@
 """A pytest plugin, loaded with `-p path_coverage.pytest_plugin`, that
 starts path coverage from the PATH_COVERAGE_* variables before any
-conftest is imported, so covered modules a conftest imports are instrumented
+conftest is imported, so covered modules a conftest imports are measured
 too. Without PATH_COVERAGE_COVER it does nothing.
 
 Under pytest-xdist each worker reports as a part named by its worker id, and

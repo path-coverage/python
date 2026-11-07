@@ -1,6 +1,6 @@
 """Generates small Python functions from a grammar of the statements that
 decide a function's paths or leave it, each written in a form path_coverage
-rewrites: and, or, not, conditional expressions, walrus, lambda, f-strings,
+measures: and, or, not, conditional expressions, walrus, lambda, f-strings,
 starred items, chained comparisons, comprehension filters, any and all, if,
 elif and else, and match with guards, wildcards, or-patterns and captures.
 Each leaf is a fresh boolean parameter, so calling a function on every
