@@ -6,8 +6,8 @@ file's own parse:
 
 - a branch, left or right, gives the outcome of the leaf whose value its
   jump tests, and of each leaf holding it whose outcome that decides, eg
-  an if's predicate holding an and; but no outcome of the last operand of
-  an and/or, which last_operands counts, one source per leaf;
+  an if's predicate holding an and; but no outcome of a leaf
+  manifest.wrapped names, which wrapped_leaves counts, one source per leaf;
 - an instruction marks where a match starts trying its cases, where each
   case is reached, where a match is left with no case taken, and where a
   return or raise statement starts, in every copy Python makes of it;
@@ -89,10 +89,8 @@ class Source:
             self.reads.setdefault(node.id, []).append(node)
         self.shapes = {name: Shape(name, decision_paths.possible(condition)) for name, condition in conditions.items()}
         self.leaves = {}
-        self.fixable = {}
         self.blocks = {}
         self.matches = []
-        self.assigned = set()
         for name, condition in conditions.items():
             self._note(self.shapes[name], condition, nodes[name])
         self.scopes = {(getattr(node, "name", SCOPE_NAMES.get(type(node))), _first_line(node)): node for node in ast.walk(tree) if isinstance(node, SCOPES)}
@@ -112,8 +110,7 @@ class Source:
         """Notes the decision of shape, its Condition condition and its node
         node: a block call by its builtin's name; else each of its leaves
         but a match's patterns, which no branch's outcome tells, by where
-        it is written, with the one outcome its form allows, if any, unless
-        last_operands counts it."""
+        it is written."""
         if condition.operator in manifest.BLOCK_CALLS:
             self.blocks[_span(node.func)] = shape
             return
@@ -121,21 +118,9 @@ class Source:
         if isinstance(node, ast.Match):
             self.matches.append((node, shape, _case_leaves(node)))
             patterns = {pattern for pattern, _ in _case_leaves(node)}
-        fixable = self.fixable[shape] = {}
         for index, leaf in enumerate(condition.leaves()):
             if index not in patterns:
-                at = (leaf.line, leaf.col, leaf.end_line, leaf.end_col)
-                self.leaves.setdefault(at, []).append((shape, index))
-                if not manifest.wrapped(self.spans[at], self.parents.get(self.spans[at])):
-                    fixable[index] = leaf.only
-
-    def settle(self):
-        """Once every branch of the file's code is mapped, notes on each
-        Shape, as fixed, its leaves that no branch tests and whose form
-        fixes their outcome, as Python compiles a constant to no test."""
-        for shape, fixable in self.fixable.items():
-            untested = {index: only for index, only in fixable.items() if (shape, index) not in self.assigned}
-            shape.fixed = {index: only == "truthy" for index, only in untested.items() if only}
+                self.leaves.setdefault((leaf.line, leaf.col, leaf.end_line, leaf.end_col), []).append((shape, index))
 
     def producer(self, ins, after):
         """The node whose value instruction ins leaves for a jump to test,
@@ -191,12 +176,11 @@ class Source:
 
     def _up(self, node, truth):
         """Outcome actions of node, given truth its outcome, as a leaf of
-        any decision, unless last_operands counts it, then of each node
+        any decision, unless wrapped_leaves counts it, then of each node
         holding it whose outcome truth decides."""
         while True:
             if not manifest.wrapped(node, self.parents.get(node)):
                 for shape, index in self.leaves.get(_span(node), ()):
-                    self.assigned.add((shape, index))
                     yield Outcome(shape, index, truth)
             truth = _held(self.parents.get(node), node, truth)
             if truth is None:
@@ -229,7 +213,6 @@ def tables(code, source):
     found = {each: Table(entry=source.entries.get((each.co_name, each.co_firstlineno))) for each in codes}
     for each in codes:
         _branches(found[each], listed[each], source)
-    source.settle()
     for each in codes:
         scope = source.scopes.get((each.co_name, each.co_firstlineno), source.tree)
         handlers = {entry.target for entry in dis.Bytecode(each).exception_entries}

@@ -321,9 +321,9 @@ Paths combined: 90 / 116 (77.59%)
 ## How it works
 
 A meta path finder, placed first on `sys.meta_path`, hands each covered
-module to a loader that parses its source and wraps the last operand of
-every `and`/`or` (`last_operands.py`, `manifest.wrapped` deciding which)
-in a call that counts its outcome and returns it unchanged:
+module to a loader that parses its source and wraps each leaf no branch
+tells (`wrapped_leaves.py`, `manifest.wrapped` deciding which) in a call
+that counts its outcome and returns it unchanged:
 
 ```python
 x = p or q
@@ -331,9 +331,13 @@ x = p or q
 x = p or __path_coverage__(1, q)
 ```
 
-No branch tests such an operand when the `and`/`or`'s value is used, as
-here, in an f-string or as a call's argument. Nothing else in the tree
-changes, each inserted node takes the location of the operand it wraps,
+Those leaves are: the last operand of every `and`/`or`, which no branch
+tests when its value is used, as here, in an f-string or as a call's
+argument; a leaf whose form fixes its outcome, eg `0`, which Python
+compiles to no test; and a leaf that is a conditional expression, whose
+literal arm Python compiles to no test, eg `if a if b else True`. Nothing
+else in the tree changes, each inserted node takes the location of the
+leaf it wraps,
 and the loader neither reads nor writes the bytecode cache. Every other
 leaf's outcome comes from `sys.monitoring` (`monitor.py`), one source per
 leaf: the module's code objects, nested functions, lambdas and generators
@@ -364,8 +368,7 @@ order, keeping each frame's evaluation of a decision apart, so a leaf
 that calls the function holding the decision, or a generator resumed in
 another thread, does not mix two evaluations. An evaluation is complete
 when its outcomes are one of the decision's possible paths, as the
-manifest gives them; a leaf whose form fixes its outcome and that Python
-compiles to no test, eg `True` in `if True and a`, takes that outcome.
+manifest gives them.
 
 ## Roadmap
 
@@ -389,9 +392,9 @@ Next:
   `BRANCH_RIGHT` events, and how 3.14 compiles `any` and `all`).
 - A module imported before `start` is not measured, and nor is the
   script run as `__main__`; all their decisions show as `never reached`.
-- The last operand of an `and`/`or` has its truth taken once more by the
-  call around it, so an operand whose `__bool__` has side effects sees it
-  called more often.
+- A wrapped leaf, eg the last operand of an `and`/`or`, has its truth
+  taken once more by the call around it, so a leaf whose `__bool__` has
+  side effects sees it called more often.
 - Python 3.14 drops an instruction event at the start of a line once
   another tool, eg coverage.py, disables its own line event there, so
   path_coverage keeps a line event wherever it marks an instruction.
@@ -451,11 +454,17 @@ runs and measures, and whether its coverage is checked:
 - `property`, the generated tests alone (`bin/test.sh --suite property`),
   whose coverage, of only part of the code, is not checked.
 
-`test/property` generates small functions from a seeded grammar and checks
-that each imports under path coverage and returns or raises exactly as it
-does compiled plainly, on every combination of its boolean parameters;
-that the wrapping of last operands compiles exactly when the source does;
-and, against `test/reference`, the rewrite path_coverage measured with
-before `sys.monitoring` (its 4660fa2 rewriter and recorder, trimmed to what
-the grammar reaches), that each function's paths and statement runs are
-counted exactly as that rewrite counts them.
+`test/property` generates small functions from a seeded grammar, each
+leaf a spy (a call of a parameter, `p0()`), a parameter read as a name, or
+a literal, each statement preceded by `mark(n, t)`. Called with spies on
+every combination of its leaves' values, each logs its leaves and
+statements as they run: the trace is the path the call took. The tests
+check that each function under path coverage returns or raises, and
+traces, exactly as compiled plainly; that the paths of each decision, as
+the oracle (`test/property/oracle.py`) derives them from the traces, and
+the statements' runs, are those path_coverage.json counts; that the
+wrapping of leaves compiles exactly when the source does; and, as a
+second opinion, against `test/reference`, the rewrite path_coverage
+measured with before `sys.monitoring` (its 4660fa2 rewriter and recorder,
+trimmed to what the grammar reaches), that each function's paths and
+statement runs are counted exactly as that rewrite counts them.

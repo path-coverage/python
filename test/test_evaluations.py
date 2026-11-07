@@ -97,27 +97,6 @@ def test_3c9e5104():
     assert ran.counts[("k.py:2:18", 1)] == {"truthy": 0, "falsy": 1}
 
 
-def test_3c9e5106():
-    """Example: return a and True, a true; and return True and a, a false
-    A leaf whose form fixes its outcome, and that no branch tests, takes
-    that outcome when it is reached, first or last."""
-    last = _shape("def f(a):\n    return a and True\n", "k.py:2:13")
-    last.fixed = {1: True}
-    first = _shape("def g(a):\n    return True and a\n", "k.py:2:16")
-    first.fixed = {0: True}
-    ran = _run(
-        Evaluations(),
-        (5, (Outcome(last, 0, True),)),
-        (6, (Outcome(first, 1, False),)),
-    )
-    assert ran.decision_paths == {
-        "k.py:2:13": {(True, True): 1},
-        "k.py:2:16": {(True, False): 1},
-    }
-    assert ran.counts[("k.py:2:13", 1)] == {"truthy": 1, "falsy": 0}
-    assert ran.counts[("k.py:2:16", 0)] == {"truthy": 1, "falsy": 0}
-
-
 SIZE = (
     "def size(order):\n"
     "    match len(order['items']):\n"

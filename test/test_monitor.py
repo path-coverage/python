@@ -2,7 +2,7 @@ import sys
 import threading
 from types import SimpleNamespace
 
-from path_coverage import code_map, last_operands, monitor
+from path_coverage import code_map, monitor, wrapped_leaves
 from path_coverage.evaluations import Evaluations
 
 DISABLE = sys.monitoring.DISABLE
@@ -13,7 +13,7 @@ def _measured(source, name, path="k.py"):
     the file path, is instrumented and has run as a module."""
     evaluations = Evaluations()
     code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled)
-    namespace = {last_operands.NAME: record}
+    namespace = {wrapped_leaves.NAME: record}
     exec(code, namespace)  # noqa: S102 - running the measured code is the point
     return namespace[name], evaluations
 

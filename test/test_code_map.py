@@ -2,7 +2,7 @@ import ast
 import dataclasses
 import dis
 
-from path_coverage import code_map, last_operands
+from path_coverage import code_map, wrapped_leaves
 from path_coverage.evaluations import Evaluations, Shape
 
 
@@ -15,9 +15,9 @@ def _said(action):
 
 def _module(source):
     """source, the file k.py, compiled as path_coverage compiles it, each
-    and/or's last operand wrapped."""
+    leaf manifest.wrapped names wrapped."""
     found = code_map.Source(source, "k.py")
-    tree = last_operands.rewrite(ast.parse(source), found, last_operands.Lasts(Evaluations()))
+    tree = wrapped_leaves.rewrite(ast.parse(source), found, wrapped_leaves.Leaves(Evaluations()))
     return compile(tree, "k.py", "exec")
 
 
@@ -139,15 +139,17 @@ def test_7b20d404():
 
 
 def test_7b20d406():
-    """Example: if True and a, then, after a return, if a and b
-    Python tests True with no branch, so it is fixed true; a, the last
-    operand, is counted by the call around it, so is never fixed. Code
-    after a return is never compiled, so no branch tests its a either,
-    but its form fixes no outcome, so it is not fixed."""
-    text = "def f(a, b):\n    if True and a:\n        return 1\n    return 2\n    if a and b:\n        return 3\n"
-    source = code_map.Source(text, "k.py")
-    code_map.tables(_module(text), source)
-    assert [source.shapes["k.py:2:12"].fixed, source.shapes["k.py:5:9"].fixed] == [{0: True}, {}]
+    """Example: if a if b else True, then if 0 and a
+    The if's predicate, a conditional expression, and 0, a literal, are
+    counted by the calls around them, so their branches give only the
+    outcomes of the leaves holding them: the ternary's test b's, and the
+    second if's predicate's when 0 is false."""
+    f = _tables("def f(a, b):\n    if a if b else True:\n        return 1\n    if 0 and a:\n        return 2\n    return 3\n")["f"]
+    assert _branches(f) == [
+        ([("Outcome", "k.py:2:9", 0, True)], [("Outcome", "k.py:2:9", 0, False)]),
+        ([], [("Outcome", "k.py:4:4", 0, False)]),
+        ([("Outcome", "k.py:4:4", 0, True)], [("Outcome", "k.py:4:4", 0, False)]),
+    ]
 
 
 SIZE = (
@@ -267,15 +269,13 @@ def test_7b20d40c():
     placed at the write, so the read is found by its name: in a
     comprehension, in what reads first after the write, its filters, then
     its element; else inside what the next instruction reads. A pattern's
-    test of None gives nothing; a ternary's arm gives the if its
-    outcome."""
+    test of None gives nothing; the if's predicate, a ternary, is counted
+    by the call around it, so only the ternary's test is a branch."""
     tables = _tables(SHAPES)
     assert _branches(tables["<genexpr>"]) == [([("Outcome", "k.py:2:36", 0, False)], [("Outcome", "k.py:2:36", 0, True)])]
     assert _branches(tables["shapes"]) == [
         ([("Outcome", "k.py:3:18", 0, True)], [("Outcome", "k.py:3:18", 0, False)]),
         ([("Outcome", "k.py:7:10", 0, True)], [("Outcome", "k.py:7:10", 0, False)]),
-        ([("Outcome", "k.py:7:4", 0, True)], [("Outcome", "k.py:7:4", 0, False)]),
-        ([("Outcome", "k.py:7:4", 0, True)], [("Outcome", "k.py:7:4", 0, False)]),
         ([("Outcome", "k.py:10:36", 0, False)], [("Outcome", "k.py:10:36", 0, True)]),
         ([("Outcome", "k.py:11:32", 0, True)], [("Outcome", "k.py:11:32", 0, False)]),
         ([("Outcome", "k.py:12:19", 0, True)], [("Outcome", "k.py:12:19", 0, False)]),

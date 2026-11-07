@@ -1,5 +1,5 @@
 """The kernel: an import hook that measures each covered module as it is
-imported, with sys.monitoring and a call around each and/or's last operand,
+imported, with sys.monitoring and a call around each leaf no branch tells,
 and the report at exit."""
 
 import atexit
@@ -12,7 +12,6 @@ from pathlib import Path
 from . import (
     console_summary,
     gaps,
-    last_operands,
     kinds,
     listed_cards,
     manifest,
@@ -23,6 +22,7 @@ from . import (
     post,
     result,
     source_report,
+    wrapped_leaves,
 )
 from .evaluations import Evaluations
 from .merge import merge, merge_paths
@@ -70,7 +70,7 @@ class _Config:
 
 
 class _Loader(importlib.machinery.SourceFileLoader):
-    """Loads a covered module from its source, each and/or's last operand
+    """Loads a covered module from its source, each leaf no branch tells
     wrapped, its code measured, never from (or into) the bytecode cache,
     which holds the unwrapped code."""
 
@@ -91,7 +91,7 @@ class _Loader(importlib.machinery.SourceFileLoader):
         path = self.get_filename(module.__name__)
         text = importlib.util.decode_source(self.get_data(path))
         code, record = monitor.instrument(text, self.config.relative(path), path, self.evaluations, self.compiled)
-        module.__dict__[last_operands.NAME] = record
+        module.__dict__[wrapped_leaves.NAME] = record
         exec(code, module.__dict__)  # noqa: S102 - running the module is the point
 
 

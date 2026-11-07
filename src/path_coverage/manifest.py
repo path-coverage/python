@@ -313,12 +313,16 @@ def irrefutable(pattern):
 
 
 def wrapped(node, parent):
-    """True for node, held by parent, when it is the last operand of an
-    and/or and no and/or itself: the one leaf whose outcome no branch need
-    test, as the and/or's value may be used, eg x = a or b, so a call
-    around it counts it. The one place this is decided, for the rewrite
-    that wraps it and for code_map, which counts no branch for it."""
-    return isinstance(parent, ast.BoolOp) and parent.values[-1] is node and not isinstance(node, ast.BoolOp)
+    """True for node, a leaf held by parent, whose outcome a call around it
+    counts, as no branch tells it: the last operand of an and/or that is no
+    and/or itself, which no branch tests when the and/or's value is used,
+    eg x = a or b; a leaf whose form fixes its outcome, eg 0, which Python
+    compiles to no test; and a conditional expression, whose literal arm
+    Python compiles to no test, eg if a if b else True. The one place this
+    is decided, for the rewrite that wraps it and for code_map, which
+    counts no branch for it."""
+    last = isinstance(parent, ast.BoolOp) and parent.values[-1] is node and not isinstance(node, ast.BoolOp)
+    return last or _only(node) is not None or isinstance(node, ast.IfExp)
 
 
 def matches_anything(case):

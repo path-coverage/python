@@ -1,6 +1,6 @@
-"""Measures covered code with sys.monitoring and one call around each
-and/or's last operand: instrument wraps those operands, as last_operands
-does, compiles the module, then has code_map map its code objects, nested
+"""Measures covered code with sys.monitoring and one call around each leaf
+whose outcome no branch tells: instrument wraps those leaves, as
+wrapped_leaves does, compiles the module, then has code_map map its code objects, nested
 ones included, once, and turns on their own events. Each event's callback
 looks up what it means and logs it, by the id of the frame it happened in,
 on the Evaluations of the run that measures it, which rebuilds them later;
@@ -11,7 +11,7 @@ measure itself."""
 import ast
 import sys
 
-from . import code_map, last_operands
+from . import code_map, wrapped_leaves
 
 MONITORING = sys.monitoring
 EVENTS = MONITORING.events
@@ -44,15 +44,15 @@ def compiled(tree, path):
 
 def instrument(text, name, path, evaluations, compiler):
     """(code, record) of text, the source of the file path, named name as
-    decisions name it: its parse, each and/or's last operand wrapped in a
-    call of record, compiled by compiler, eg compiled, then measured,
+    decisions name it: its parse, each leaf manifest.wrapped names wrapped
+    in a call of record, compiled by compiler, eg compiled, then measured,
     logging on evaluations. The module must bind record as
-    last_operands.NAME."""
+    wrapped_leaves.NAME."""
     source = code_map.Source(text, name)
-    lasts = last_operands.Lasts(evaluations)
-    code = compiler(last_operands.rewrite(ast.parse(text), source, lasts), path)
+    leaves = wrapped_leaves.Leaves(evaluations)
+    code = compiler(wrapped_leaves.rewrite(ast.parse(text), source, leaves), path)
     measure(code, source, evaluations)
-    return code, lasts.record
+    return code, leaves.record
 
 
 def measure(code, source, evaluations):

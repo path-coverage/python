@@ -15,17 +15,14 @@ LIMIT = 100_000
 
 
 class Shape:
-    """What rebuilding needs of one decision: its name; its possible paths,
-    as decision_paths.possible gives them; and fixed, {leaf index: outcome}
-    of each leaf whose form fixes its outcome and which no branch tests, as
-    Python compiles it to no test at all."""
+    """What rebuilding needs of one decision: its name, and its possible
+    paths, as decision_paths.possible gives them."""
 
     def __init__(self, name, possible):
         """The shape of the decision named name, with possible its paths."""
         self.name = name
         self.possible = frozenset(map(tuple, possible))
         self.size = len(possible[0])
-        self.fixed = {}
         self.following = _following(self.possible)
 
 
@@ -135,13 +132,11 @@ class Evaluations:
 
     def _evaluation(self, frame, shape, index):
         """The outcomes of shape's evaluation under way in frame, taken out
-        of those open; a new evaluation's, its leading fixed leaves
-        noted, when there is none, or its leaf index is already noted."""
+        of those open; a new evaluation's, none noted yet, when there is
+        none, or its leaf index is already noted."""
         outcomes = self._open.pop((frame, shape), None)
         if outcomes is None or outcomes[index] is not None:
             outcomes = [None] * shape.size
-            while (first := shape.following[tuple(outcomes)]) in shape.fixed:
-                self._fix(shape, outcomes, first)
         return outcomes
 
     def _set(self, frame, shape, outcomes, index, outcome):
@@ -152,23 +147,14 @@ class Evaluations:
         self._settle((frame, shape), shape, outcomes)
 
     def _settle(self, key, shape, outcomes):
-        """Counts outcomes' path when it is complete; else notes each fixed
-        leaf it reaches next, and keeps it open under key while it waits
-        for a leaf; an evaluation no possible path agrees with is
-        dropped."""
-        while (path := tuple(outcomes)) not in shape.possible:
-            following = shape.following.get(path)
-            if following not in shape.fixed:
-                if following is not None:
-                    self._open[key] = outcomes
-                return
-            self._fix(shape, outcomes, following)
-        self._taken(shape, path)
-
-    def _fix(self, shape, outcomes, index):
-        """Notes leaf index on outcomes as its fixed outcome, counting it."""
-        outcomes[index] = shape.fixed[index]
-        self._count(shape, index, outcomes[index])
+        """Counts outcomes' path when it is complete; else keeps it open
+        under key while it waits for a leaf; an evaluation no possible path
+        agrees with is dropped."""
+        path = tuple(outcomes)
+        if path in shape.possible:
+            self._taken(shape, path)
+        elif path in shape.following:
+            self._open[key] = outcomes
 
     def _unreached(self, shape, outcomes, patterns):
         """Notes each of patterns not yet matched on outcomes as not."""
