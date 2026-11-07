@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "path_coverage"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Path coverage for Python: the paths taken within each decision, and within each method"
 requires-python = ">=3.13"
 readme = "README.md"
@@ -15,6 +15,9 @@ test = ["pytest", "pytest-cov", "coverage>=7.15,<8"]
 
 [project.scripts]
 path_coverage_collector = "path_coverage.collector:command"
+
+[tool.setuptools.dynamic]
+version = { attr = "path_coverage.version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

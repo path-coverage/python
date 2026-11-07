@@ -1,4 +1,5 @@
 import json
+import platform
 import sys
 from pathlib import Path
 
@@ -73,6 +74,10 @@ def test_e5a70c01(tmp_path, capsys):
         },
         "paths": {decision: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
         "kinds": ["block", "case", "chain", "choice"],
+        "measured_by": {
+            "python": platform.python_version(),
+            "path_coverage": path_coverage.__version__,
+        },
         "reached": {"src/single_and_trails.py:4:0": 2},
         "totals": {"alone": [2, 3], "combined": [2, 3]},
         "cards": {
@@ -421,6 +426,55 @@ def test_e5a70c12(tmp_path, capsys):
     with pytest.raises(ValueError) as refused:
         path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
     assert str(refused.value) == f"{run} measured other kinds"
+    assert not (tmp_path / "merged").exists()
+
+
+def test_e5a70c1a(tmp_path, capsys):
+    """Example: the JSON report of a run names, under "measured_by", each
+    tool that parsed or measured it and its version: Python and
+    path_coverage. A change to either can list a file's decisions or paths
+    differently, so their runs are never merged."""
+    project = PROJECTS / "single_and"
+    exits = []
+    path_coverage.start(
+        root=project, cover=["src/**/*.py"], coverage_dir=tmp_path, on_exit=exits.append
+    )
+    try:
+        _imported(project, "single_and_trails").is_new("T2", {})
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    capsys.readouterr()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert report["measured_by"] == {
+        "python": platform.python_version(),
+        "path_coverage": path_coverage.__version__,
+    }
+
+
+def test_e5a70c1b(tmp_path, capsys):
+    """Example: render of a run whose JSON names Python 3.12.0 under
+    "measured_by", as another Python would write it
+    Another version of a tool can find a file's decisions or paths
+    differently, so render refuses it, naming the run, rather than credit
+    one path's count to another, and writes no report."""
+    project = PROJECTS / "single_and"
+    settings = {"root": project, "cover": ["src/**/*.py"]}
+    exits = []
+    path_coverage.start(**settings, coverage_dir=tmp_path / "run", on_exit=exits.append)
+    try:
+        _imported(project, "single_and_trails").is_new("T2", {})
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    capsys.readouterr()
+    run = tmp_path / "run" / "path_coverage.json"
+    report = json.loads(run.read_text())
+    report["measured_by"] = {"python": "3.12.0", "path_coverage": "0.0.1"}
+    run.write_text(json.dumps(report))
+    with pytest.raises(ValueError) as refused:
+        path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
+    assert str(refused.value) == f"{run} was measured by other tools"
     assert not (tmp_path / "merged").exists()
 
 

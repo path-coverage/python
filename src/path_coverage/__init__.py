@@ -2,5 +2,6 @@
 within each method, through its decisions."""
 
 from .kernel import render, start, start_from_env, stop
+from .version import __version__
 
-__all__ = ["render", "start", "start_from_env", "stop"]
+__all__ = ["__version__", "render", "start", "start_from_env", "stop"]

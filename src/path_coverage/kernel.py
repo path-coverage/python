@@ -15,6 +15,7 @@ from . import (
     kinds,
     listed_cards,
     manifest,
+    measured_by,
     method_statements,
     paths_report,
     post,
@@ -223,11 +224,12 @@ def render(
     saved), their counts added together, parsing each covered file afresh,
     so the report shows only the gaps that every run left, and each
     statement's reaches added up. It writes the merged JSON report into
-    coverage_dir too. A run that measured other kinds is refused, as it
-    lists a decision's paths differently."""
+    coverage_dir too. A run that measured other kinds, or was measured by
+    other tools or versions of them, is refused, as it can list a
+    decision's paths differently."""
     config = _config(root, cover, coverage_dir, report, None, skip, groups)
     files = _files(config)
-    reports = [_same_kinds(path) for path in runs]
+    reports = [_same_measuring(path) for path in runs]
     decisions = _decisions(files)
     operands = merge([result.operands(decisions, {}), *(each["decisions"] for each in reports)])
     paths = merge_paths([result.paths(decisions, {}), *(_taken(each) for each in reports)])
@@ -249,12 +251,16 @@ def _reached(runs):
     return total
 
 
-def _same_kinds(path):
+def _same_measuring(path):
     """The JSON report at path, when it measured the kinds this version
-    measures; ValueError naming path when not."""
+    measures and was measured by the same tools at the same versions;
+    ValueError naming path and which differs when not, as either can list
+    a decision's paths differently."""
     report = json.loads(Path(path).read_text())
     if report.get("kinds") != kinds.names():
         raise ValueError(f"{path} measured other kinds")
+    if report.get("measured_by") != measured_by.versions():
+        raise ValueError(f"{path} was measured by other tools")
     return report
 
 
@@ -337,14 +343,16 @@ def _taken(report):
 def _report_json(operands, paths, files, reached):
     """The JSON report: {"$schema": its schema's URL, "decisions": operands,
     "paths": {decision: {"leaves": [...], "taken": [...]}}, "kinds": [name,
-    ...]}, the kinds naming what was measured, and "reached": {name: runs}
-    when reached is known, even empty, as a run that reached no statement
-    says so."""
+    ...], "measured_by": {tool: version}}, the kinds naming what was
+    measured and measured_by the tools that measured it, and "reached":
+    {name: runs} when reached is known, even empty, as a run that reached
+    no statement says so."""
     report = {
         "$schema": SCHEMA_URL,
         "decisions": operands,
         "paths": paths_report.of(paths, files),
         "kinds": kinds.names(),
+        "measured_by": measured_by.versions(),
     }
     if reached is not None:
         report["reached"] = reached
