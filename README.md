@@ -123,6 +123,25 @@ are. A file matching any `skip` glob is neither instrumented nor reported.
 A group's globs are relative to `root`, as cover globs are; a file can be
 in several groups, or in none.
 
+A cover glob can end in `::` and a qualname, the names of a def or class
+from the module down joined by dots, eg `src/orders.py::Order.ship`. Only
+that scope is measured: code outside it runs as plain Python, with no
+events and nothing wrapped, and the totals, gaps, summary and pages count
+only its decisions and cards. A def nested in the scope is part of it,
+as are both defs of a property's getter and setter, which share a name.
+Every file the glob matches must hold the qualname, or `start` refuses
+the cover, naming the file and the first name missing:
+
+    cover 'src/orders.py::Order.post': class Order in src/orders.py has no post
+
+`PATH_COVERAGE_COVER` takes the same form, eg
+`PATH_COVERAGE_COVER=src/orders.py::Order.ship`.
+
+`start` refuses any setting that would quietly measure less than asked,
+including a stray comma in a `PATH_COVERAGE_*` list:
+
+    cover 'src/orders.py:Order.ship' matches no file
+
 With pytest, from the environment alone:
 
 ```sh

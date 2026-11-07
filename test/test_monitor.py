@@ -2,7 +2,7 @@ import sys
 import threading
 from types import SimpleNamespace
 
-from path_coverage import code_map, monitor, wrapped_leaves
+from path_coverage import code_map, monitor, scopes, wrapped_leaves
 from path_coverage.evaluations import Evaluations
 
 DISABLE = sys.monitoring.DISABLE
@@ -12,7 +12,7 @@ def _measured(source, name, path="k.py"):
     """(the function named name, the Evaluations measuring it) once source,
     the file path, is instrumented and has run as a module."""
     evaluations = Evaluations()
-    code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled)
+    code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled, scopes.whole(source))
     namespace = {wrapped_leaves.NAME: record}
     exec(code, namespace)  # noqa: S102 - running the measured code is the point
     return namespace[name], evaluations
@@ -352,7 +352,7 @@ def _codes(source):
     k.py, once measured, logging on the Evaluations returned third."""
     module = compile(source, "k.py", "exec")
     evaluations = Evaluations()
-    monitor.measure(module, code_map.Source(source, "k.py"), evaluations)
+    monitor.measure(module, code_map.Source(source, "k.py", scopes.whole(source)), evaluations)
     functions = {const.co_name: const for const in module.co_consts if hasattr(const, "co_code")}
     return module, functions, evaluations
 
@@ -365,7 +365,7 @@ def test_d86a1f11():
     where its jump does not is ignored."""
     _, functions, evaluations = _codes(MEMBER)
     member, fee = functions["member"], functions["fee"]
-    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py"))
+    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py", scopes.whole(MEMBER)))
     member_table, fee_table = (table for code, table in tables.items() if code.co_name in functions)
     jump = min(member_table.left)
     goes_to, _ = member_table.right[jump]
@@ -393,7 +393,7 @@ def test_d86a1f14():
     anywhere else."""
     _, functions, _ = _codes(MEMBER)
     fee = functions["fee"]
-    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py"))
+    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py", scopes.whole(MEMBER)))
     mark = min(next(table for code, table in tables.items() if code.co_name == "fee").marks)
     assert [monitor._kept(fee, mark), monitor._kept(fee, 0), monitor._line_started(fee, 6)] == [None, DISABLE, DISABLE]
 

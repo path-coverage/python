@@ -1,7 +1,7 @@
 import ast
 import sys
 
-from path_coverage import code_map, wrapped_leaves
+from path_coverage import code_map, scopes, wrapped_leaves
 from path_coverage.evaluations import Evaluations, Outcome
 
 SOURCE = (
@@ -15,7 +15,7 @@ SOURCE = (
 def _rewritten(source):
     """(the rewritten tree, the Leaves it records into, the Source) of
     source, the file k.py."""
-    found = code_map.Source(source, "k.py")
+    found = code_map.Source(source, "k.py", scopes.whole(source))
     leaves = wrapped_leaves.Leaves(Evaluations())
     return wrapped_leaves.rewrite(ast.parse(source), found, leaves), leaves, found
 

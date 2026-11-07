@@ -5,7 +5,7 @@ from function_grammar import FunctionGrammar
 from reference.reference_recorder import Recorder
 from reference.reference_rewriter import RECORDER_NAME, rewrite
 
-from path_coverage import monitor, wrapped_leaves
+from path_coverage import monitor, scopes, wrapped_leaves
 from path_coverage.evaluations import Evaluations
 
 SEEDS = range(1, 121)
@@ -35,7 +35,7 @@ def _monitored(path, source, grammar):
     measured by path_coverage and run on every combination, as its
     Evaluations count them."""
     evaluations = Evaluations()
-    code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled)
+    code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled, scopes.whole(source))
     namespace = {wrapped_leaves.NAME: record}
     exec(code, namespace)  # noqa: S102 - running generated code is the point
     _run_all(namespace, grammar)

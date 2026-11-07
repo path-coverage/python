@@ -3,7 +3,7 @@ import random
 
 from function_grammar import FunctionGrammar
 
-from path_coverage import code_map, wrapped_leaves
+from path_coverage import code_map, scopes, wrapped_leaves
 from path_coverage.evaluations import Evaluations
 
 SEEDS = range(1, 41)
@@ -32,7 +32,7 @@ def _wrapped_compiles(source):
     """True when path_coverage's wrapping of source's leaves compiles;
     False when source does not parse, or its wrapping does not compile."""
     try:
-        found = code_map.Source(source, "k.py")
+        found = code_map.Source(source, "k.py", scopes.whole(source))
         tree = wrapped_leaves.rewrite(ast.parse(source), found, wrapped_leaves.Leaves(Evaluations()))
         compile(tree, "k.py", "exec", dont_inherit=True)
         return True

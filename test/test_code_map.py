@@ -2,7 +2,7 @@ import ast
 import dataclasses
 import dis
 
-from path_coverage import code_map, wrapped_leaves
+from path_coverage import code_map, scopes, wrapped_leaves
 from path_coverage.evaluations import Evaluations, Shape
 
 
@@ -16,7 +16,7 @@ def _said(action):
 def _module(source):
     """source, the file k.py, compiled as path_coverage compiles it, each
     leaf manifest.wrapped names wrapped."""
-    found = code_map.Source(source, "k.py")
+    found = code_map.Source(source, "k.py", scopes.whole(source))
     tree = wrapped_leaves.rewrite(ast.parse(source), found, wrapped_leaves.Leaves(Evaluations()))
     return compile(tree, "k.py", "exec")
 
@@ -25,7 +25,7 @@ def _tables(source):
     """{code name: Table} for each code object compiled from source, a file
     k.py, as code_map maps them."""
     module = _module(source)
-    return {code.co_name: table for code, table in code_map.tables(module, code_map.Source(source, "k.py")).items()}
+    return {code.co_name: table for code, table in code_map.tables(module, code_map.Source(source, "k.py", scopes.whole(source))).items()}
 
 
 def _branches(table):
@@ -77,7 +77,7 @@ def test_7b20d402():
     take."""
     module = _module(FEE)
     fee = module.co_consts[0]
-    tables = code_map.tables(module, code_map.Source(FEE, "k.py"))
+    tables = code_map.tables(module, code_map.Source(FEE, "k.py", scopes.whole(FEE)))
     jump = next(ins for ins in dis.get_instructions(fee) if ins.opname.startswith("POP_JUMP"))
     assert tables[fee].right[jump.offset][0] == jump.argval
 
@@ -233,7 +233,7 @@ def test_7b20d40b():
     POP_ITER after its END_FOR, so each is found there as well."""
     module = compile(LATE, "k.py", "exec")
     late = module.co_consts[0]
-    table = code_map.tables(module, code_map.Source(LATE, "k.py"))[late]
+    table = code_map.tables(module, code_map.Source(LATE, "k.py", scopes.whole(LATE)))[late]
     listed = list(dis.get_instructions(late))
     after = {ins.offset: listed[at + 1] for at, ins in enumerate(listed[:-1])}
     jumps = [offset for offset in sorted(table.left) if after[offset].opname == "NOT_TAKEN"]

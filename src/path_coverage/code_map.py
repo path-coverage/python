@@ -21,7 +21,7 @@ import ast
 import dis
 from dataclasses import dataclass, field
 
-from . import decision_paths, manifest, method_statements
+from . import decision_paths, manifest, method_statements, scopes
 from .columns import Columns
 from .evaluations import Answer, Begin, End, Item, Matched, Opened, Outcome, Reach, Shape, Unmatched
 
@@ -76,9 +76,13 @@ class Source:
     a branch can test, the block calls, the matches and the statements
     whose runs are counted."""
 
-    def __init__(self, source, path):
-        """source, the text of the file path, as decisions name it."""
+    def __init__(self, source, path, kept):
+        """source, the text of the file path, as decisions name it, kept
+        the line numbers measured, eg scopes.whole(source): a decision on
+        no kept line has no shape and no leaf, so none is wrapped."""
+        self.kept = kept
         tree, conditions, nodes = manifest.found(source, path)
+        conditions = {name: condition for name, condition in conditions.items() if scopes.line(name) in kept}
         columns = Columns(source)
         reaches = set(method_statements.reaches(source, path))
         self.tree = tree

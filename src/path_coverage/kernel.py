@@ -21,7 +21,9 @@ from . import (
     paths_report,
     post,
     result,
+    scopes,
     source_report,
+    summary,
     wrapped_leaves,
 )
 from .evaluations import Evaluations
@@ -58,15 +60,15 @@ class _Config:
         """True when path is under root and matches a cover glob and no
         skip glob."""
         try:
-            relative = Path(self.relative(path))
+            relative = self.relative(path)
         except ValueError:
             return False
-        return any(map(relative.full_match, self.cover)) and not self.skips(relative)
+        return summary.matches(relative, map(scopes.glob, self.cover)) and not self.skips(relative)
 
     def skips(self, relative):
         """True when relative, a path relative to root, matches a skip
         glob."""
-        return any(map(Path(relative).full_match, self.skip))
+        return summary.matches(relative, self.skip)
 
 
 class _Loader(importlib.machinery.SourceFileLoader):
@@ -90,7 +92,8 @@ class _Loader(importlib.machinery.SourceFileLoader):
         make bound in it."""
         path = self.get_filename(module.__name__)
         text = importlib.util.decode_source(self.get_data(path))
-        code, record = monitor.instrument(text, self.config.relative(path), path, self.evaluations, self.compiled)
+        name = self.config.relative(path)
+        code, record = monitor.instrument(text, name, path, self.evaluations, self.compiled, self.config.lines[name])
         module.__dict__[wrapped_leaves.NAME] = record
         exec(code, module.__dict__)  # noqa: S102 - running the module is the point
 
@@ -132,7 +135,11 @@ def _config(root, cover, coverage_dir, report, collector, skip, groups=None):
     _check("reporter", report, REPORTERS)
     if "post" in report and not collector:
         raise ValueError("the post reporter needs a collector url")
-    return _Config(root, cover, coverage_dir, report, collector, skip, groups)
+    config = _Config(root, cover, coverage_dir, report, collector, skip, groups)
+    _check_lists(config)
+    config.lines = _lines(config)
+    _check_filters(config)
+    return config
 
 
 def start(
@@ -187,25 +194,64 @@ def start_from_env(env, part=None, on_exit=atexit.register):
     collector = env.get("PATH_COVERAGE_COLLECTOR")
     start(
         root=env["PATH_COVERAGE_ROOT"],
-        cover=env["PATH_COVERAGE_COVER"].split(","),
-        skip=[glob for glob in env.get("PATH_COVERAGE_SKIP", "").split(",") if glob],
+        cover=_env_list(env, "PATH_COVERAGE_COVER", []),
+        skip=_env_list(env, "PATH_COVERAGE_SKIP", []),
         coverage_dir=env["PATH_COVERAGE_DIR"],
-        report=env.get("PATH_COVERAGE_REPORT", "post" if collector else "gaps").split(","),
+        report=_env_list(env, "PATH_COVERAGE_REPORT", ["post" if collector else "gaps"]),
         collector=collector,
-        groups=_env_groups(env.get("PATH_COVERAGE_GROUPS", "")),
+        groups=_env_groups(_env_list(env, "PATH_COVERAGE_GROUPS", [])),
         part=part,
         on_exit=on_exit,
     )
     return True
 
 
-def _env_groups(text):
-    """{name: [glob, ...]} of text, comma-separated name:glob pairs, eg
-    "code:src/**/*.py,test:test/**/*.py"; a name given twice gets both
-    globs."""
+def _env_list(env, variable, absent):
+    """The comma-separated entries of env's variable, absent when it is
+    not set; ValueError naming the variable and its value when an entry
+    is empty, eg from a stray or trailing comma, or the variable set to
+    '', as dropping it would quietly change what is measured."""
+    if variable not in env:
+        return absent
+    value = env[variable]
+    entries = value.split(",")
+    _refuse_empty(variable, entries, value)
+    return entries
+
+
+def _refuse_empty(label, entries, shown):
+    """ValueError "label has an empty entry: shown" when any of entries is
+    '', so an empty entry is never quietly dropped or globbed."""
+    if "" in entries:
+        raise ValueError(f"{label} has an empty entry: {shown!r}")
+
+
+def _check_lists(config):
+    """Refuses an empty cover, an empty entry in cover, skip or a group's
+    globs, a group with no globs and a group with no name, naming it: each
+    would quietly measure or total less than asked."""
+    if not config.cover:
+        raise ValueError("cover is empty, so nothing would be measured")
+    _refuse_empty("cover", config.cover, config.cover)
+    _refuse_empty("skip", config.skip, config.skip)
+    if "" in config.groups:
+        raise ValueError(f"a group has an empty name: {config.groups!r}")
+    for name, globs in config.groups.items():
+        if not globs:
+            raise ValueError(f"group {name!r} has no globs")
+        _refuse_empty(f"group {name!r}", globs, globs)
+
+
+def _env_groups(entries):
+    """{name: [glob, ...]} of entries, PATH_COVERAGE_GROUPS's name:glob
+    pairs, eg ["code:src/**/*.py", "test:test/**/*.py"]; a name given
+    twice gets both globs. An entry without both a name and a glob is
+    refused, naming it."""
     groups = {}
-    for pair in filter(None, text.split(",")):
-        name, glob = pair.split(":", 1)
+    for entry in entries:
+        name, colon, glob = entry.partition(":")
+        if not (name and colon and glob):
+            raise ValueError(f"PATH_COVERAGE_GROUPS entry {entry!r} is not name:glob")
         groups.setdefault(name, []).append(glob)
     return groups
 
@@ -296,41 +342,118 @@ def _report(config, evaluations, part):
 def _finish(config, files, operands, paths, reached):
     """Writes the JSON report, with its totals, and the source report into
     coverage_dir, then runs the chosen reporters. reached is each
-    statement's runs, None when not known."""
+    statement's runs, None when not known. A cover's ::qualname keeps
+    only the decisions and cards inside its scope."""
     cards = method_statements.cards(files, paths, reached)
-    report = _report_json(operands, paths, files, reached)
-    report["totals"] = console_summary.totals(paths, cards)
+    listed = listed_cards.of(files, operands, paths, reached)
+    kept_operands = _kept(operands, config.lines)
+    kept_paths = _kept(paths, config.lines)
+    kept_cards = _kept(cards, config.lines)
+    kept_reached = None if reached is None else _kept(reached, config.lines)
+    report = _report_json(kept_operands, kept_paths, files, kept_reached)
+    report["totals"] = console_summary.totals(kept_paths, kept_cards)
     if config.groups:
-        report["totals"]["groups"] = console_summary.group_totals(paths, cards, config.groups)
-    report["cards"] = listed_cards.of(files, operands, paths, reached)
-    report["tree"] = listed_cards.tree(files, operands)
+        report["totals"]["groups"] = console_summary.group_totals(kept_paths, kept_cards, config.groups)
+    report["cards"] = _kept(listed, config.lines)
+    report["tree"] = _carded(listed_cards.tree(files, operands), report["cards"])
     text = json.dumps(report, indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)
-    source = source_report.of(files, paths, report["cards"], config.groups)
+    kept_files = {path: (source, _kept(decisions, config.lines)) for path, (source, decisions) in files.items()}
+    source = source_report.of(kept_files, paths, report["cards"], config.groups)
     (config.coverage_dir / "path_coverage.source.json").write_text(json.dumps(source))
     if "gaps" in config.report:
-        for line in gaps.lines(operands, paths, paths_report.texts(files)):
+        for line in gaps.lines(kept_operands, kept_paths, paths_report.texts(files)):
             print(line)
     if "summary" in config.report:
-        for line in console_summary.lines(paths, cards, config.groups):
+        for line in console_summary.lines(kept_paths, kept_cards, config.groups):
             print(line)
     if "post" in config.report:
         post.deliver(text, config.collector)
 
 
+def _matched(config, glob):
+    """{path relative to root: path} of each file glob matches, in path
+    order, skipped or not."""
+    matched = {}
+    for path in sorted(config.root.glob(glob)):
+        matched[config.relative(path)] = path
+    return matched
+
+
+def _found(config, glob):
+    """{path relative to root: source} of each file glob matches and no
+    skip glob does, in path order."""
+    found = {}
+    for relative, path in _matched(config, glob).items():
+        if not config.skips(relative):
+            found[relative] = path.read_text()
+    return found
+
+
+def _check_filters(config):
+    """Refuses a skip glob matching no file a cover glob matches, and a
+    group glob matching no covered file, naming it: a filter that matches
+    nothing can only be a mistake."""
+    matched = {}
+    for cover in config.cover:
+        matched.update(_matched(config, scopes.glob(cover)))
+    for skip in config.skip:
+        if not _any_matches(matched, skip):
+            raise ValueError(f"skip {skip!r} matches no covered file")
+    for name, globs in config.groups.items():
+        for glob in globs:
+            if not _any_matches(config.lines, glob):
+                raise ValueError(f"group {name!r}: {glob!r} matches no covered file")
+
+
+def _any_matches(paths, glob):
+    """True when any of paths, relative to root, matches glob, as
+    summary.matches decides it."""
+    for path in paths:
+        if summary.matches(path, [glob]):
+            return True
+    return False
+
+
 def _files(config):
     """{path relative to root: (source, decisions)} for every covered file,
-    whether or not the run imported it, and none a skip glob matches."""
+    whether or not the run imported it, all its decisions, as _finish
+    keeps only those on config.lines."""
     files = {}
-    for glob in config.cover:
-        for path in sorted(config.root.glob(glob)):
-            relative = config.relative(path)
-            if config.skips(relative):
-                continue
-            source = path.read_text()
+    for cover in config.cover:
+        for relative, source in _found(config, scopes.glob(cover)).items():
             files[relative] = (source, manifest.decisions(source, relative))
     return files
+
+
+def _lines(config):
+    """{path relative to root: line numbers} the lines measured in each
+    covered file, as scopes.parse's kept gives them for its cover. Two
+    covers of one file keep the lines of both. A cover whose glob
+    matches no file is refused, naming it, as it would measure nothing."""
+    lines = {}
+    for cover in config.cover:
+        glob, kept = scopes.parse(cover)
+        found = _found(config, glob)
+        if not found:
+            raise ValueError(f"cover {cover!r} matches no file")
+        for relative, source in found.items():
+            lines[relative] = lines.get(relative, frozenset()) | kept(source, relative)
+    return lines
+
+
+def _carded(tree, cards):
+    """tree, as listed_cards.tree gives it, {path: {"line:col": rows}},
+    with only the cards in cards, {"path:line:col": card}, so the tree
+    and the cards always list the same cards."""
+    return {path: {at: rows for at, rows in nested.items() if f"{path}:{at}" in cards} for path, nested in tree.items()}
+
+
+def _kept(named, lines):
+    """named, {"path:line:col": value}, with only the entries scopes.keeps
+    keeps for lines."""
+    return {name: value for name, value in named.items() if scopes.keeps(name, lines)}
 
 
 def _decisions(files):

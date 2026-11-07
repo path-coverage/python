@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import path_coverage
+from path_coverage import wrapped_leaves
 
 PROJECTS = Path(__file__).parent / "projects"
 
@@ -512,7 +513,7 @@ def test_e5a70c0e(tmp_path, capsys):
             {
                 "PATH_COVERAGE_ROOT": str(project),
                 "PATH_COVERAGE_COVER": "src/*.py",
-                "PATH_COVERAGE_SKIP": "lib/*.py,src/*_policies.py",
+                "PATH_COVERAGE_SKIP": "src/*_rules.py,src/*_policies.py",
                 "PATH_COVERAGE_DIR": str(tmp_path),
             },
             on_exit=on_exit,
@@ -618,9 +619,8 @@ def test_e5a70c10(tmp_path, capsys):
 
 
 def test_e5a70c11(tmp_path):
-    """Example: groups shop and none, fee called once
-    Each group's JSON totals have a combined total too.
-    none matches no file, so its totals are all 0 / 0."""
+    """Example: group shop, fee called once
+    Each group's JSON totals have a combined total too."""
     project = PROJECTS / "two_decisions"
     exits = []
     path_coverage.start(
@@ -628,7 +628,7 @@ def test_e5a70c11(tmp_path):
         cover=["src/*.py"],
         coverage_dir=tmp_path,
         report=[],
-        groups={"shop": ["src/*_shop.py"], "none": ["lib/*.py"]},
+        groups={"shop": ["src/*_shop.py"]},
         on_exit=exits.append,
     )
     try:
@@ -639,7 +639,6 @@ def test_e5a70c11(tmp_path):
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["totals"]["groups"] == {
         "shop": {"alone": [2, 4], "combined": [3, 5]},
-        "none": {"alone": [0, 0], "combined": [0, 0]},
     }
 
 
@@ -695,6 +694,466 @@ def test_e5a70c19(tmp_path):
         ["ready", "waiting"],
         [{"path": [True, True], "count": 1}, {"path": [True, False], "count": 1}],
     ]
+
+
+ORDERS = (
+    "class Order:\n"
+    "    def ship(self, express, paid):\n"
+    "        def carrier(heavy):\n"
+    '            return "truck" if heavy else "van"\n'
+    "        if express and paid:\n"
+    "            return carrier(True)\n"
+    "        return carrier(False)\n"
+    "\n"
+    "    def total(self, items, vip):\n"
+    "        return sum(items) if vip or items else 0\n"
+    "\n"
+    "\n"
+    "def refund(order, late):\n"
+    "    return 10 if late else 0\n"
+)
+
+
+def _ordered(tmp_path, report, groups={}, cover="src/orders.py::Order.ship"):
+    """The JSON report of a run covering cover, a glob of ORDERS's file
+    src/orders.py, with the reporters report and the groups groups, after
+    one call each of ship (an express paid order, so carrier's truck),
+    total and refund."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(ORDERS)
+    exits = []
+    path_coverage.start(
+        root=tmp_path,
+        cover=[cover],
+        coverage_dir=tmp_path,
+        report=report,
+        groups=groups,
+        on_exit=exits.append,
+    )
+    try:
+        orders = _imported(tmp_path, "orders")
+        assert orders.Order().ship(True, True) == "truck"
+        assert orders.Order().total([1], False) == 1
+        assert orders.refund(None, True) == 10
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    return json.loads((tmp_path / "path_coverage.json").read_text())
+
+
+def test_e5a70c1c(tmp_path):
+    """Example: cover src/orders.py::Order.ship of ORDERS, an Order whose
+    ship holds a nested carrier, beside Order.total and a function refund
+    A cover glob's ::qualname keeps only the decisions and cards inside
+    that scope, a def nested in it included: ship's if and and, and
+    carrier's conditional. total's and refund's are not measured, nor
+    counted in the totals: 3 of ship's 7 paths alone, 4 of its 9
+    combined, as a file holding ship alone gives. The JSON's paths, the
+    statements reached, and the cards in its tree, are of that scope
+    only."""
+    report = _ordered(tmp_path, [])
+    kept = ["src/orders.py:4:27", "src/orders.py:5:19", "src/orders.py:5:8"]
+    assert [
+        sorted(report["decisions"]),
+        sorted(report["paths"]),
+        sorted(report["cards"]),
+        report["totals"],
+        report["reached"],
+        sorted(report["tree"]["src/orders.py"]),
+    ] == [
+        kept,
+        kept,
+        ["src/orders.py:2:4", "src/orders.py:3:8"],
+        {"alone": [3, 7], "combined": [4, 9]},
+        {"src/orders.py:2:4": 1, "src/orders.py:3:8": 1, "src/orders.py:6:12": 1},
+        ["2:4", "3:8"],
+    ]
+
+
+def test_e5a70c23(tmp_path, capsys):
+    """Example: cover src/orders.py::Order.ship of ORDERS
+    The gaps printed are ship's and carrier's only."""
+    _ordered(tmp_path, ["gaps"])
+    assert capsys.readouterr().out == (
+        "src/orders.py:4:27 path never taken: `heavy` false\n"
+        "src/orders.py:5:8 path never taken: `express and paid` false\n"
+        "src/orders.py:5:19 path never taken: `express` true, `paid` false\n"
+        "src/orders.py:5:19 path never taken: `express` false\n"
+    )
+
+
+def test_e5a70c24(tmp_path, capsys):
+    """Example: cover src/orders.py::Order.ship of ORDERS
+    The summary's totals count ship's and carrier's paths only."""
+    _ordered(tmp_path, ["summary"])
+    assert capsys.readouterr().out == ("Paths alone: 3 / 7 (42.86%)\nPaths combined: 4 / 9 (44.44%)\n")
+
+
+def test_e5a70c25(tmp_path):
+    """Example: cover src/orders.py::Order.ship of ORDERS, in a group
+    orders of src/orders.py
+    A group's totals count only the scope's paths: ship's and carrier's,
+    3 of 7 alone, 4 of 9 combined, as the run's own totals do."""
+    report = _ordered(tmp_path, [], {"orders": ["src/orders.py"]})
+    assert report["totals"]["groups"] == {"orders": {"alone": [3, 7], "combined": [4, 9]}}
+
+
+@pytest.mark.parametrize(
+    ("cover", "refusal"),
+    [
+        ("src/orders.py:Order.ship", "cover 'src/orders.py:Order.ship' matches no file"),
+        ("Order.total", "cover 'Order.total' matches no file"),
+        (" src/orders.py::Order.ship", "cover ' src/orders.py::Order.ship' matches no file"),
+        ("src/orders.py::", "cover 'src/orders.py::': '' is not a qualname"),
+        ("src/orders.py::Order::ship", "cover 'src/orders.py::Order::ship': 'Order::ship' is not a qualname"),
+        ("src/orders.py::Order.", "cover 'src/orders.py::Order.': 'Order.' is not a qualname"),
+        ("src/orders.py:: Order.ship", "cover 'src/orders.py:: Order.ship': ' Order.ship' is not a qualname"),
+    ],
+)
+def test_e5a70c28(tmp_path, cover, refusal):
+    """Example: covers mistyped beside src/orders.py of ORDERS
+    A cover whose glob matches no file, or whose qualname is not names
+    joined by dots, is refused at start, naming it, never measuring less
+    than asked: one colon, a stray name after a comma, a space, an empty
+    or ::-joined or dot-ended qualname."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(ORDERS)
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=tmp_path,
+            cover=["src/orders.py::Order.ship", cover],
+            coverage_dir=tmp_path,
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == refusal
+
+
+@pytest.mark.parametrize("skip", ["src/migrations/*.py", "lib/*.py"])
+def test_e5a70c29(tmp_path, skip):
+    """Example: cover src/*.py of ORDERS in src/orders.py, beside
+    lib/rates.py, with a skip of a missing dir or of an uncovered file
+    A skip glob matching no covered file is refused at start, naming it,
+    as it skips nothing, so is a mistake."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(ORDERS)
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "rates.py").write_text("VAT = 20\n")
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=tmp_path,
+            cover=["src/*.py"],
+            skip=[skip],
+            coverage_dir=tmp_path,
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == f"skip {skip!r} matches no covered file"
+
+
+def test_e5a70c2a(tmp_path):
+    """Example: cover src/*.py of ORDERS in src/orders.py, with a group
+    billing of src/billing/*.py
+    A group glob matching no covered file is refused at start, naming the
+    group and the glob, as the group could only ever total 0 / 0."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(ORDERS)
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=tmp_path,
+            cover=["src/*.py"],
+            groups={"billing": ["src/billing/*.py"]},
+            coverage_dir=tmp_path,
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == "group 'billing': 'src/billing/*.py' matches no covered file"
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "refusal"),
+    [
+        ("PATH_COVERAGE_COVER", "src/*.py,", "PATH_COVERAGE_COVER has an empty entry: 'src/*.py,'"),
+        ("PATH_COVERAGE_SKIP", "src/*_policies.py,", "PATH_COVERAGE_SKIP has an empty entry: 'src/*_policies.py,'"),
+        ("PATH_COVERAGE_SKIP", "", "PATH_COVERAGE_SKIP has an empty entry: ''"),
+        ("PATH_COVERAGE_REPORT", "gaps,,summary", "PATH_COVERAGE_REPORT has an empty entry: 'gaps,,summary'"),
+        (
+            "PATH_COVERAGE_GROUPS",
+            "flows:src/*_flows.py,",
+            "PATH_COVERAGE_GROUPS has an empty entry: 'flows:src/*_flows.py,'",
+        ),
+        ("PATH_COVERAGE_GROUPS", "flows", "PATH_COVERAGE_GROUPS entry 'flows' is not name:glob"),
+        ("PATH_COVERAGE_GROUPS", "flows:", "PATH_COVERAGE_GROUPS entry 'flows:' is not name:glob"),
+        ("PATH_COVERAGE_GROUPS", ":src/*_flows.py", "PATH_COVERAGE_GROUPS entry ':src/*_flows.py' is not name:glob"),
+    ],
+)
+def test_e5a70c2b(tmp_path, variable, value, refusal):
+    """Example: PATH_COVERAGE_* lists mistyped, over never_imported
+    A list variable set with an empty entry (a stray or trailing comma,
+    or set to ''), or a group entry that is not a name and a glob, is
+    refused at start, naming the variable and its value; never dropped."""
+    env = {
+        "PATH_COVERAGE_ROOT": str(PROJECTS / "never_imported"),
+        "PATH_COVERAGE_COVER": "src/*.py",
+        "PATH_COVERAGE_DIR": str(tmp_path),
+    }
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start_from_env({**env, variable: value}, on_exit=lambda report: None)
+    assert str(refused.value) == refusal
+
+
+@pytest.mark.parametrize(
+    ("settings", "refusal"),
+    [
+        ({"cover": []}, "cover is empty, so nothing would be measured"),
+        ({"cover": ["src/*.py", ""]}, "cover has an empty entry: ['src/*.py', '']"),
+        ({"skip": [""]}, "skip has an empty entry: ['']"),
+        ({"groups": {"flows": []}}, "group 'flows' has no globs"),
+        ({"groups": {"": ["src/*_flows.py"]}}, "a group has an empty name: {'': ['src/*_flows.py']}"),
+        ({"groups": {"flows": [""]}}, "group 'flows' has an empty entry: ['']"),
+    ],
+)
+def test_e5a70c2c(tmp_path, settings, refusal):
+    """Example: start's lists mistyped, over never_imported
+    An empty cover, an empty entry in cover, skip or a group's globs, a
+    group with no globs, or a group with no name, is refused at start,
+    naming it, as each would quietly measure or total less than asked."""
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            **{
+                "root": PROJECTS / "never_imported",
+                "cover": ["src/*.py"],
+                "coverage_dir": tmp_path,
+                "on_exit": lambda report: None,
+                **settings,
+            }
+        )
+    assert str(refused.value) == refusal
+
+
+def test_e5a70c27(tmp_path):
+    """Example: cover src/orders.py::Order.ship of ORDERS
+    The source report shows all 14 of the file's lines, but only the
+    scope's decisions, ship's and carrier's, so total's and refund's
+    show as plain code."""
+    _ordered(tmp_path, [])
+    source = json.loads((tmp_path / "path_coverage.source.json").read_text())
+    file = source["files"]["src/orders.py"]
+    assert [len(file["lines"]), sorted(file["decisions"])] == [
+        14,
+        ["src/orders.py:4:27", "src/orders.py:5:19", "src/orders.py:5:8"],
+    ]
+
+
+def test_e5a70c26(tmp_path):
+    """Example: render, covering src/orders.py::Order.ship, the JSON
+    report of a run that covered ORDERS whole, calling ship, total and
+    refund
+    The merged report keeps only the scope: its decisions, totals and
+    reached are ship's and carrier's, though the run counted total's and
+    refund's too."""
+    _ordered(tmp_path, [], cover="src/orders.py")
+    path_coverage.render(
+        root=tmp_path,
+        cover=["src/orders.py::Order.ship"],
+        coverage_dir=tmp_path / "merged",
+        runs=[tmp_path / "path_coverage.json"],
+        report=[],
+    )
+    merged = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())
+    assert [sorted(merged["decisions"]), merged["totals"], merged["reached"]] == [
+        ["src/orders.py:4:27", "src/orders.py:5:19", "src/orders.py:5:8"],
+        {"alone": [3, 7], "combined": [4, 9]},
+        {"src/orders.py:2:4": 1, "src/orders.py:3:8": 1, "src/orders.py:6:12": 1},
+    ]
+
+
+def test_e5a70c1d(tmp_path):
+    """Example: cover src/orders.py::Order.size, where size is a property
+    whose getter and setter are both defs named size
+    A ::qualname naming two defs keeps both: the getter's conditional and
+    the setter's and, and their two cards. total's are not measured."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(
+        "class Order:\n"
+        "    @property\n"
+        "    def size(self):\n"
+        '        return "big" if self.big else "small"\n'
+        "\n"
+        "    @size.setter\n"
+        "    def size(self, weight):\n"
+        "        self.big = weight > 5 and weight < 50\n"
+        "\n"
+        "    def total(self, items, vip):\n"
+        "        return sum(items) if vip or items else 0\n"
+    )
+    exits = []
+    path_coverage.start(
+        root=tmp_path,
+        cover=["src/orders.py::Order.size"],
+        coverage_dir=tmp_path,
+        report=[],
+        on_exit=exits.append,
+    )
+    try:
+        order = _imported(tmp_path, "orders").Order()
+        order.size = 10
+        assert [order.size, order.total([1], False)] == ["big", 1]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert [sorted(report["decisions"]), sorted(report["cards"])] == [
+        ["src/orders.py:4:21", "src/orders.py:8:30"],
+        ["src/orders.py:3:4", "src/orders.py:7:4"],
+    ]
+
+
+def test_e5a70c1e(tmp_path):
+    """A cover whose ::qualname names nothing in a file its glob matches is
+    refused at start, naming the cover, the deepest def or class found,
+    and the name it lacks, eg Order.post in an orders.py whose Order has
+    only ship."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(
+        "class Order:\n"
+        "    def ship(self, express):\n"
+        '        return "air" if express else "sea"\n'
+    )
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=tmp_path,
+            cover=["src/orders.py::Order.post"],
+            coverage_dir=tmp_path,
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == ("cover 'src/orders.py::Order.post': class Order in src/orders.py has no post")
+
+
+def test_e5a70c1f(tmp_path):
+    """A cover whose glob matches two files, only one of them holding
+    its ::qualname, is refused at start, naming the cover, the file
+    without it and the name it lacks, eg Order.ship over orders.py and
+    refunds.py."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(
+        "class Order:\n"
+        "    def ship(self, express):\n"
+        '        return "air" if express else "sea"\n'
+    )
+    (tmp_path / "src" / "refunds.py").write_text(
+        "def refund(order, late):\n"
+        "    return 10 if late else 0\n"
+    )
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=tmp_path,
+            cover=["src/*.py::Order.ship"],
+            coverage_dir=tmp_path,
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == "cover 'src/*.py::Order.ship': src/refunds.py has no Order"
+
+
+def test_e5a70c20(tmp_path):
+    """A cover whose ::qualname goes deeper than a file's defs is refused
+    at start, naming the deepest def found and the name it lacks, eg
+    Order.ship.helper when ship holds no helper."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(
+        "class Order:\n"
+        "    def ship(self, express):\n"
+        '        return "air" if express else "sea"\n'
+    )
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=tmp_path,
+            cover=["src/orders.py::Order.ship.helper"],
+            coverage_dir=tmp_path,
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == (
+        "cover 'src/orders.py::Order.ship.helper': def Order.ship in src/orders.py has no helper"
+    )
+
+
+def test_e5a70c21(tmp_path):
+    """Example: cover src/text.py::newline, where newline is defined once
+    in an if and once in its else
+    A ::qualname names defs inside an if as it names any other: both
+    newlines' conditionals are kept, and their cards; width's are not."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "text.py").write_text(
+        "import sys\n"
+        "\n"
+        'if sys.platform == "win32":\n'
+        "    def newline(raw):\n"
+        '        return "\\n" if raw else "\\r\\n"\n'
+        "else:\n"
+        "    def newline(raw):\n"
+        '        return "\\r" if raw else "\\n"\n'
+        "\n"
+        "\n"
+        "def width(text, wide):\n"
+        "    return 2 if wide else 1\n"
+    )
+    exits = []
+    path_coverage.start(
+        root=tmp_path,
+        cover=["src/text.py::newline"],
+        coverage_dir=tmp_path,
+        report=[],
+        on_exit=exits.append,
+    )
+    try:
+        text = _imported(tmp_path, "text")
+        assert [text.newline(False), text.width("ab", False)] == ["\n", 1]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert [sorted(report["decisions"]), sorted(report["cards"])] == [
+        ["src/text.py:5:20", "src/text.py:8:20"],
+        ["src/text.py:4:4", "src/text.py:7:4"],
+    ]
+
+
+def test_e5a70c22(tmp_path):
+    """Example: cover src/orders.py::Order.carrier, carrier a @property,
+    beside Order.total
+    Code outside a ::qualname's scope runs as plain Python: total gets no
+    monitoring events and no leaf of it is wrapped. carrier, decorated,
+    gets both, its scope starting at its decorator."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "orders.py").write_text(
+        "class Order:\n"
+        "    express = True\n"
+        "    paid = True\n"
+        "\n"
+        "    @property\n"
+        "    def carrier(self):\n"
+        "        return self.express and self.paid\n"
+        "\n"
+        "    def total(self, items, vip):\n"
+        "        return sum(items) if vip or items else 0\n"
+    )
+    path_coverage.start(
+        root=tmp_path,
+        cover=["src/orders.py::Order.carrier"],
+        coverage_dir=tmp_path,
+        report=[],
+        on_exit=lambda report: None,
+    )
+    try:
+        order = _imported(tmp_path, "orders").Order
+        tool = path_coverage.monitor._tool
+        carrier, total = order.carrier.fget.__code__, order.total.__code__
+        seen = [
+            sys.monitoring.get_local_events(tool, carrier) != 0,
+            sys.monitoring.get_local_events(tool, total),
+            wrapped_leaves.NAME in carrier.co_names,
+            wrapped_leaves.NAME in total.co_names,
+        ]
+    finally:
+        path_coverage.stop()
+    assert seen == [True, 0, True, False]
 
 
 def test_e5a70c13(tmp_path):

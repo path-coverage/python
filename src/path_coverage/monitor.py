@@ -42,13 +42,14 @@ def compiled(tree, path):
     return compile(tree, path, "exec", dont_inherit=True)
 
 
-def instrument(text, name, path, evaluations, compiler):
+def instrument(text, name, path, evaluations, compiler, kept):
     """(code, record) of text, the source of the file path, named name as
-    decisions name it: its parse, each leaf manifest.wrapped names wrapped
-    in a call of record, compiled by compiler, eg compiled, then measured,
-    logging on evaluations. The module must bind record as
-    wrapped_leaves.NAME."""
-    source = code_map.Source(text, name)
+    decisions name it: its parse, each leaf manifest.wrapped names on a
+    kept line wrapped in a call of record, compiled by compiler, eg
+    compiled, then measured where kept, the line numbers measured, eg
+    scopes.whole(text), logging on evaluations. The module must bind
+    record as wrapped_leaves.NAME."""
+    source = code_map.Source(text, name, kept)
     leaves = wrapped_leaves.Leaves(evaluations)
     code = compiler(wrapped_leaves.rewrite(ast.parse(text), source, leaves), path)
     measure(code, source, evaluations)
@@ -56,9 +57,14 @@ def instrument(text, name, path, evaluations, compiler):
 
 
 def measure(code, source, evaluations):
-    """Measures code, a module's code, and every code object nested in it,
-    source its Source, logging what each event means on evaluations."""
+    """Measures code, a module's code, and every code object nested in it
+    that starts on a line source, its Source, keeps, the module's own
+    code on line 0, its top level, logging what each event means on
+    evaluations. Code on no kept line gets no events, so runs as plain
+    Python."""
     for each, table in code_map.tables(code, source).items():
+        if (0 if each is code else each.co_firstlineno) not in source.kept:
+            continue
         key = id(each)
         _codes.append(each)
         _left.update({(key, offset): (evaluations, actions) for offset, actions in table.left.items()})
