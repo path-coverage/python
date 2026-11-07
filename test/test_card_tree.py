@@ -13,6 +13,19 @@ def _places(source):
     return {key: tuple(place[name] for name in keys) for key, place in rows.items()}
 
 
+def test_5be7c008():
+    """Example: refund, an if of not (a and b) whose then arm returns.
+    The and is a row in the if's one leaf, but only part of it, as the not
+    is outside it, so what it gives the leaf is not known: it gives
+    nothing, though it names the leaf it is in."""
+    source = "def refund(a, b):\n    if not (a and b):\n        return 1\n"
+    assert _places(source) == {
+        "2:4": TOP,
+        "2:14": ("2:4", None, [0, 1], 0, None),
+        "3:8": ("2:4", "then", [0], None, None),
+    }
+
+
 def test_5be7c001():
     """Example: pick, an if of a and b holding an if of b, each arm of
     which returns.

@@ -140,13 +140,31 @@ def test_5c1e9a0f():
     assert decisions("def k(flags):\n    return any(flags)\n", "k.py") == {}
 
 
+def test_5c1e9a13():
+    """Example: a match whose last case is case 2 | _:, case _ as size:,
+    case (n as size): or case [n]:
+    An or-pattern with an irrefutable alternative, and an as-pattern of an
+    irrefutable pattern, match anything, as Python itself decides, so each
+    such case's pattern leaf can only be true; [n] can fail to match."""
+
+    def last_pattern(case):
+        """The only of the last case's pattern leaf of a match whose last
+        case is case."""
+        source = f"def size_of(order):\n    match order:\n        case 1:\n            return 1\n        {case}\n            return 2\n"
+        return decisions(source, "k.py")["k.py:2:4"].operands[-1].only
+
+    cases = ["case 2 | _:", "case _ as size:", "case (n as size):", "case [n]:"]
+    assert [last_pattern(case) for case in cases] == ["truthy", "truthy", "truthy", None]
+
+
 def test_5c1e9a07():
     """Example: if order.big and order.new: ... else: ...
     An if statement is a decision, named at its keyword, col 4.
     Its predicate, the whole `and`, is one leaf of it, and the `and` is a
     decision of its own, named at its keyword, so each row of a card is one
     decision.
-    Its then and else arms are plain, as they are statements."""
+    Its then and else arms are plain, as they are statements, and each
+    leaves the function by return."""
     source = (
         "def fee(order):\n"
         "    if order.big and order.new:\n"
@@ -156,8 +174,9 @@ def test_5c1e9a07():
     )
     both = Condition(operator="and", operands=(Leaf(2, 7, 2, 16), Leaf(2, 21, 2, 30)))
     predicate = Leaf(2, 7, 2, 30)
+    arms = (Arm("then", leaving="return"), Arm("else", leaving="return"))
     assert decisions(source, "k.py") == {
-        "k.py:2:4": Condition(operator="if", operands=(predicate, Arm("then"), Arm("else"))),
+        "k.py:2:4": Condition(operator="if", operands=(predicate, *arms)),
         "k.py:2:17": both,
     }
 
@@ -166,7 +185,9 @@ def test_5c1e9a08():
     """Example: if order.big: ... elif order.new: ...
     The elif is a decision of its own, named at its keyword.
     The if's else arm is the whole elif.
-    The elif has no else, so it has a then arm only."""
+    The elif has no else, so it has a then arm only.
+    Each then arm leaves by return; the if's else arm, the elif, leaves
+    only when its predicate holds, so does not leave."""
     source = (
         "def fee(order):\n"
         "    if order.big:\n"
@@ -175,11 +196,10 @@ def test_5c1e9a08():
         "        return 6\n"
         "    return 7\n"
     )
+    returns = Arm("then", leaving="return")
     assert decisions(source, "k.py") == {
-        "k.py:2:4": Condition(
-            operator="if", operands=(Leaf(2, 7, 2, 16), Arm("then"), Arm("else"))
-        ),
-        "k.py:4:4": Condition(operator="if", operands=(Leaf(4, 9, 4, 18), Arm("then"))),
+        "k.py:2:4": Condition(operator="if", operands=(Leaf(2, 7, 2, 16), returns, Arm("else"))),
+        "k.py:4:4": Condition(operator="if", operands=(Leaf(4, 9, 4, 18), returns)),
     }
 
 

@@ -1,20 +1,15 @@
 """The number of ways one call can go through each card, folded over its
 tree, as card_tree places its rows. Each row gives a pair, (ways that go on,
-ways that leave the function): a return or a raise leaves, and so does each
-path of a decision taking an arm that returns or raises. Rows one after another
-multiply, but only the ways that go on reach the next row; a decision adds up
-its paths, each with the rows it runs on that path one after another; and a
-row that is the whole of a leaf counts only those of its paths that give the
-leaf the outcome the path has, so no impossible way is counted where gives
-knows it."""
-
-import re
+ways that leave the function): a return or a raise leaves, so each path of a
+decision taking an arm that holds one leaves there, as that row runs on it.
+Rows one after another multiply, but only the ways that go on reach the next
+row; a decision adds up its paths, each with the rows it runs on that path one
+after another; and a row that is the whole of a leaf counts only those of its
+paths that give the leaf the outcome the path has, so no impossible way is
+counted where gives knows it."""
 
 from . import card_tree, method_statements, decision_paths
 from .manifest import decisions as find_decisions
-
-# An arm's code, or a row's top, that leaves the function.
-LEAVES = re.compile(r"(return|raise)\b")
 
 
 def of(source, path):
@@ -32,7 +27,7 @@ def card(source, decisions, rows):
     """The ways through a card of rows in source, decisions being {decision:
     Condition}."""
     places = card_tree.nested(source, decisions, rows)
-    return sum(_Fold(source, rows, places, decisions).total())
+    return sum(_Fold(rows, places, decisions).total())
 
 
 def sequence(pairs):
@@ -53,10 +48,9 @@ def added(pairs):
 class _Fold:
     """The fold of a card's rows, placed as places has them."""
 
-    def __init__(self, source, rows, places, decisions):
-        """rows a card's, in source, placed as card_tree places them, each
-        decision row's Condition among decisions."""
-        self.source = source
+    def __init__(self, rows, places, decisions):
+        """rows a card's, placed as card_tree places them, each decision
+        row's Condition among decisions."""
         self.rows = {card_tree.key_of(row): row for row in rows}
         self.places = places
         self.decisions = decisions
@@ -81,14 +75,12 @@ class _Fold:
     def pair_on(self, key, path):
         """The pair of the decision row keyed key on its path at index path: the
         rows it runs on that path, one after another, each given that path's
-        outcomes; every way of it leaving when the path takes an arm that
-        leaves."""
+        outcomes, a return or raise among them leaving there."""
         outcomes = self._possible(self.rows[key].decision)[path]
         running = [
             child for child in self.children.get(key, []) if path in self.places[child]["on"]
         ]
-        pair = sequence([self._child_pair(child, outcomes) for child in running])
-        return (0, sum(pair)) if path in self._leaving(key) else pair
+        return sequence([self._child_pair(child, outcomes) for child in running])
 
     def _child_pair(self, child, outcomes):
         """The pair of the row keyed child, its parent's path having
@@ -106,17 +98,6 @@ class _Fold:
                 for path, given in enumerate(gives)
             ]
         )
-
-    def _leaving(self, key):
-        """The indices of the paths of the decision row keyed key that take an
-        arm whose code returns or raises."""
-        decision = self.decisions[self.rows[key].decision]
-        return [
-            path
-            for region in card_tree.regions_of(self.source, key, decision)
-            if region.arm and LEAVES.match(card_tree.text_of(self.source, region))
-            for path in region.on
-        ]
 
     def _possible(self, decision):
         """The possible paths of the decision named decision."""

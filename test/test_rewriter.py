@@ -21,6 +21,42 @@ def _can_attest(recorder):
     return namespace["can_attest"]
 
 
+def _compiles(code):
+    """True when Python compiles code, source or a tree; False when it
+    refuses it with a SyntaxError."""
+    try:
+        compile(code, "k.py", "exec", dont_inherit=True)
+        return True
+    except SyntaxError:
+        return False
+
+
+def test_7e40b312():
+    """Example: matches whose last case, or an earlier one, is case _:,
+    case size:, case 2 | _: or case _ if big:
+    A case that matches anything and has no guard must be the last, or
+    Python refuses the code. The rewrite compiles exactly when the source
+    does: adding guards never makes such code valid, nor does it break a
+    match that is valid."""
+
+    def size_of(first, second):
+        """The source of a function matching order with cases first, then
+        second, each returning."""
+        return f"def size_of(order, big):\n    match order:\n        {first}\n            return 1\n        {second}\n            return 2\n"
+
+    sources = [
+        size_of("case 1:", "case _:"),
+        size_of("case 1:", "case 2 | _:"),
+        size_of("case _ if big:", "case 1:"),
+        size_of("case _:", "case 1:"),
+        size_of("case size:", "case 1:"),
+        size_of("case 2 | _:", "case 1:"),
+    ]
+    expected = [_compiles(source) for source in sources]
+    actual = [_compiles(rewrite(ast.parse(source), "k.py", source=source)) for source in sources]
+    assert [expected, actual] == [[True, True, True, False, False, False]] * 2
+
+
 def test_7e40b301():
     """Example: user.active and (user.admin or flow.public), with active,
     not admin, and a public flow

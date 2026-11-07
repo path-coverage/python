@@ -1,4 +1,4 @@
-.PHONY: test demo
+.PHONY: test test_core demo
 
 space := $(subst ,, )
 
@@ -8,6 +8,11 @@ space := $(subst ,, )
 #   eg make test tids='5be7c0 e2b45f01'
 test:
 	bash ${PWD}/bin/test.sh $(if $(tids),-k "$(subst $(space), or ,$(strip $(tids)))")
+
+# Runs every test but the generated ones in test/property, and checks the
+# result: whether the hand-written tests alone reach full coverage.
+test_core:
+	bash ${PWD}/bin/test.sh --suite core
 
 # Build the demo report into site/, the same site GitHub Pages
 # publishes, and open it in a browser where one can be found.

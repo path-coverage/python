@@ -247,8 +247,10 @@ A `match` statement is a decision, named at its keyword. Each case's pattern is
 a leaf, true when it matches. A guard is reached only when its pattern
 matches, and its leaves follow the pattern's. A later case is reached only
 when no earlier case was taken. When no case is taken, every pattern
-reached is false, and that is a path of its own. A last case of `_`, or of
-a bare name, matches anything, so no path ends with nothing matched.
+reached is false, and that is a path of its own. A last case with no guard
+whose pattern Python finds irrefutable, eg `_`, a bare name, `_ as size` or
+`2 | _`, matches anything, so no path ends with nothing matched; a guarded
+one, eg `case _ if big:`, does not.
 
 ```python
 match order.kind:
@@ -398,7 +400,8 @@ package in one process, so `test/self_coverage.py`, a pytest plugin that
 `src/path_coverage` into a temporary dir as `path_coverage_self`, renaming
 the names its rewritten code calls (`__path_coverage_self__`,
 `__path_coverage_self_path__`), and starts the copy, with groups `code`
-(`src/**`) and `test` (`test/**`), skipping `test/projects/**`. The tests
+(`src/**`) and `test` (`test/**`), skipping `test/projects/**` and the
+files the suite leaves out. The tests
 start and stop `path_coverage` as they always do, its finder in front of
 the copy's while they run. The copy's finder sits in front of pytest's
 assertion rewriting, so the copy's loader rewrites a test module's asserts
@@ -418,3 +421,18 @@ test:
   Paths combined: 829 / 839 (98.81%)
 Path coverage report: .../path_coverage/reports/paths/index.html
 ```
+
+`test/suites.py` is the one place that says which test files a suite
+runs and measures, and whether its coverage is checked:
+
+- `all`, every test (`make test`, the default).
+- `core`, every test but the generated ones in `test/property`, neither
+  run nor measured (`make test_core`): whether the hand-written tests
+  alone reach full coverage.
+- `property`, the generated tests alone (`bin/test.sh --suite property`),
+  whose coverage, of only part of the code, is not checked.
+
+`test/property` generates small functions from a seeded grammar and checks
+that each imports under path coverage and returns or raises exactly as it
+does compiled plainly, on every combination of its boolean parameters;
+and that the rewrite compiles exactly when the source does.

@@ -7,6 +7,7 @@ import io
 import tokenize
 from dataclasses import dataclass, field
 
+from . import leaving
 from .columns import Columns
 
 OPERATORS = {ast.And: "and", ast.Or: "or"}
@@ -41,6 +42,9 @@ class Arm:
     # at; an if statement's arm's statements, first to last; None for an
     # arm of no code, eg a filter's.
     extent: tuple | None = field(default=None, compare=False)
+    # How an if statement's arm leaves the function, as leaving.of gives
+    # it, "return" or "raise"; None for an arm that does not leave it.
+    leaving: str | None = None
 
     def leaves(self):
         """The leaves of the condition the arm holds; none for a plain arm."""
@@ -162,8 +166,8 @@ class _DecisionFinder(ast.NodeVisitor):
         decision = self.columns.name(self.path, node.lineno, node.col_offset)
         self.decisions[decision] = None
         predicate = self._leaf(node.test)
-        then = Arm("then", extent=_statements_extent(node.body))
-        arms = (then, Arm("else", extent=_statements_extent(node.orelse))) if node.orelse else (then,)
+        then = _statement_arm("then", node.body)
+        arms = (then, _statement_arm("else", node.orelse)) if node.orelse else (then,)
         self.decisions[decision] = Condition("if", (predicate, *arms), _extent(node))
         for statement in node.body + node.orelse:
             self.visit(statement)
@@ -234,6 +238,12 @@ def _statements_extent(statements):
     return (first.lineno, first.col_offset, last.end_lineno, last.end_col_offset)
 
 
+def _statement_arm(kind, statements):
+    """The plain Arm of an if statement whose code is statements, with
+    how they leave the function, as leaving.of decides it."""
+    return Arm(kind, extent=_statements_extent(statements), leaving=leaving.of(statements))
+
+
 def block_generator(node, builtins):
     """The generator of node when node is a call of one of builtins whose
     one argument is a generator, eg any(o.late for o in orders); else None,
@@ -277,16 +287,37 @@ def _leaf(node):
     return Leaf(node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
 
 
+def irrefutable(pattern):
+    """True for a case's pattern that matches any subject, as Python itself
+    decides it: _ or a bare capture name, an as-pattern of an irrefutable
+    pattern, eg _ as size, or an or-pattern with an irrefutable
+    alternative, eg 2 | _."""
+    match pattern:
+        case ast.MatchAs(pattern=None):
+            return True
+        case ast.MatchAs(pattern=inner):
+            return irrefutable(inner)
+        case ast.MatchOr(patterns=alternatives):
+            return any(map(irrefutable, alternatives))
+        case _:
+            return False
+
+
+def matches_anything(case):
+    """True for a match statement's case that is taken whatever the
+    subject: an irrefutable pattern with no guard. The one place this is
+    decided, for the manifest's paths and the rewriter's added case alike."""
+    return case.guard is None and irrefutable(case.pattern)
+
+
 def _pattern_leaf(pattern):
-    """The Leaf of a case's pattern, only truthy for one that matches
-    anything: _ or a bare capture name."""
-    irrefutable = isinstance(pattern, ast.MatchAs) and pattern.pattern is None
+    """The Leaf of a case's pattern, only truthy for an irrefutable one."""
     return Leaf(
         pattern.lineno,
         pattern.col_offset,
         pattern.end_lineno,
         pattern.end_col_offset,
-        "truthy" if irrefutable else None,
+        "truthy" if irrefutable(pattern) else None,
     )
 
 

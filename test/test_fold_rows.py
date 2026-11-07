@@ -1,4 +1,7 @@
 from path_coverage import fold_rows
+from path_coverage.decision_paths import possible
+from path_coverage.decision_tree import tree_of
+from path_coverage.manifest import decisions
 
 
 def _shown(row):
@@ -76,8 +79,8 @@ def test_a91f2b03():
         "cells": [None, None],
         "operands": [
             {"text": "order.big", "cells": [False, True]},
-            {"arm": "then", "text": "pack(order)", "cells": [False, True], "body": None},
-            {"arm": "else", "text": "drop(order)", "cells": [True, False], "body": None},
+            {"arm": "then", "text": "pack(order)", "leaving": None, "cells": [False, True], "body": None},
+            {"arm": "else", "text": "drop(order)", "leaving": None, "cells": [True, False], "body": None},
         ],
     }
     rows = fold_rows.rows(tree)
@@ -96,11 +99,30 @@ def test_a91f2b04():
         "cells": [None, None],
         "operands": [
             {"text": "order.free", "cells": [True, False], "at": [5, 7, 5, 17]},
-            {"arm": "then", "text": "return 0", "cells": [True, False], "body": None, "at": [6, 8, 6, 16]},
+            {"arm": "then", "text": "return 0", "leaving": "return", "cells": [True, False], "body": None, "at": [6, 8, 6, 16]},
         ],
     }
     [leaves] = _of_kind(fold_rows.rows(tree), "leaves")
     assert [_shown(leaves), leaves["at"], leaves["branch"]] == [["return", "leaves", ""], [6, 8, 6, 16], "lhs"]
+
+
+def test_a91f2b08():
+    """Example: if order.pickup: total -= 2; return total, its then
+    taken once, its predicate false once
+    Its arm returns after a first statement, so its fold still has a row
+    for it, return, marking the path that left there, the true one, blank
+    on the other."""
+    source = (
+        "def total_of(order, total):\n"
+        "    if order.pickup:\n"
+        "        total -= 2\n"
+        "        return total\n"
+        "    return total\n"
+    )
+    [condition] = decisions(source, "k.py").values()
+    paths = [{"path": path, "count": 1} for path in possible(condition)]
+    rows = fold_rows.rows(tree_of(source, condition, paths))
+    assert [_shown(row) for row in _of_kind(rows, "leaves")] == [["return", "leaves", ""]]
 
 
 def test_a91f2b07():
@@ -113,8 +135,8 @@ def test_a91f2b07():
         "cells": [None, None],
         "operands": [
             {"text": "u.active", "cells": [True, False]},
-            {"arm": "then", "text": None, "cells": [True, False], "body": None},
-            {"arm": "else", "text": None, "cells": [False, True], "body": None},
+            {"arm": "then", "text": None, "leaving": None, "cells": [True, False], "body": None},
+            {"arm": "else", "text": None, "leaving": None, "cells": [False, True], "body": None},
         ],
     }
     assert [(row["kind"], *_shown(row)) for row in fold_rows.rows(tree)[1:]] == [
@@ -132,8 +154,8 @@ def test_a91f2b05():
         "cells": [None, None],
         "operands": [
             {"text": "order.big", "cells": [True, False]},
-            {"arm": "then", "text": '"big"', "cells": [True, False], "body": None},
-            {"arm": "else", "text": '"small"', "cells": [False, True], "body": None},
+            {"arm": "then", "text": '"big"', "leaving": None, "cells": [True, False], "body": None},
+            {"arm": "else", "text": '"small"', "leaving": None, "cells": [False, True], "body": None},
         ],
     }
     assert [_shown(row) for row in _of_kind(fold_rows.rows(tree), "arm")] == [

@@ -75,6 +75,7 @@ def _arm(source, arm, decided, then_on, outcomes, leaves):
     return {
         "arm": arm.kind,
         "text": segment(source, *written) if written else None,
+        "leaving": arm.leaving,
         "cells": [outcome == picked for outcome in decided],
         "body": body,
     }

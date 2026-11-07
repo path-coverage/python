@@ -614,6 +614,35 @@ def test_e5a70c18(tmp_path, capsys):
     assert list(report["tree"]["src/cafe_label.py"]["1:0"]) == ["2:18", "2:23"]
 
 
+def test_e5a70c19(tmp_path):
+    """Example: match kata: case _ if started: return "ready", then return
+    "waiting", called once started and once not
+    A last case of _ with a guard does not match anything: when its guard
+    is false no case is taken, a path of its own. So both paths are taken
+    once, the one where nothing matched included, and there are no gaps."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "guarded_gate.py").write_text(
+        "def state(kata, started):\n"
+        "    match kata:\n"
+        "        case _ if started:\n"
+        '            return "ready"\n'
+        '    return "waiting"\n'
+    )
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        gate = _imported(tmp_path, "guarded_gate")
+        states = [gate.state("K5", True), gate.state("K5", False)]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert [states, report["paths"]["src/guarded_gate.py:2:4"]["taken"]] == [
+        ["ready", "waiting"],
+        [{"path": [True, True], "count": 1}, {"path": [True, False], "count": 1}],
+    ]
+
+
 def test_e5a70c13(tmp_path):
     """Example: fee never called
     The JSON report says no statement was reached: reached is {}.

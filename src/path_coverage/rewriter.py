@@ -21,10 +21,11 @@ from .manifest import (
     builtin_blocks,
     if_keywords,
     keyword_before,
+    matches_anything,
     operator_keywords,
     decision_at,
 )
-from .method_statements import reaches
+from .method_statements import reaches, runs_no_code
 
 RECORDER_NAME = "__path_coverage__"
 
@@ -44,12 +45,6 @@ def _call(method, args, at):
         if not hasattr(arg, "lineno"):
             ast.copy_location(arg, at)
     return call
-
-
-def _constant(statement):
-    """True for a statement that is a constant alone, eg a docstring or
-    ..., which runs no code."""
-    return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
 def _unmatched_case(decision, patterns, at):
@@ -125,7 +120,7 @@ class _Rewriter(ast.NodeTransformer):
         that is the whole body; else first. Each call is counted."""
         name = self.columns.name(self.path, function.lineno, function.col_offset)
         body = function.body
-        at = 1 if _constant(body[0]) else 0
+        at = 1 if runs_no_code(body[0]) else 0
         function.body = [*body[:at], _reach(name, body[min(at, len(body) - 1)]), *body[at:]]
 
     def visit_BoolOp(self, node):
@@ -172,12 +167,16 @@ class _Rewriter(ast.NodeTransformer):
         """node, preceded by an enter of its decision, each case's guard (one
         added where there was none) in a matched call noting its pattern
         matched, numbering leaves as the manifest does: each case's
-        pattern, then its guard's. Unless the last case matches anything, a
-        case is added after it whose guard notes that none matched. The
-        added code takes the subject's location, so the lines a trace sees
-        run are the file's own."""
+        pattern, then its guard's. Unless the last case matches anything, as
+        manifest.matches_anything decides before any guard is added, a case
+        is added after it whose guard notes that none matched. The added code
+        takes the subject's location, so the lines a trace sees run are the
+        file's own. A case before the last that matches anything is left
+        unguarded, so Python refuses the match, as it refuses the source."""
         decision = self.columns.name(self.path, node.lineno, node.col_offset)
         node.subject = self.visit(node.subject)
+        last = node.cases[-1]
+        open_ended = not matches_anything(last)
         counter = [0]
         patterns = []
         for case in node.cases:
@@ -186,11 +185,11 @@ class _Rewriter(ast.NodeTransformer):
             args = [ast.Constant(decision), ast.Constant(pattern), ast.Constant(tuple(patterns))]
             if case.guard is not None:
                 args.append(self._guard(case.guard, decision, counter))
-            case.guard = _call("matched", args, case.pattern)
+            if case is last or not matches_anything(case):
+                case.guard = _call("matched", args, case.pattern)
             patterns.append(pattern)
             case.body = [self.visit(statement) for statement in case.body]
-        last = node.cases[-1].pattern
-        if not (isinstance(last, ast.MatchAs) and last.pattern is None):
+        if open_ended:
             node.cases.append(_unmatched_case(decision, patterns, node.subject))
         enter = ast.Expr(_call("enter", [ast.Constant(decision), ast.Constant(counter[0])], node.subject))
         ast.copy_location(enter, node.subject)

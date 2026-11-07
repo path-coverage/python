@@ -67,7 +67,28 @@ def test_1a6c3e02():
     assert then_arm["text"] == "new(id) or len(id) == 6"
     assert then_arm["cells"] == [True, True, True, False]
     assert then_arm["body"]["operator"] == "or"
-    assert else_arm == {"arm": "else", "text": '"no"', "cells": [False, False, False, True], "body": None}
+    assert else_arm == {"arm": "else", "text": '"no"', "leaving": None, "cells": [False, False, False, True], "body": None}
+
+
+def test_1a6c3e05():
+    """Example: if order.pickup: total -= 2; return total, else: if
+    order.late: raise Late, each a statement of its own line
+    An arm leaves the function when any of its statements is a return or a
+    raise, not only its first: so the then arm leaves, by return. The else
+    arm's one statement is an if, which leaves only when its predicate
+    holds, so the else arm does not leave, its leaving None."""
+    source = (
+        "def total_of(order, total):\n"
+        "    if order.pickup:\n"
+        "        total -= 2\n"
+        "        return total\n"
+        "    else:\n"
+        "        if order.late:\n"
+        "            raise Late\n"
+        "    return total\n"
+    )
+    _, then_arm, else_arm = _tree(source, [1, 1], "k.py:2:4")["operands"]
+    assert [then_arm["leaving"], else_arm["leaving"]] == ["return", None]
 
 
 def test_1a6c3e03():

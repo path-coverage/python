@@ -27,14 +27,16 @@ testpaths = ["test"]
 
 # Line and branch coverage of src/ and test/, as bin/test.sh measures them
 # beside path coverage; the projects the tests run, and the self-coverage
-# plugin, are no code of path_coverage's.
+# and suites plugins, are no code of path_coverage's. A suite's left-out
+# files, test/suites.py says which, are never imported, so never measured:
+# test/property has no __init__.py, so coverage.py lists no file of it unrun.
 [tool.coverage.run]
 branch = true
 source = ["src/path_coverage", "test"]
 data_file = "reports/.coverage"
 # The collector's command runs in a process of its own in its tests.
 patch = ["subprocess"]
-omit = ["*/test/projects/*", "*/test/self_coverage.py"]
+omit = ["*/test/projects/*", "*/test/self_coverage.py", "*/test/suites.py"]
 
 [tool.coverage.report]
 # Every line and every branch of src/ and test/ runs, or the run fails.

@@ -93,17 +93,6 @@ def _smallest(regions):
     return min(regions, key=lambda region: region.end - region.begin, default=None)
 
 
-def regions_of(source, owner, condition):
-    """The regions of condition, the decision of the row keyed owner, in
-    source, as nested finds them."""
-    return _regions(source, _line_starts(source), owner, condition)
-
-
-def text_of(source, region):
-    """The source text of region's bytes."""
-    return source.encode()[region.begin : region.end].decode()
-
-
 def _regions(source, starts, owner, condition):
     """The regions of condition, the decision of the row keyed owner: its
     arms', then its leaves'."""

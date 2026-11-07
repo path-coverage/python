@@ -27,9 +27,6 @@ TAKEN = {True: ["", "taken"], False: [""]}
 # path that took it, so left the function there, else blank.
 LEAVES = {True: ["", "leaves"], False: [""]}
 
-# An arm's code that leaves the function, and the word that says how.
-LEAVING = re.compile(r"(return|raise)\b")
-
 
 def rows(decision):
     """The rows of decision's fold, a decision tree located as page_cards locates
@@ -73,11 +70,11 @@ def shown(condition):
 
 
 def _leaving(arm):
-    """{"leaves": return or raise, "cells", "at"} for arm when its code
-    returns or raises, cells marking the paths that took it, so left the
-    function, at where its code is; None for an arm that does neither."""
-    found = LEAVING.match(arm["text"] or "")
-    return found and {"leaves": found.group(1), "cells": arm["cells"], "at": arm.get("at")}
+    """{"leaves": return or raise, "cells", "at"} for arm when it leaves the
+    function, as its leaving says, cells marking the paths that took it, so
+    left the function, at where its code is; None for an arm that does not."""
+    word = arm["leaving"]
+    return word and {"leaves": word, "cells": arm["cells"], "at": arm.get("at")}
 
 
 def _operand_rows(condition, indent):

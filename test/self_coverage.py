@@ -21,6 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import suites
 from _pytest.assertion.rewrite import rewrite_asserts
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -77,7 +78,9 @@ def _asserting_loader(kernel):
 def start():
     """Copies the package, then starts the copy covering src/ and test/,
     groups code and test, reporting html and JSON into REPORTS when pytest
-    unconfigures."""
+    unconfigures. This file and suites.py, loaded before it starts, run
+    outside the measured run, so are skipped; so are the files the suite
+    leaves out, which never run."""
     into = Path(tempfile.mkdtemp(prefix="path_coverage_self."))
     copy(into)
     sys.path.insert(0, str(into))
@@ -88,7 +91,7 @@ def start():
     path_coverage_self.start(
         root=ROOT,
         cover=["src/**/*.py", "test/**/*.py"],
-        skip=["test/projects/**", "test/self_coverage.py"],
+        skip=["test/projects/**", "test/self_coverage.py", "test/suites.py", *suites.excluded()],
         coverage_dir=REPORTS,
         report=[],
         groups={"code": ["src/**/*.py"], "test": ["test/**/*.py"]},

@@ -5,7 +5,7 @@ top card."""
 import ast
 from dataclasses import dataclass
 
-from . import decision_paths
+from . import decision_paths, leaving
 from . import totals as path_totals
 from .columns import Columns
 from .manifest import (
@@ -50,31 +50,6 @@ UNSEEN = (
     ast.DictComp,
     ast.GeneratorExp,
 )
-
-# The tops of statements with a keyword of their own and no decision at their
-# top, by their type.
-KEYWORDS = {
-    ast.For: "for",
-    ast.AsyncFor: "for",
-    ast.While: "while",
-    ast.With: "with",
-    ast.AsyncWith: "with",
-    ast.Try: "try",
-    ast.TryStar: "try",
-    ast.FunctionDef: "def",
-    ast.AsyncFunctionDef: "def",
-    ast.ClassDef: "class",
-    ast.Raise: "raise",
-    ast.Return: "return",
-    ast.Assign: "=",
-    ast.AugAssign: "=",
-    ast.AnnAssign: "=",
-}
-
-
-# The tops of the statements that are no decision yet are rows: each leaves its
-# function, so cuts a path short.
-LEAVING = ("return", "raise")
 
 
 def of(source, path):
@@ -218,9 +193,14 @@ def body_of(node):
     or a class's, a first statement that is a constant alone, eg its
     docstring or ..., left out, as it runs no code."""
     body = node.body
-    first = body[0]
-    constant = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
-    return body[1:] if constant else body
+    return body[1:] if runs_no_code(body[0]) else body
+
+
+def runs_no_code(statement):
+    """True for a statement that is a constant alone, eg a docstring or
+    ...: the one place this is decided, for the rows and the rewrite's
+    entry reach alike."""
+    return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
 def _top_of_decision(lines, line, column, condition):
@@ -268,11 +248,12 @@ class _Rows:
 
     def rows(self, function):
         """The Statement rows of function's body that shape a path, flat, in
-        the order written: each decision's, and each return's and raise's, as
-        each cuts a path short; no row for any other statement, whose one
-        path tells the reader nothing."""
-        rows = [self._row(node) for node in self._rows_in(body_of(function))]
-        return [row for row in rows if row.decision or row.top in LEAVING]
+        the order written: each decision's, and each statement's that leaves
+        the function, as leaving decides it, as each cuts a path short; no
+        row for any other statement, whose one path tells the reader
+        nothing."""
+        nodes = self._rows_in(body_of(function))
+        return [self._row(node) for node in nodes if self._decision_of(node) or leaving.word(node)]
 
     def _rows_in(self, statements):
         """The nodes statements' rows are for, flat, in the order written:
@@ -408,14 +389,15 @@ class _Rows:
 
     def _row(self, node):
         """The Statement row of node, where it starts: a decision with as many
-        paths as its Condition has, its top its operator, an elif's elif;
-        anything else with 1."""
+        paths as its Condition has, its top its operator, an elif's elif; a
+        statement that leaves the function with 1, its top leaving's word
+        for it, return or raise."""
         decision = self._decision_of(node)
         name = self._name(node)
         line, column = self._at(node)
         char_column = self.columns.char(line, column)
         if decision is None:
-            return Statement(line, column, char_column, _top(node), 1, None, name)
+            return Statement(line, column, char_column, leaving.word(node), 1, None, name)
         condition = self.found[decision]
         top = _top_of_decision(self.lines, line, column, condition)
         paths = len(decision_paths.possible(condition))
@@ -447,11 +429,3 @@ def _statements_of(node):
         handled = [statement for handler in node.handlers for statement in handler.body]
         return node.body + handled + node.orelse + node.finalbody
     return []
-
-
-def _top(statement):
-    """What a statement that is no decision is as written: its keyword's, eg
-    for, or = for a write, () for a call, value for anything else."""
-    if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
-        return "()"
-    return KEYWORDS.get(type(statement), "value")
