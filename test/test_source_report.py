@@ -1,4 +1,4 @@
-from path_coverage import manifest, source_report
+from path_coverage import decision_paths, manifest, source_report
 
 KATA = "def kata(id):\n    return ok(id) and new(id)\n"
 
@@ -73,3 +73,38 @@ def test_5e2a9140():
     """Example: no groups given
     The source report of a run with no groups has none."""
     assert source_report.of({}, {}, {}, None)["groups"] == {}
+
+
+def _labels(source, kind):
+    """The labels of the fold rows of kind, eg operand, of the one decision
+    in source, the file k.py, as the source report gives them."""
+    decisions = manifest.decisions(source, "k.py")
+    [name] = decisions
+    paths = [{"path": path, "count": 0} for path in decision_paths.possible(decisions[name])]
+    fold = source_report.decision(source, decisions, name, paths, "return")["fold"]
+    return [row["label"] for row in fold if row["kind"] == kind]
+
+
+def test_5e2a9150():
+    """Example: return f(a,  # first, then b) and c on the next line
+    The operand reads as one line, its line break and the indent after it
+    one space, coloured as the file colours it: its comment, which alone
+    would leave its bracket unclosed, is still a comment."""
+    labels = _labels("def ok(a, b, c):\n    return f(a,  # first\n             b) and c\n", "operand")
+    assert labels[0] == {"text": "f(a,  # first b)", "tokens": [[6, 13, "c"]]}
+
+
+def test_5e2a9160():
+    """Example: return f(1, then 2) and c on the next line
+    Each number of the operand is coloured where the one line it reads as
+    puts it."""
+    labels = _labels("def ok(c):\n    return f(1,\n             2) and c\n", "operand")
+    assert labels[0] == {"text": "f(1, 2)", "tokens": [[2, 3, "n"], [5, 6, "n"]]}
+
+
+def test_5e2a9170():
+    """Example: return c if a else f(1, then 2) on the next line
+    The else arm reads as one line, as an operand does, its numbers on
+    both lines coloured, after its : coloured as an operator."""
+    labels = _labels("def ok(a, c):\n    return c if a else f(1,\n                         2)\n", "arm")
+    assert labels[1] == {"text": ": f(1, 2)", "tokens": [[0, 1, "o"], [4, 5, "n"], [7, 8, "n"]]}

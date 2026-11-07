@@ -3,8 +3,6 @@ shows it: a grid whose columns are the decision's paths, as page data holds its
 rows, each a kind, a branch, a label, where its code is and a cell per
 path."""
 
-import re
-
 from . import code_tokens, kinds
 from .kinds.block import ITEMS
 
@@ -28,11 +26,12 @@ TAKEN = {True: ["", "taken"], False: [""]}
 LEAVES = {True: ["", "leaves"], False: [""]}
 
 
-def rows(decision):
+def rows(decision, colours=code_tokens.PLAIN):
     """The rows of decision's fold, a decision tree located as page_cards locates
     it: its own row, naming its operator, or its label, eg if/else, each
     path's count, and where its else keyword is, if it has one; then the
-    rows of its operands."""
+    rows of its operands, the code of each coloured by colours, its file's,
+    as code_tokens.colours gives them."""
     own = {
         "kind": "decision",
         "branch": "",
@@ -41,7 +40,7 @@ def rows(decision):
         "else": decision.get("else_at"),
         "counts": decision["counts"],
     }
-    return [own, *_operand_rows(decision, "")]
+    return [own, *_operand_rows(decision, "", colours)]
 
 
 def values(cells, names=OUTCOMES):
@@ -77,7 +76,7 @@ def _leaving(arm):
     return word and {"leaves": word, "cells": arm["cells"], "at": arm.get("at")}
 
 
-def _operand_rows(condition, indent):
+def _operand_rows(condition, indent, colours):
     """The rows of a condition's operands, each branching from its operator
     after indent; a nested condition's operands, and those of an arm's
     condition, follow its own row, indented under its branch."""
@@ -87,41 +86,43 @@ def _operand_rows(condition, indent):
         tip = i == len(operands) - 1
         branch = indent + (ELL if tip else TEE)
         under = indent + (GAP if tip else BAR)
-        found += _node_rows(operand, branch, under)
+        found += _node_rows(operand, branch, under, colours)
     return found
 
 
-def _node_rows(operand, branch, under):
+def _node_rows(operand, branch, under, colours):
     """The rows of one operand of a condition, branching after branch, any
     operands of its own indented to under."""
     if "arm" in operand:
-        return _arm_rows(operand, branch, under)
+        return _arm_rows(operand, branch, under, colours)
     if "leaves" in operand:
         cells = values(operand["cells"], LEAVES)
-        label = code_tokens.code(operand["leaves"])
+        label = code_tokens.label_code(operand["leaves"])
         return [{"kind": "leaves", "branch": branch, "label": label, "at": operand["at"], "cells": cells}]
     if "operator" not in operand:
-        return [_operand_row(operand, branch)]
+        return [_operand_row(operand, branch, colours)]
     label = code_tokens.label_code(operand.get("label", operand["operator"]))
     own = {"kind": "subtree", "branch": branch, "label": label, "at": operand.get("at"), "cells": values(operand["cells"])}
-    return [own, *_operand_rows(operand, under)]
+    return [own, *_operand_rows(operand, under, colours)]
 
 
-def _arm_rows(arm, branch, under):
+def _arm_rows(arm, branch, under, colours):
     """A ternary's arm's row, ? for then and : for else: an arm holding a
     condition showing the condition's operator and value, its operands
-    below; a plain arm its text, marking the paths taking it."""
+    below; a plain arm its text, as an operand's reads, marking the paths
+    taking it."""
     body = arm["body"]
-    label = code_tokens.ternary_arm_code(kinds.of("ternary").arm_label(arm, "ternary"))
+    mark, _, rest = kinds.of("ternary").arm_label(arm, "ternary").partition(" ")
+    code = code_tokens.label_code(rest) if body else colours.span(arm.get("at"), rest)
+    label = code_tokens.marked_code(mark, code)
     cells = values(body["cells"]) if body else values(arm["cells"], TAKEN)
     own = {"kind": "arm", "branch": branch, "label": label, "at": arm.get("at"), "cells": cells}
-    return [own, *_operand_rows(body, under)] if body else [own]
+    return [own, *_operand_rows(body, under, colours)] if body else [own]
 
 
-def _operand_row(operand, branch):
+def _operand_row(operand, branch, colours):
     """One operand's row: its branch, text, coloured as the code it is,
     written over more than one line read as one, each line break and the
     indent around it one space, and its outcome on each path."""
-    one_line = re.sub(r"\s*\n\s*", " ", operand["text"])
-    label = code_tokens.code(one_line)
+    label = colours.span(operand.get("at"), operand["text"])
     return {"kind": "operand", "branch": branch, "label": label, "at": operand.get("at"), "cells": values(operand["cells"])}

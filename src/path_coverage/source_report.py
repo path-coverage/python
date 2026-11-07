@@ -40,8 +40,7 @@ def _file(source, decisions, paths, tops):
 def lines(source):
     """Example: "ok(1)\\n" gives [{"text": "ok(1)", "tokens": [[3, 4, "n"]]}].
     Each line of source: its text and its coloured tokens."""
-    tokens = code_tokens.of(source)
-    return [{"text": text, "tokens": tokens.get(number, [])} for number, text in enumerate(source.splitlines(), start=1)]
+    return code_tokens.colours(source).each_line()
 
 
 def decision(source, decisions, name, paths, top):
@@ -61,5 +60,5 @@ def _fold(source, condition, paths, top):
     tree = decision_tree.node(source, condition, [taken["path"] for taken in paths])
     located = decision_locations.located(source, condition, tree)
     else_at = decision_locations.else_at(source, condition)
-    own, *rest = fold_rows.rows({**located, "counts": None, "else_at": else_at, "label": top})
+    own, *rest = fold_rows.rows({**located, "counts": None, "else_at": else_at, "label": top}, code_tokens.colours(source))
     return [{key: value for key, value in own.items() if key != "counts"}, *rest]

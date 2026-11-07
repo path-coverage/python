@@ -7,7 +7,9 @@ elif and else, and match with guards, wildcards, or-patterns and captures.
 Each leaf is a spy, a call of a fresh parameter, eg p0(), which the oracle
 passes a callable logging its call and giving its value; or a fresh
 parameter read as a name, eg p1; or a literal, eg 0, as path_coverage
-treats a name and a literal apart from a call. Every statement of run is
+treats a name and a literal apart from a call. A spy may be written over
+two lines, a comment ending its first, as code is, so a leaf's text alone
+is not always valid code. Every statement of run is
 preceded by a call of its mark parameter, mark(n, t), which logs that
 statement n is about to run with t's value, so the trace of a call is the
 path it took. Calling a function on every combination of its parameters'
@@ -65,8 +67,10 @@ NESTING = {
 # no code follows it.
 BODY = {**FLAT, "leave": "<leave>"}
 
-# The kinds of leaf, a spy twice as often as each other kind.
-KINDS = ("spy", "spy", "name", "literal")
+# The kinds of leaf, a spy twice as often as each other kind: a spy,
+# written on one line or over two, a comment ending its first, a name or a
+# literal.
+KINDS = ("spy", "spy", "spy_over_lines", "name", "literal")
 
 # The literals a leaf can be, each a number, so t stays one.
 LITERALS = ("True", "False", "0", "1")
@@ -117,6 +121,13 @@ class FunctionGrammar:
         """A call of the next parameter, noted as a spy."""
         self.spies.add(self.leaves)
         return f"{self._name()}()"
+
+    def _spy_over_lines(self):
+        """A call of the next parameter, noted as a spy, written over two
+        lines, a comment ending its first, eg p0(  # spy then ) on the
+        next: a leaf whose text, read as one line, is no valid code."""
+        self.spies.add(self.leaves)
+        return f"{self._name()}(  # spy\n)"
 
     def _name(self):
         """The next parameter."""

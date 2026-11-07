@@ -30,15 +30,15 @@ def test_c0d7e305():
 
 def test_c0d7e302():
     """Example: the labels if/else and elif, and a ternary's arm, ? n > 1
-    A label naming a choice and its else is coloured word by word, each a
-    keyword, as code would read its / as division. Any other label is
-    coloured as code. A ternary's arm's ? is an operator, the code after
-    it code."""
+    A label is coloured word by word, each keyword a keyword, as it is no
+    code of the file. A ternary's arm's ? is an operator, the code after
+    it coloured as its file colours it."""
     assert [code_tokens.label_code("if/else"), code_tokens.label_code("elif")] == [
         {"text": "if/else", "tokens": [[0, 2, "k"], [3, 7, "k"]]},
         {"text": "elif", "tokens": [[0, 4, "k"]]},
     ]
-    assert code_tokens.ternary_arm_code("? n > 1") == {"text": "? n > 1", "tokens": [[0, 1, "o"], [6, 7, "n"]]}
+    arm = code_tokens.colours("x = 0 if a else n > 1\n").span([1, 16, 1, 21], "n > 1")
+    assert code_tokens.marked_code("?", arm) == {"text": "? n > 1", "tokens": [[0, 1, "o"], [6, 7, "n"]]}
 
 
 def test_c0d7e306():
