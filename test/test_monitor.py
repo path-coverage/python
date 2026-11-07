@@ -401,8 +401,9 @@ def test_d86a1f14():
 def test_d86a1f13():
     """Example: the start callback, for member's code, and for the
     module's
-    member's start counts its entry; the module's, no function's, is
-    disabled, never seen again."""
+    member's start logs its entry, counted once the log is rebuilt; the
+    module's, no function's, is disabled, never seen again."""
     module, functions, evaluations = _codes(MEMBER)
     assert [monitor._started(functions["member"], 0), monitor._started(module, 0)] == [None, DISABLE]
+    evaluations.flush()
     assert evaluations.reached == {"k.py:1:0": 1}

@@ -4,20 +4,21 @@ without the page."""
 
 import ast
 
-from . import card_tree, card_ways, method_statements
+from . import card_tree, card_ways, method_statements, ways_report
 from .source_lines import lines_of
 
 
-def of(files, operands, paths, reached):
+def of(files, operands, paths, counted):
     """{card decision: card} of every card in files, {path relative to root:
     (source, decisions)}: each function's, by its def's decision, then each top
     card's, by its first line, as card gives them; operands and paths as
-    result gives them, reached each statement's runs, None when not known.
-    Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3, "ways":
-    2, "calls": 1, "rows": [...]}}."""
+    result gives them, counted (reached, ways), each statement's runs, None
+    when not known, and each function's ways taken, as Evaluations.ways
+    has them. Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3,
+    "ways": 2, "calls": 1, "rows": [...], "taken": [...]}}."""
     listed = {}
     for path, (source, decisions) in files.items():
-        listed.update(function_cards(source, (path, decisions), paths, reached))
+        listed.update(function_cards(source, (path, decisions), paths, counted))
         lines = lines_of(source, decisions, operands)
         listed.update(top_cards(source, (path, decisions), lines, paths))
     return listed
@@ -37,11 +38,13 @@ def tree(files, operands):
     return nested
 
 
-def function_cards(source, at, paths, reached):
+def function_cards(source, at, paths, counted):
     """The cards of each function in source, at being its (path, decisions), as
     of gives them: each counting its calls, its entry's runs, 0 when never
-    called, None when not known."""
+    called, None when not known, and listing the ways its calls took, as
+    ways_report.taken gives them, none when never called."""
     path, decisions = at
+    reached, ways = counted
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
     cards = {}
@@ -49,6 +52,7 @@ def function_cards(source, at, paths, reached):
         calls = None if reached is None else reached.get(decision, 0)
         title = (names[decision], lasts[decision], card_ways.card(source, decisions, rows), calls)
         cards[decision] = card(decision, title, rows, method_statements.taken(rows, paths, reached))
+        cards[decision]["taken"] = ways_report.taken(ways.get(decision, {}))
     return cards
 
 

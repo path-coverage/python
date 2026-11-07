@@ -43,10 +43,12 @@ def _following(possible):
 class Evaluations:
     """The counts the reports carry: counts, {(decision, leaf index):
     {"truthy": n, "falsy": n}} of every leaf reached; decision_paths,
-    {decision: {path: n}} of every evaluation completed; and reached,
-    {name: runs} of every statement reached, eg {"k.py:3:4": 2}. Events
-    are logged as they happen, as (frame id, actions), and rebuilt into
-    these counts by flush."""
+    {decision: {path: n}} of every evaluation completed; reached,
+    {name: runs} of every statement reached, eg {"k.py:3:4": 2}; and
+    ways, {function's entry: {way: calls}}, each way the steps one call
+    took, in order, a decision's (name, path) or a statement's (name,).
+    Events are logged as they happen, as (frame id, actions), and rebuilt
+    into these counts by flush."""
 
     def __init__(self, limit=LIMIT):
         """Starts with nothing counted; the log is rebuilt once it holds
@@ -54,10 +56,12 @@ class Evaluations:
         self.counts = {}
         self.decision_paths = {}
         self.reached = {}
+        self.ways = {}
         self.log = []
         self.limit = limit
         self._open = {}
         self._blocks = {}
+        self._walking = {}
 
     def note(self, frame, actions):
         """Logs actions, seen in the frame of id frame; rebuilds the log
@@ -124,11 +128,50 @@ class Evaluations:
         counts true when there were any items."""
         items, answer = self._blocks.pop((frame, shape))
         self._count(shape, 0, items > 0)
-        self._taken(shape, (ITEMS[min(items, 2)], answer))
+        self._taken(frame, shape, (ITEMS[min(items, 2)], answer))
 
     def reach(self, name):
         """Counts a run of the statement named name."""
         self.reached[name] = self.reached.get(name, 0) + 1
+
+    def enter(self, frame, name):
+        """Starts the way of a call of the function whose entry is named
+        name, in frame, counting the entry as reached. A way still under
+        way in a frame of that id ends first: CPython gives a new frame
+        the id of one that has finished, and a new call always enters
+        before anything else happens in it."""
+        self._walked(frame)
+        self._walking[frame] = (name, [])
+        self.reach(name)
+
+    def ran(self, frame, name):
+        """Counts a run of the statement named name, a step of the way
+        under way in frame."""
+        self.reach(name)
+        self._step(frame, (name,))
+
+    def close(self):
+        """Ends every way still under way, as the run is over, counting
+        each in ways."""
+        for frame in list(self._walking):
+            self._walked(frame)
+
+    def _walked(self, frame):
+        """Counts the way under way in frame, when there is one, as taken
+        once more."""
+        walking = self._walking.pop(frame, None)
+        if walking is not None:
+            entry, steps = walking
+            ways = self.ways.setdefault(entry, {})
+            way = tuple(steps)
+            ways[way] = ways.get(way, 0) + 1
+
+    def _step(self, frame, step):
+        """Adds step to the way under way in frame; nothing in a frame no
+        measured function entered, eg a module's top level."""
+        walking = self._walking.get(frame)
+        if walking is not None:
+            walking[1].append(step)
 
     def _evaluation(self, frame, shape, index):
         """The outcomes of shape's evaluation under way in frame, taken out
@@ -152,7 +195,7 @@ class Evaluations:
         agrees with is dropped."""
         path = tuple(outcomes)
         if path in shape.possible:
-            self._taken(shape, path)
+            self._taken(key[0], shape, path)
         elif path in shape.following:
             self._open[key] = outcomes
 
@@ -168,10 +211,12 @@ class Evaluations:
         counts = self.counts.setdefault((shape.name, index), {"truthy": 0, "falsy": 0})
         counts["truthy" if outcome else "falsy"] += 1
 
-    def _taken(self, shape, path):
-        """Counts one more evaluation of shape taking path."""
+    def _taken(self, frame, shape, path):
+        """Counts one more evaluation of shape taking path, a step of the
+        way under way in frame."""
         paths = self.decision_paths.setdefault(shape.name, {})
         paths[path] = paths.get(path, 0) + 1
+        self._step(frame, (shape.name, path))
 
 
 @dataclass(frozen=True)
@@ -273,10 +318,21 @@ class End:
 
 @dataclass(frozen=True)
 class Reach:
-    """A run of the statement, or the entry of the function, named name."""
+    """A run of the statement named name."""
 
     name: str
 
-    def apply(self, evaluations, _frame):
-        """Counts the run."""
-        evaluations.reach(self.name)
+    def apply(self, evaluations, frame):
+        """Counts the run, a step of the way under way in frame."""
+        evaluations.ran(frame, self.name)
+
+
+@dataclass(frozen=True)
+class Enter:
+    """The entry of a call of the function whose entry is named name."""
+
+    name: str
+
+    def apply(self, evaluations, frame):
+        """Starts the call's way in frame."""
+        evaluations.enter(frame, self.name)

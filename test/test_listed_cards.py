@@ -27,10 +27,10 @@ PATHS = {
 
 def _listed(source, paths, reached):
     """The listed cards of source, as if it were k.py, from paths and
-    reached, its operands all zero."""
+    reached, its operands all zero, with no ways taken."""
     decisions = manifest.decisions(source, "k.py")
     files = {"k.py": (source, decisions)}
-    return listed_cards.of(files, result.operands(decisions, {}), paths, reached)
+    return listed_cards.of(files, result.operands(decisions, {}), paths, (reached, {}))
 
 
 def test_d3c9a101():
@@ -50,6 +50,7 @@ def test_d3c9a101():
             "ways": 3,
             "calls": 0,
             "rows": [{"at": "3:22", "top": "and", "paths": 3, "taken": 1, "decision": "k.py:3:22"}],
+            "taken": [],
         },
         "k.py:1:0": {
             "name": "file",

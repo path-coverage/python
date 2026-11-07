@@ -89,6 +89,10 @@ def test_e5a70c01(tmp_path, capsys):
                 "ways": 3,
                 "calls": 2,
                 "rows": [{"at": "6:30", "top": "and", "paths": 3, "taken": 2, "decision": decision}],
+                "taken": [
+                    {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
+                    {"way": [{"at": "6:30", "path": [False, None]}], "count": 1},
+                ],
             }
         },
         "tree": {
@@ -163,7 +167,7 @@ def test_e5a70c04(tmp_path, capsys):
     main run none
     A part run writes only its own part file.
     The main run clears stale parts as it starts.
-    At exit it adds every part's counts and paths to its own.
+    At exit it adds every part's counts, paths and ways to its own.
     Then it writes the report and prints the one path left untaken."""
     project = PROJECTS / "single_and"
     stale = tmp_path / "path_coverage.gw7.json"
@@ -194,6 +198,10 @@ def test_e5a70c04(tmp_path, capsys):
         ]
     }
     assert report["paths"][decision]["taken"] == _taken(1, 1, 0)
+    assert report["cards"]["src/single_and_trails.py:4:0"]["taken"] == [
+        {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
+        {"way": [{"at": "6:30", "path": [True, False]}], "count": 1},
+    ]
     assert capsys.readouterr().out == (
         f"{decision} path never taken: `trail_id in trails` false\n"
     )
@@ -1154,6 +1162,107 @@ def test_e5a70c22(tmp_path):
     finally:
         path_coverage.stop()
     assert seen == [True, 0, True, False]
+
+
+SAVE = (
+    "def save(record, dry_run, db, audit):\n"
+    "    if dry_run:\n"
+    "        print('would save', record)\n"
+    "        return None\n"
+    "    db.append(record)\n"
+    "    if not dry_run:\n"
+    "        audit.append(record)\n"
+    "    return len(db)\n"
+)
+
+
+def test_e5a70c2d(tmp_path, capsys):
+    """Example: save called as a dry run, then twice for real
+    Each card lists the ways its calls took, whole: each step a decision
+    row's path or a statement row reached, in the order taken, with how
+    many calls took that way."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "saving.py").write_text(SAVE)
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        saving = _imported(tmp_path, "saving")
+        saved = [saving.save("R1", True, [], []), saving.save("R2", False, [], []), saving.save("R3", False, [], [])]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert [capsys.readouterr().out, saved, report["cards"]["src/saving.py:1:0"]["taken"]] == [
+        "would save R1\n",
+        [None, 1, 1],
+        [
+            {"way": [{"at": "2:04", "path": [True]}, {"at": "4:08"}], "count": 1},
+            {"way": [{"at": "2:04", "path": [False]}, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2},
+        ],
+    ]
+
+
+def test_e5a70c2e(tmp_path, capsys):
+    """Example: a module setting MODE by a conditional, then save, called
+    as a dry run and for real; that run's JSON report rendered
+    The merged report lists the same ways save's calls took, read back
+    from the report's cards; the top card, which no call runs, lists none."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "saving.py").write_text("MODE = 'cli' if __name__ == '__main__' else 'lib'\n\n\n" + SAVE)
+    exits = []
+    settings = {"root": tmp_path, "cover": ["src/*.py"], "report": []}
+    path_coverage.start(**settings, coverage_dir=tmp_path / "run", on_exit=exits.append)
+    try:
+        saving = _imported(tmp_path, "saving")
+        saving.save("R1", True, [], [])
+        saving.save("R2", False, [], [])
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    capsys.readouterr()
+    path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
+    cards = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["cards"]
+    assert [cards["src/saving.py:4:0"]["taken"], "taken" in cards["src/saving.py:1:0"]] == [
+        [
+            {"way": [{"at": "5:04", "path": [True]}, {"at": "7:08"}], "count": 1},
+            {"way": [{"at": "5:04", "path": [False]}, {"at": "9:04", "path": [True]}, {"at": "11:04"}], "count": 1},
+        ],
+        False,
+    ]
+
+
+def test_e5a70c2f(tmp_path):
+    """Example: two generators of steps, one fast and one not, resumed in
+    turn, each suspended before its if
+    A generator's call is one way however often it resumes: each lists its
+    own if's path, never the other's."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "stepping.py").write_text(
+        "def steps(fast):\n"
+        "    yield 'start'\n"
+        "    if fast:\n"
+        "        yield 'skip'\n"
+        "    yield 'done'\n"
+    )
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        stepping = _imported(tmp_path, "stepping")
+        fast, slow = stepping.steps(True), stepping.steps(False)
+        firsts = [next(fast), next(slow)]
+        rests = [list(slow), list(fast)]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    assert [firsts, rests, report["cards"]["src/stepping.py:1:0"]["taken"]] == [
+        ["start", "start"],
+        [["done"], ["skip", "done"]],
+        [
+            {"way": [{"at": "3:04", "path": [True]}], "count": 1},
+            {"way": [{"at": "3:04", "path": [False]}], "count": 1},
+        ],
+    ]
 
 
 def test_e5a70c13(tmp_path):

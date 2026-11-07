@@ -12,6 +12,7 @@ import ast
 import sys
 
 from . import code_map, wrapped_leaves
+from .evaluations import Enter
 
 MONITORING = sys.monitoring
 EVENTS = MONITORING.events
@@ -73,7 +74,7 @@ def measure(code, source, evaluations):
         _right.update({(key, alias): _right[(key, offset)] for alias, offset in table.right_aliases.items()})
         _marks.update({(key, offset): (evaluations, actions) for offset, actions in table.marks.items()})
         if table.entry is not None:
-            _entries[key] = (evaluations, table.entry)
+            _entries[key] = (evaluations, (Enter(table.entry),))
         MONITORING.set_local_events(_tool, each, LOCAL)
 
 
@@ -138,13 +139,13 @@ def _kept(code, offset):
 
 
 def _started(code, _offset):
-    """Counts the entry of a measured function; disables the start of any
-    other code."""
+    """Logs the entry of a measured function, in its frame, which starts
+    that call's way; disables the start of any other code."""
     found = _entries.get(id(code))
     if found is None:
         return DISABLE
-    evaluations, name = found
-    evaluations.reach(name)
+    evaluations, actions = found
+    evaluations.note(id(sys._getframe(1)), actions)
 
 
 # This package's tool id, claimed once, as it is first imported.

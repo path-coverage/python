@@ -24,10 +24,11 @@ from . import (
     scopes,
     source_report,
     summary,
+    ways_report,
     wrapped_leaves,
 )
 from .evaluations import Evaluations
-from .merge import merge, merge_paths
+from .merge import merge, merge_paths, merge_ways
 
 REPORTERS = ("gaps", "post", "summary")
 
@@ -285,7 +286,8 @@ def render(
     decisions = _decisions(files)
     operands = merge([result.operands(decisions, {}), *(each["decisions"] for each in reports)])
     paths = merge_paths([result.paths(decisions, {}), *(_taken(each) for each in reports)])
-    _finish(config, files, operands, paths, _reached([each.get("reached") for each in reports]))
+    ways = merge_ways([ways_report.ways(each) for each in reports])
+    _finish(config, files, operands, paths, (_reached([each.get("reached") for each in reports]), ways))
 
 
 def _reached(runs):
@@ -322,30 +324,37 @@ def _report(config, evaluations, part):
     evaluations', writes the JSON report into coverage_dir, then runs the
     chosen reporters."""
     evaluations.flush()
+    evaluations.close()
     files = _files(config)
     decisions = _decisions(files)
     operands = result.operands(decisions, evaluations.counts)
     paths = result.paths(decisions, evaluations.decision_paths)
     reached = evaluations.reached
+    ways = evaluations.ways
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     if part is not None:
+        part_report = _report_json(operands, paths, files, reached)
+        part_report["cards"] = {entry: {"taken": ways_report.taken(walked)} for entry, walked in ways.items()}
         part_file = config.coverage_dir / f"path_coverage.{part}.json"
-        part_file.write_text(json.dumps(_report_json(operands, paths, files, reached), indent=2))
+        part_file.write_text(json.dumps(part_report, indent=2))
         return
     parts = [json.loads(path.read_text()) for path in _parts(config)]
     operands = merge([operands, *(each["decisions"] for each in parts)])
     paths = merge_paths([paths, *(_taken(each) for each in parts)])
     reached = _reached([reached, *(each.get("reached") for each in parts)])
-    _finish(config, files, operands, paths, reached)
+    ways = merge_ways([ways, *(ways_report.ways(each) for each in parts)])
+    _finish(config, files, operands, paths, (reached, ways))
 
 
-def _finish(config, files, operands, paths, reached):
+def _finish(config, files, operands, paths, counted):
     """Writes the JSON report, with its totals, and the source report into
-    coverage_dir, then runs the chosen reporters. reached is each
-    statement's runs, None when not known. A cover's ::qualname keeps
+    coverage_dir, then runs the chosen reporters. counted is (reached,
+    ways): each statement's runs, None when not known, and each function's
+    ways taken, as Evaluations.ways has them. A cover's ::qualname keeps
     only the decisions and cards inside its scope."""
+    reached, ways = counted
     cards = method_statements.cards(files, paths, reached)
-    listed = listed_cards.of(files, operands, paths, reached)
+    listed = listed_cards.of(files, operands, paths, counted)
     kept_operands = _kept(operands, config.lines)
     kept_paths = _kept(paths, config.lines)
     kept_cards = _kept(cards, config.lines)

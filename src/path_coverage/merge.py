@@ -32,3 +32,15 @@ def merge_paths(runs):
         decision: [{"path": list(path), "count": count} for path, count in totals.items()]
         for decision, totals in merged.items()
     }
+
+
+def merge_ways(runs):
+    """The ways of runs (each as Evaluations.ways has them) with each way's
+    calls added across them, in the order the ways first appear."""
+    merged = {}
+    for run in runs:
+        for entry, walked in run.items():
+            totals = merged.setdefault(entry, {})
+            for way, count in walked.items():
+                totals[way] = totals.get(way, 0) + count
+    return merged
