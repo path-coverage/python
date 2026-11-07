@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 import path_coverage
-from path_coverage import monitor
 
 PROJECTS = Path(__file__).parent / "projects"
 
@@ -784,31 +783,8 @@ def test_e5a70c15(tmp_path):
         del sys.path[:3]
         for name in ("covered", "vendored", "other", "spaced", "away"):
             sys.modules.pop(name)
-    instrumented = [module.__name__ for module in imported if module.__file__ in monitor.measured()]
+    instrumented = [module.__name__ for module in imported if "__path_coverage__" in vars(module)]
     assert instrumented == ["covered"]
-
-
-def test_e5a70c1c(tmp_path):
-    """Example: cover *.py and skip vendored.py under root; the starting
-    code of covered.py, vendored.py, lib/other.py, a file outside root,
-    and text compiled under the name of a covered file that is not there,
-    each offered to be measured
-    Only covered.py's is measured: the rest are skipped, matched by no
-    cover glob, outside root, or no file to parse."""
-    from path_coverage import kernel
-    from path_coverage.evaluations import Evaluations
-
-    root, outside = tmp_path / "root", tmp_path / "outside"
-    files = [root / "covered.py", root / "vendored.py", root / "lib" / "other.py", outside / "away.py"]
-    for file in files:
-        file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_text("VALUE = 1 if __name__ else 2\n")
-    config = kernel._config(root, ["*.py"], tmp_path, ["gaps"], None, ["vendored.py"])
-    adopt = kernel._adopter(config, Evaluations())
-    names = [str(file) for file in files] + [str(root / "missing.py")]
-    for name in names:
-        adopt(compile("VALUE = 1 if __name__ else 2\n", name, "exec"))
-    assert [name for name in names if name in monitor.measured()] == [str(root / "covered.py")]
 
 
 def test_e5a70c16(tmp_path, capsys):

@@ -2,7 +2,7 @@ import sys
 import threading
 from types import SimpleNamespace
 
-from path_coverage import code_map, monitor
+from path_coverage import code_map, last_operands, monitor
 from path_coverage.evaluations import Evaluations
 
 DISABLE = sys.monitoring.DISABLE
@@ -10,14 +10,11 @@ DISABLE = sys.monitoring.DISABLE
 
 def _measured(source, name, path="k.py"):
     """(the function named name, the Evaluations measuring it) once source,
-    the file path, is measured and has run as a module. It is measured
-    here rather than as it starts, as code a monitoring callback runs is
-    never itself measured, by path coverage or by line coverage."""
+    the file path, is instrumented and has run as a module."""
     evaluations = Evaluations()
-    module = compile(source, path, "exec")
-    monitor.measure(module, code_map.Source(source, path), evaluations)
-    namespace = {}
-    exec(module, namespace)  # noqa: S102 - running the measured code is the point
+    code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled)
+    namespace = {last_operands.NAME: record}
+    exec(code, namespace)  # noqa: S102 - running the measured code is the point
     return namespace[name], evaluations
 
 
@@ -33,8 +30,9 @@ CAN_ATTEST = "def can_attest(user, flow):\n    return user.active and (user.admi
 def test_d86a1f01():
     """Example: user.active and (user.admin or flow.public), with active,
     not admin, and a public flow
-    Each leaf a branch tests gives its outcome; flow.public, which none
-    tests, the truth of the value returned. The value is unchanged."""
+    Each leaf a branch tests gives its outcome; flow.public, the last
+    operand, which none tests, the call around it. The value is
+    unchanged."""
     can_attest, evaluations = _measured(CAN_ATTEST, "can_attest", "src/model/flow.py")
     assert can_attest(SimpleNamespace(active=True, admin=False), SimpleNamespace(public="yes")) == "yes"
     assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(True, False, True): 1}}
@@ -287,21 +285,62 @@ def test_d86a1f0f():
 def test_d86a1f10():
     """Example: FLAG = a and b, FLAG declared global, called with a true
     and b true
-    b is tested by no branch, so the value written tells its outcome, read
-    from the globals, as the function has no local FLAG."""
+    b, the last operand, is tested by no branch, so the call around it
+    counts its outcome."""
     source = "FLAG = None\n\ndef flag(a, b):\n    global FLAG\n    FLAG = a and b\n"
     flag, evaluations = _measured(source, "flag")
     flag(True, "yes")
     assert _rebuilt(evaluations).decision_paths == {"k.py:5:13": {(True, True): 1}}
 
 
+def test_d86a1f15():
+    """Example: t += len(f"{a or b}") and t += (0 < t < 3) or b, called
+    twice
+    An and/or's last operand, inside an f-string or a write, is counted by
+    the call around it; a chained comparison whose value is an and/or's
+    operand is counted once, by that and/or's test of it."""
+    source = "def run(a, b, t):\n    t += len(f\"{a or b}\")\n    t += (0 < t < 3) or b\n    return t\n"
+    run, evaluations = _measured(source, "run")
+    assert [run(False, True, 0), run(True, False, 1)] == [5, 5]
+    assert _rebuilt(evaluations).decision_paths == {
+        "k.py:2:18": {(False, True): 1, (True, None): 1},
+        "k.py:3:21": {(False, True): 1, (False, False): 1},
+    }
+    assert evaluations.reached == {"k.py:1:0": 2, "k.py:4:4": 2}
+
+
+def test_d86a1f16():
+    """Example: a match whose last case, 2 | _, only raises, after a case
+    whose body is an if that raises, then a return; called with True, 5
+    and 2
+    Python copies the last case's raise to each of its alternatives, so it
+    is counted at each, as is the case's match; the first case is counted
+    once, its if's false branch landing back inside it."""
+    source = (
+        "def run(p0, p1, t):\n"
+        "    match p0:\n"
+        "        case True:\n"
+        "            if p1: raise ValueError\n"
+        "        case 2 | _:\n"
+        "            raise ValueError\n"
+        "    return t\n"
+    )
+    run, evaluations = _measured(source, "run")
+    returned = []
+    for p0 in (True, 5, 2):
+        try:
+            returned.append(run(p0, False, 1))
+        except ValueError:
+            returned.append("raised")
+    assert returned == [1, "raised", "raised"]
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True, None): 1, (False, True): 2}, "k.py:4:12": {(False,): 1}}
+    assert evaluations.reached == {"k.py:1:0": 3, "k.py:6:12": 2, "k.py:7:4": 1}
+
+
 MEMBER = (
     "def member(member, vip):\n"
     "    ok = member and vip\n"
     "    return ok\n"
-    "\n"
-    "def is_member(user):\n"
-    '    return user.get("member") and not user.get("banned")\n'
     "\n"
     "def fee(total):\n"
     "    return total\n"
@@ -319,36 +358,30 @@ def _codes(source):
 
 
 def test_d86a1f11():
-    """Example: member and is_member measured, then each branch, mark and
-    value callback called as sys.monitoring calls it, from this frame
-    An event that means something is logged by this frame's id, a write's
-    value read from this frame; one that means nothing is disabled where
-    it happens; a right branch that goes where its jump does not is
-    ignored."""
+    """Example: member and fee measured, then each branch and mark
+    callback called as sys.monitoring calls it, from this frame
+    An event that means something is logged by this frame's id; one that
+    means nothing is disabled where it happens; a right branch that goes
+    where its jump does not is ignored."""
     _, functions, evaluations = _codes(MEMBER)
-    member, is_member, fee = functions["member"], functions["is_member"], functions["fee"]
+    member, fee = functions["member"], functions["fee"]
     tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py"))
-    member_table, is_member_table, fee_table = (table for code, table in tables.items() if code.co_name in functions)
+    member_table, fee_table = (table for code, table in tables.items() if code.co_name in functions)
     jump = min(member_table.left)
     goes_to, _ = member_table.right[jump]
-    ok = 0
-    returned = min(is_member_table.values)
     assert [
         monitor._branched_left(member, jump, 0),
         monitor._branched_right(member, jump, goes_to),
         monitor._branched_right(member, jump, goes_to + 2),
-        monitor._instruction(member, min(member_table.marks)),
-        monitor._valued(is_member, returned, ok),
         monitor._instruction(fee, min(fee_table.marks)),
         monitor._branched_left(member, 0, 0),
         monitor._branched_right(member, 0, 0),
         monitor._instruction(member, 0),
-        monitor._valued(member, 0, None),
-    ] == [None] * 6 + [DISABLE] * 4
+    ] == [None] * 4 + [DISABLE] * 3
     here = id(sys._getframe())
-    assert [(frame, truth) for frame, _, truth in evaluations.log] == [(here, None), (here, None), (here, False), (here, False), (here, None)]
+    assert [frame for frame, _ in evaluations.log] == [here, here, here]
     assert _rebuilt(evaluations).decision_paths == {"k.py:2:16": {(False, None): 1}}
-    assert evaluations.reached == {"k.py:3:4": 1, "k.py:9:4": 1}
+    assert evaluations.reached == {"k.py:6:4": 1}
 
 
 def test_d86a1f14():
@@ -362,28 +395,14 @@ def test_d86a1f14():
     fee = functions["fee"]
     tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py"))
     mark = min(next(table for code, table in tables.items() if code.co_name == "fee").marks)
-    assert [monitor._kept(fee, mark), monitor._kept(fee, 0), monitor._line_started(fee, 9)] == [None, DISABLE, DISABLE]
-
-
-def test_d86a1f12():
-    """Example: a write's value read from a frame with no such local, as
-    for a name declared global
-    It is read from the frame's globals."""
-    assert monitor._written(sys._getframe(), "MEMBER") is True
+    assert [monitor._kept(fee, mark), monitor._kept(fee, 0), monitor._line_started(fee, 6)] == [None, DISABLE, DISABLE]
 
 
 def test_d86a1f13():
-    """Example: the start callback, for member's code, for the module's
-    while offering each module's start, and for a nested function's
-    member's start counts its entry; the module's is offered, once, as is
-    no other code; both are then disabled, never seen again."""
+    """Example: the start callback, for member's code, and for the
+    module's
+    member's start counts its entry; the module's, no function's, is
+    disabled, never seen again."""
     module, functions, evaluations = _codes(MEMBER)
-    offered = []
-    monitor.start(offered.append)
-    try:
-        started = [monitor._started(functions["member"], 0), monitor._started(module, 0), monitor._started(functions["is_member"].replace(co_name="inner"), 0)]
-    finally:
-        monitor.stop()
-    assert started == [None, DISABLE, DISABLE]
-    assert offered[-1] is module
+    assert [monitor._started(functions["member"], 0), monitor._started(module, 0)] == [None, DISABLE]
     assert evaluations.reached == {"k.py:1:0": 1}

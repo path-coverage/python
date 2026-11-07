@@ -1,14 +1,18 @@
-"""The kernel: measures each covered module, with sys.monitoring, as it
-starts, changing none of its code, and writes the report at exit."""
+"""The kernel: an import hook that measures each covered module as it is
+imported, with sys.monitoring and a call around each and/or's last operand,
+and the report at exit."""
 
 import atexit
+import importlib.machinery
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 from . import (
-    code_map,
     console_summary,
     gaps,
+    last_operands,
     kinds,
     listed_cards,
     manifest,
@@ -65,19 +69,54 @@ class _Config:
         return any(map(Path(relative).full_match, self.skip))
 
 
-def _adopter(config, evaluations):
-    """What a starting module's code is offered to: a function that
-    measures it, logging on evaluations, when its file is one config
-    covers, parsing the file as it is now; and ignores it otherwise, as
-    for code compiled from text under a name that is no file."""
+class _Loader(importlib.machinery.SourceFileLoader):
+    """Loads a covered module from its source, each and/or's last operand
+    wrapped, its code measured, never from (or into) the bytecode cache,
+    which holds the unwrapped code."""
 
-    def adopt(code):
-        """Measures code, a module's, when config covers its file."""
-        if Path(code.co_filename).is_file() and config.covers(code.co_filename):
-            path = Path(code.co_filename)
-            monitor.measure(code, code_map.Source(path.read_text(), config.relative(path)), evaluations)
+    def __init__(self, fullname, path, config, evaluations):
+        """A loader for the covered file at path, logging on evaluations."""
+        super().__init__(fullname, path)
+        self.config = config
+        self.evaluations = evaluations
 
-    return adopt
+    def compiled(self, tree, path):
+        """tree, the covered file's wrapped parse, compiled as the module of
+        the file path."""
+        return monitor.compiled(tree, path)
+
+    def exec_module(self, module):
+        """Runs module's measured code, with the call its wrapped operands
+        make bound in it."""
+        path = self.get_filename(module.__name__)
+        text = importlib.util.decode_source(self.get_data(path))
+        code, record = monitor.instrument(text, self.config.relative(path), path, self.evaluations, self.compiled)
+        module.__dict__[last_operands.NAME] = record
+        exec(code, module.__dict__)  # noqa: S102 - running the module is the point
+
+
+class _Finder:
+    """A meta path finder that hands each covered module to _Loader and
+    leaves every other import to the finders after it."""
+
+    def __init__(self, config, evaluations):
+        """A finder for the files config covers, logging on evaluations."""
+        self.config = config
+        self.evaluations = evaluations
+
+    def find_spec(self, fullname, path, target=None):
+        """The spec of a covered module, with _Loader as its loader; None
+        for any other module."""
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+        if spec is None or not isinstance(spec.loader, importlib.machinery.SourceFileLoader):
+            return None
+        if not self.config.covers(spec.origin):
+            return None
+        spec.loader = _Loader(fullname, spec.origin, self.config, self.evaluations)
+        return spec
+
+
+_finder = None
 
 
 def _check(setting, names, known):
@@ -108,7 +147,7 @@ def start(
     part=None,
     on_exit=atexit.register,
 ):
-    """Measures every covered module that starts from now on and reports at
+    """Measures every covered module imported from now on and reports at
     exit, counting afresh: the paths within each decision, and within each
     method. skip lists globs of files not covered though a cover glob
     matches them. report names the reporters: "gaps" (the default) prints the
@@ -121,12 +160,14 @@ def start(
     run clears stale parts now and adds every part to its own report at
     exit. on_exit is atexit.register except in tests, which must not print
     a report as their own process exits."""
+    global _finder
     config = _config(root, cover, coverage_dir, report, collector, skip, groups)
     evaluations = Evaluations()
     if part is None:
         for stale in _parts(config):
             stale.unlink()
-    monitor.start(_adopter(config, evaluations))
+    _finder = _Finder(config, evaluations)
+    sys.meta_path.insert(0, _finder)
     on_exit(lambda: _report(config, evaluations, part))
 
 
@@ -170,9 +211,9 @@ def _env_groups(text):
 
 
 def stop():
-    """Stops measuring modules that start from now on; those already
-    started are still measured."""
-    monitor.stop()
+    """Stops measuring modules imported from now on; those already
+    imported are still measured."""
+    sys.meta_path.remove(_finder)
 
 
 def render(

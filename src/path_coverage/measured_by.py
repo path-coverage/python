@@ -11,5 +11,5 @@ from .version import __version__
 
 def versions():
     """{tool name: its version} of this process, eg {"python": "3.14.8",
-    "path_coverage": "0.0.2"}, the tools a report merges only with."""
+    "path_coverage": "0.0.3"}, the tools a report merges only with."""
     return {"python": platform.python_version(), "path_coverage": __version__}

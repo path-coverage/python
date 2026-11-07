@@ -1,8 +1,9 @@
+import ast
 import dataclasses
 import dis
 
-from path_coverage import code_map
-from path_coverage.evaluations import Shape
+from path_coverage import code_map, last_operands
+from path_coverage.evaluations import Evaluations, Shape
 
 
 def _said(action):
@@ -12,10 +13,18 @@ def _said(action):
     return (type(action).__name__, *[field.name if isinstance(field, Shape) else field for field in fields])
 
 
+def _module(source):
+    """source, the file k.py, compiled as path_coverage compiles it, each
+    and/or's last operand wrapped."""
+    found = code_map.Source(source, "k.py")
+    tree = last_operands.rewrite(ast.parse(source), found, last_operands.Lasts(Evaluations()))
+    return compile(tree, "k.py", "exec")
+
+
 def _tables(source):
     """{code name: Table} for each code object compiled from source, a file
     k.py, as code_map maps them."""
-    module = compile(source, "k.py", "exec")
+    module = _module(source)
     return {code.co_name: table for code, table in code_map.tables(module, code_map.Source(source, "k.py")).items()}
 
 
@@ -29,15 +38,9 @@ def _branches(table):
 
 
 def _marks(table):
-    """table's instruction marks in offset order, each (its actions as
-    _said gives them, the name whose stored value it reads)."""
-    return [([_said(a) for a in actions], name) for _, (actions, name) in sorted(table.marks.items())]
-
-
-def _values(table):
-    """table's returned or yielded values' actions in offset order, as
-    _said gives them."""
-    return [[_said(a) for a in actions] for _, actions in sorted(table.values.items())]
+    """table's instruction marks in offset order, each its actions as _said
+    gives them."""
+    return [[_said(a) for a in actions] for _, actions in sorted(table.marks.items())]
 
 
 FEE = (
@@ -53,20 +56,17 @@ FEE = (
 
 def test_7b20d401():
     """Example: fee, an if of an and, an if, and a return
-    Each branch gives its leaf's outcome; the and's last leaf, and its
-    first when false, give the if's predicate's too. The return is
-    reached, and fee's entry counted."""
+    Each branch gives its leaf's outcome, and the if's predicate's when it
+    decides it; the and's last leaf, order.paid, is counted by the call
+    around it, so its branch gives the if's predicate's alone. The return
+    is reached, and fee's entry counted."""
     fee = _tables(FEE)["fee"]
     assert _branches(fee) == [
         ([("Outcome", "k.py:3:19", 0, True)], [("Outcome", "k.py:3:19", 0, False), ("Outcome", "k.py:3:4", 0, False)]),
-        (
-            [("Outcome", "k.py:3:19", 1, True), ("Outcome", "k.py:3:4", 0, True)],
-            [("Outcome", "k.py:3:19", 1, False), ("Outcome", "k.py:3:4", 0, False)],
-        ),
+        ([("Outcome", "k.py:3:4", 0, True)], [("Outcome", "k.py:3:4", 0, False)]),
         ([("Outcome", "k.py:5:4", 0, True)], [("Outcome", "k.py:5:4", 0, False)]),
     ]
-    assert _marks(fee) == [([("Reach", "k.py:7:4")], None)]
-    assert _values(fee) == []
+    assert _marks(fee) == [[("Reach", "k.py:7:4")]]
     assert fee.entry == "k.py:1:0"
 
 
@@ -75,7 +75,7 @@ def test_7b20d402():
     A right branch counts only when it goes where its jump goes, as
     Python 3.14 also reports a right branch from a loop's end it did not
     take."""
-    module = compile(FEE, "k.py", "exec")
+    module = _module(FEE)
     fee = module.co_consts[0]
     tables = code_map.tables(module, code_map.Source(FEE, "k.py"))
     jump = next(ins for ins in dis.get_instructions(fee) if ins.opname.startswith("POP_JUMP"))
@@ -88,27 +88,29 @@ CHECK = (
     "        return 1\n"
     "    if x is None:\n"
     "        return 2\n"
-    "    if (w := x) or 0 < t < 3:\n"
+    "    if 0 < t < 3 or (w := x):\n"
     "        return 3\n"
-    "    return 4\n"
+    "    t = (0 < t < 3) or w\n"
+    "    return t\n"
 )
 
 
 def test_7b20d403():
-    """Example: if not items, if x is None, and if (w := x) or 0 < t < 3
+    """Example: if not items, if x is None, if 0 < t < 3 or (w := x), and
+    t = (0 < t < 3) or w
     A not flips the outcome its branch tests; is None is tested as its own
-    jump; a walrus's outcome is its value's; a chained comparison's first
-    jump tells only when it is false."""
+    jump. A chained comparison tested as a jump tells from its first jump
+    only when false, from its last both ways; one whose value is tested
+    later, as an and/or's operand whose value is used, tells nothing from
+    its first jump, as its value's own test tells the outcome once."""
     check = _tables(CHECK)["check"]
     assert _branches(check) == [
         ([("Outcome", "k.py:2:4", 0, True)], [("Outcome", "k.py:2:4", 0, False)]),
         ([("Outcome", "k.py:4:4", 0, True)], [("Outcome", "k.py:4:4", 0, False)]),
-        ([("Outcome", "k.py:6:16", 0, False)], [("Outcome", "k.py:6:16", 0, True), ("Outcome", "k.py:6:4", 0, True)]),
-        ([], [("Outcome", "k.py:6:16", 1, False), ("Outcome", "k.py:6:4", 0, False)]),
-        (
-            [("Outcome", "k.py:6:16", 1, True), ("Outcome", "k.py:6:4", 0, True)],
-            [("Outcome", "k.py:6:16", 1, False), ("Outcome", "k.py:6:4", 0, False)],
-        ),
+        ([], [("Outcome", "k.py:6:17", 0, False)]),
+        ([("Outcome", "k.py:6:17", 0, False)], [("Outcome", "k.py:6:17", 0, True), ("Outcome", "k.py:6:4", 0, True)]),
+        ([("Outcome", "k.py:6:4", 0, True)], [("Outcome", "k.py:6:4", 0, False)]),
+        ([("Outcome", "k.py:8:20", 0, False)], [("Outcome", "k.py:8:20", 0, True)]),
     ]
 
 
@@ -117,48 +119,35 @@ MEMBER = (
     "    ok = member and vip\n"
     "    either = member or vip\n"
     "    return 5 if either and not ok else 7\n"
-    "\n"
-    "def is_member(user):\n"
-    '    return user.get("member") and not user.get("banned")\n'
 )
 
 
 def test_7b20d404():
     """Example: ok = member and vip, either = member or vip, and return 5
     if either and not ok else 7
-    vip is tested by no branch, so each write's value, read once it is
-    written, tells its outcome; the ternary's leaves are all tested, so
-    its returned value tells nothing."""
+    Each and/or's first leaf is tested by a branch; its last, vip and not
+    ok, counted by the call around it, so the branch testing not ok gives
+    the ternary's predicate's outcome alone."""
     member = _tables(MEMBER)["member"]
     assert _branches(member) == [
         ([("Outcome", "k.py:2:16", 0, True)], [("Outcome", "k.py:2:16", 0, False)]),
         ([("Outcome", "k.py:3:20", 0, False)], [("Outcome", "k.py:3:20", 0, True)]),
         ([("Outcome", "k.py:4:23", 0, True)], [("Outcome", "k.py:4:23", 0, False), ("Outcome", "k.py:4:13", 0, False)]),
-        (
-            [("Outcome", "k.py:4:23", 1, True), ("Outcome", "k.py:4:13", 0, True)],
-            [("Outcome", "k.py:4:23", 1, False), ("Outcome", "k.py:4:13", 0, False)],
-        ),
+        ([("Outcome", "k.py:4:13", 0, True)], [("Outcome", "k.py:4:13", 0, False)]),
     ]
-    assert _marks(member) == [([("Value", "k.py:2:16", False)], "ok"), ([("Value", "k.py:3:20", False)], "either")]
-    assert _values(member) == []
-
-
-def test_7b20d405():
-    """Example: return user.get("member") and not user.get("banned")
-    The not is tested by no branch, so the value returned tells its
-    outcome."""
-    is_member = _tables(MEMBER)["is_member"]
-    assert _values(is_member) == [[("Value", "k.py:7:30", False)]]
+    assert _marks(member) == []
 
 
 def test_7b20d406():
-    """Example: return a and True
-    Python tests True with no branch, so it is fixed true, and the
-    returned value is not needed."""
-    source = code_map.Source("def f(a):\n    return a and True\n", "k.py")
-    tables = code_map.tables(compile("def f(a):\n    return a and True\n", "k.py", "exec"), source)
-    assert source.shapes["k.py:2:13"].fixed == {1: True}
-    assert [_values(table) for table in tables.values()] == [[], []]
+    """Example: if True and a, then, after a return, if a and b
+    Python tests True with no branch, so it is fixed true; a, the last
+    operand, is counted by the call around it, so is never fixed. Code
+    after a return is never compiled, so no branch tests its a either,
+    but its form fixes no outcome, so it is not fixed."""
+    text = "def f(a, b):\n    if True and a:\n        return 1\n    return 2\n    if a and b:\n        return 3\n"
+    source = code_map.Source(text, "k.py")
+    code_map.tables(_module(text), source)
+    assert [source.shapes["k.py:2:12"].fixed, source.shapes["k.py:5:9"].fixed] == [{0: True}, {}]
 
 
 SIZE = (
@@ -184,12 +173,12 @@ def test_7b20d407():
     size = _tables(SIZE)["size"]
     assert _branches(size) == [([("Outcome", "k.py:2:4", 3, True)], [("Outcome", "k.py:2:4", 3, False)])]
     assert _marks(size) == [
-        ([("Opened", "k.py:2:4")], None),
-        ([("Matched", "k.py:2:4", 0, ()), ("Reach", "k.py:4:12")], None),
-        ([("Matched", "k.py:2:4", 1, (0,)), ("Reach", "k.py:6:12")], None),
-        ([("Matched", "k.py:2:4", 2, (0, 1))], None),
-        ([("Reach", "k.py:8:12")], None),
-        ([("Matched", "k.py:2:4", 4, (0, 1, 2)), ("Reach", "k.py:10:12")], None),
+        [("Opened", "k.py:2:4")],
+        [("Matched", "k.py:2:4", 0, ()), ("Reach", "k.py:4:12")],
+        [("Matched", "k.py:2:4", 1, (0,)), ("Reach", "k.py:6:12")],
+        [("Matched", "k.py:2:4", 2, (0, 1))],
+        [("Reach", "k.py:8:12")],
+        [("Matched", "k.py:2:4", 4, (0, 1, 2)), ("Reach", "k.py:10:12")],
     ]
 
 
@@ -210,11 +199,11 @@ def test_7b20d408():
     case taken, there where the code after the match starts."""
     label = _tables(KIND)["label"]
     assert _marks(label) == [
-        ([("Opened", "k.py:2:4")], None),
-        ([("Matched", "k.py:2:4", 0, ())], None),
-        ([("Reach", "k.py:4:12")], None),
-        ([("Matched", "k.py:2:4", 2, (0,)), ("Reach", "k.py:6:12")], None),
-        ([("Unmatched", "k.py:2:4", (0, 2)), ("Reach", "k.py:7:4")], None),
+        [("Opened", "k.py:2:4")],
+        [("Matched", "k.py:2:4", 0, ())],
+        [("Reach", "k.py:4:12")],
+        [("Matched", "k.py:2:4", 2, (0,)), ("Reach", "k.py:6:12")],
+        [("Unmatched", "k.py:2:4", (0, 2)), ("Reach", "k.py:7:4")],
     ]
 
 
@@ -273,17 +262,16 @@ def test_7b20d40c():
     """Example: a filter testing the item it was just given, an and over
     each item, a class pattern, an if of a ternary, a write to no name, a
     filter testing the item is not None, an and reading a name written
-    just before it on its line, and a walrus returned
+    just before it on its line, and an and in a returned walrus
     Python fuses a name's write and its next read into one instruction
     placed at the write, so the read is found by its name: in a
     comprehension, in what reads first after the write, its filters, then
     its element; else inside what the next instruction reads. A pattern's
-    test of None gives nothing; a ternary's arm gives the if its outcome;
-    a returned walrus's value is its and's."""
+    test of None gives nothing; a ternary's arm gives the if its
+    outcome."""
     tables = _tables(SHAPES)
     assert _branches(tables["<genexpr>"]) == [([("Outcome", "k.py:2:36", 0, False)], [("Outcome", "k.py:2:36", 0, True)])]
-    shapes = tables["shapes"]
-    assert _branches(shapes) == [
+    assert _branches(tables["shapes"]) == [
         ([("Outcome", "k.py:3:18", 0, True)], [("Outcome", "k.py:3:18", 0, False)]),
         ([("Outcome", "k.py:7:10", 0, True)], [("Outcome", "k.py:7:10", 0, False)]),
         ([("Outcome", "k.py:7:4", 0, True)], [("Outcome", "k.py:7:4", 0, False)]),
@@ -292,7 +280,6 @@ def test_7b20d40c():
         ([("Outcome", "k.py:11:32", 0, True)], [("Outcome", "k.py:11:32", 0, False)]),
         ([("Outcome", "k.py:12:19", 0, True)], [("Outcome", "k.py:12:19", 0, False)]),
     ]
-    assert _values(shapes) == [[("Value", "k.py:12:19", False)]]
 
 
 READY = (
@@ -311,11 +298,39 @@ def test_7b20d40d():
     ready = _tables(READY)["ready"]
     assert _branches(ready) == [([("Outcome", "k.py:2:4", 1, True)], [("Outcome", "k.py:2:4", 1, False)])]
     assert _marks(ready) == [
-        ([("Opened", "k.py:2:4")], None),
-        ([("Matched", "k.py:2:4", 0, ())], None),
-        ([("Reach", "k.py:4:12")], None),
-        ([("Reach", "k.py:5:4")], None),
+        [("Opened", "k.py:2:4")],
+        [("Matched", "k.py:2:4", 0, ())],
+        [("Reach", "k.py:4:12")],
+        [("Reach", "k.py:5:4")],
     ]
+
+
+COPIED = (
+    "def run(p0, p1, t):\n"
+    "    match p0:\n"
+    "        case True:\n"
+    "            if p1: raise ValueError\n"
+    "        case 2 | _:\n"
+    "            raise ValueError\n"
+    "    return t\n"
+)
+
+
+def test_7b20d40e():
+    """Example: a match whose last case, 2 | _, only raises, after a case
+    whose body is an if that raises
+    Python copies the raise to each of the last pattern's alternatives, so
+    the case is reached, and its raise run, at each copy; the first case's
+    body is reached once, though its if's false branch lands back inside
+    it."""
+    marks = [action for actions in _marks(_tables(COPIED)["run"]) for action in actions]
+    assert [marks.count(action) for action in (
+        ("Matched", "k.py:2:4", 0, ()),
+        ("Matched", "k.py:2:4", 1, (0,)),
+        ("Reach", "k.py:4:19"),
+        ("Reach", "k.py:6:12"),
+        ("Reach", "k.py:7:4"),
+    )] == [1, 2, 1, 2, 1]
 
 
 def test_7b20d40a():

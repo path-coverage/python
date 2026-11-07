@@ -320,11 +320,24 @@ Paths combined: 90 / 116 (77.59%)
 
 ## How it works
 
-Nothing is rewritten: the code that runs is the code Python compiled.
-While measuring, `sys.monitoring` offers each module's code as it starts
-(`monitor.py`); a covered module's code objects, nested functions, lambdas
-and generators included, have their own events turned on, and no other
-code has any.
+A meta path finder, placed first on `sys.meta_path`, hands each covered
+module to a loader that parses its source and wraps the last operand of
+every `and`/`or` (`last_operands.py`, `manifest.wrapped` deciding which)
+in a call that counts its outcome and returns it unchanged:
+
+```python
+x = p or q
+# compiles as
+x = p or __path_coverage__(1, q)
+```
+
+No branch tests such an operand when the `and`/`or`'s value is used, as
+here, in an f-string or as a call's argument. Nothing else in the tree
+changes, each inserted node takes the location of the operand it wraps,
+and the loader neither reads nor writes the bytecode cache. Every other
+leaf's outcome comes from `sys.monitoring` (`monitor.py`), one source per
+leaf: the module's code objects, nested functions, lambdas and generators
+included, have their own events turned on, and no other code has any.
 
 Before a covered module runs, `code_map.py` maps each of its code objects
 once, from where Python says each instruction came from
@@ -332,14 +345,12 @@ once, from where Python says each instruction came from
 
 - each branch, left or right, gives the outcome of the leaf whose value
   its jump tests, and of each leaf holding it whose outcome that decides,
-  eg an `if` whose predicate is an `and`;
+  eg an `if` whose predicate is an `and`; a chained comparison whose
+  value an `and`/`or` tests again gives its outcome only there;
 - an instruction marks where a `match` starts trying its cases, where a
   case's guard or body starts (its pattern matched), and where the match is
-  left with no case taken; where each return or raise starts; and where a
-  write of a decision's value is done, so the value can be read;
-- a value returned or yielded tells the outcome of an `and`/`or`'s last
-  leaf, which no branch tests when the value is used, as in
-  `return a and b`;
+  left with no case taken; and where each return or raise starts; each at
+  every copy Python makes of a small block, eg a body that only returns;
 - a function's start counts its entry.
 
 `any` and `all` of a generator Python 3.14 runs in the caller: its check
@@ -354,7 +365,7 @@ that calls the function holding the decision, or a generator resumed in
 another thread, does not mix two evaluations. An evaluation is complete
 when its outcomes are one of the decision's possible paths, as the
 manifest gives them; a leaf whose form fixes its outcome and that Python
-compiles to no test, eg `True` in `a and True`, takes that outcome.
+compiles to no test, eg `True` in `if True and a`, takes that outcome.
 
 ## Roadmap
 
@@ -376,15 +387,11 @@ Next:
 
 - CPython 3.14 or later (`sys.monitoring`'s `BRANCH_LEFT` and
   `BRANCH_RIGHT` events, and how 3.14 compiles `any` and `all`).
-- A module that started before `start` is not measured, and nor is the
+- A module imported before `start` is not measured, and nor is the
   script run as `__main__`; all their decisions show as `never reached`.
-- The last leaf of an `and`/`or` whose value is used is tested by no
-  branch. Its outcome is read from the value when the value is returned,
-  yielded, or written to a name; anywhere else, eg a list's item, a call's
-  argument or a comprehension's element, it cannot be seen, so that
-  evaluation's path is not counted, though its earlier leaves' outcomes
-  are. Such a value's truth is taken once more when it is read, so a value
-  whose `__bool__` has side effects sees it called more often.
+- The last operand of an `and`/`or` has its truth taken once more by the
+  call around it, so an operand whose `__bool__` has side effects sees it
+  called more often.
 - Python 3.14 drops an instruction event at the start of a line once
   another tool, eg coverage.py, disables its own line event there, so
   path_coverage keeps a line event wherever it marks an instruction.
@@ -407,13 +414,17 @@ Every run measures path_coverage's own `src/` and `test/` with
 path_coverage. The code measured and the tool measuring are the same
 package in one process, so `test/self_coverage.py`, a pytest plugin that
 `bin/test.sh` loads with `-p` before any test module is imported, copies
-`src/path_coverage` into a temporary dir as `path_coverage_self`, and starts
+`src/path_coverage` into a temporary dir as `path_coverage_self`, renaming
+the name its wrapped operands call (`__path_coverage_self__`), and starts
 the copy, with groups `code` (`src/**`) and `test` (`test/**`), skipping
 `test/projects/**` and the files the suite leaves out. Each claims a
 `sys.monitoring` tool id of its own, so the tests start and stop
-`path_coverage` as they always do. Code that runs inside a monitoring
-callback is never itself monitored, by the copy or by coverage.py, so the
-tests call `monitor`'s callbacks, and measure code, directly.
+`path_coverage` as they always do, its finder in front of the copy's while
+they run. The copy's finder sits in front of pytest's assertion rewriting,
+so the copy's loader rewrites a test module's asserts as pytest would,
+after its own wrapping. Code that runs inside a monitoring callback is
+never itself monitored, by the copy or by coverage.py, so the tests call
+`monitor`'s callbacks directly.
 
 The report is written to `reports/paths/index.html` (gitignored). A full
 run, with no arguments, ends by printing each group's totals and where the
@@ -433,12 +444,18 @@ Path coverage report: .../path_coverage/reports/paths/index.html
 runs and measures, and whether its coverage is checked:
 
 - `all`, every test (`make test`, the default).
-- `core`, every test but the generated ones in `test/property`, neither
-  run nor measured (`make test_core`): whether the hand-written tests
-  alone reach full coverage.
+- `core`, every test but the generated ones in `test/property`, and the
+  reference rewrite in `test/reference` that only they run, neither run
+  nor measured (`make test_core`): whether the hand-written tests alone
+  reach full coverage.
 - `property`, the generated tests alone (`bin/test.sh --suite property`),
   whose coverage, of only part of the code, is not checked.
 
 `test/property` generates small functions from a seeded grammar and checks
 that each imports under path coverage and returns or raises exactly as it
-does compiled plainly, on every combination of its boolean parameters.
+does compiled plainly, on every combination of its boolean parameters;
+that the wrapping of last operands compiles exactly when the source does;
+and, against `test/reference`, the rewrite path_coverage measured with
+before `sys.monitoring` (its 4660fa2 rewriter and recorder, trimmed to what
+the grammar reaches), that each function's paths and statement runs are
+counted exactly as that rewrite counts them.

@@ -1,31 +1,24 @@
-"""Measures covered code with sys.monitoring, changing none of it: while
-measuring, each module's code is offered, as it starts, to be adopted; an
-adopted module's code objects, nested ones included, are mapped once by
-code_map and have their own events turned on. Each event's callback looks
-up what it means and logs it, by the id of the frame it happened in, on
-the Evaluations of the run that adopted it, which rebuilds them later; an
-event that means nothing is disabled where it happened, so it is never
+"""Measures covered code with sys.monitoring and one call around each
+and/or's last operand: instrument wraps those operands, as last_operands
+does, compiles the module, then has code_map map its code objects, nested
+ones included, once, and turns on their own events. Each event's callback
+looks up what it means and logs it, by the id of the frame it happened in,
+on the Evaluations of the run that measures it, which rebuilds them later;
+an event that means nothing is disabled where it happened, so it is never
 seen there again. The package is never itself measured, as it would
 measure itself."""
 
+import ast
 import sys
 
-from . import code_map
+from . import code_map, last_operands
 
 MONITORING = sys.monitoring
 EVENTS = MONITORING.events
 DISABLE = MONITORING.DISABLE
 
-# The events of each adopted code object.
-LOCAL = (
-    EVENTS.BRANCH_LEFT
-    | EVENTS.BRANCH_RIGHT
-    | EVENTS.INSTRUCTION
-    | EVENTS.PY_RETURN
-    | EVENTS.PY_YIELD
-    | EVENTS.PY_START
-    | EVENTS.LINE
-)
+# The events of each measured code object.
+LOCAL = EVENTS.BRANCH_LEFT | EVENTS.BRANCH_RIGHT | EVENTS.INSTRUCTION | EVENTS.PY_START | EVENTS.LINE
 
 # The tool ids tried, in order, those Python names for a debugger, a
 # profiler or coverage last.
@@ -33,41 +26,33 @@ TOOLS = (3, 4, 5, 2, 0, 1)
 
 # What each event means, by (id(code), offset): branches left, (Evaluations,
 # actions); branches right, (Evaluations, offset gone to, actions);
-# instructions, (Evaluations, actions, name read or None); values
-# returned or yielded, (Evaluations, actions). Entries by id(code):
-# (Evaluations, name).
+# instructions, (Evaluations, actions). Entries by id(code): (Evaluations,
+# name).
 _left = {}
 _right = {}
 _marks = {}
-_values = {}
 _entries = {}
 
 # Every code object mapped, kept alive so its id names no other.
 _codes = []
 
 
-def _ignore(_code):
-    """Adopts nothing: what a module's start is offered while not
-    measuring."""
+def compiled(tree, path):
+    """tree compiled as the module of the file path."""
+    return compile(tree, path, "exec", dont_inherit=True)
 
 
-_adopt = _ignore
-
-
-def start(adopt):
-    """Offers each module's code, as it starts from now on, to adopt, which
-    adopts it by calling measure, or ignores it."""
-    global _adopt
-    _adopt = adopt
-    MONITORING.set_events(_tool, EVENTS.PY_START)
-
-
-def stop():
-    """Offers no more modules' code; code already adopted is still
-    measured."""
-    global _adopt
-    _adopt = _ignore
-    MONITORING.set_events(_tool, 0)
+def instrument(text, name, path, evaluations, compiler):
+    """(code, record) of text, the source of the file path, named name as
+    decisions name it: its parse, each and/or's last operand wrapped in a
+    call of record, compiled by compiler, eg compiled, then measured,
+    logging on evaluations. The module must bind record as
+    last_operands.NAME."""
+    source = code_map.Source(text, name)
+    lasts = last_operands.Lasts(evaluations)
+    code = compiler(last_operands.rewrite(ast.parse(text), source, lasts), path)
+    measure(code, source, evaluations)
+    return code, lasts.record
 
 
 def measure(code, source, evaluations):
@@ -80,17 +65,10 @@ def measure(code, source, evaluations):
         _right.update({(key, offset): (evaluations, *found) for offset, found in table.right.items()})
         _left.update({(key, alias): _left[(key, offset)] for alias, offset in table.left_aliases.items()})
         _right.update({(key, alias): _right[(key, offset)] for alias, offset in table.right_aliases.items()})
-        _marks.update({(key, offset): (evaluations, *found) for offset, found in table.marks.items()})
-        _values.update({(key, offset): (evaluations, actions) for offset, actions in table.values.items()})
+        _marks.update({(key, offset): (evaluations, actions) for offset, actions in table.marks.items()})
         if table.entry is not None:
             _entries[key] = (evaluations, table.entry)
         MONITORING.set_local_events(_tool, each, LOCAL)
-
-
-def measured():
-    """The files any code was measured in so far, as Python named them
-    when it compiled their code."""
-    return {code.co_filename for code in _codes}
 
 
 def _claim():
@@ -102,8 +80,6 @@ def _claim():
         (EVENTS.BRANCH_LEFT, _branched_left),
         (EVENTS.BRANCH_RIGHT, _branched_right),
         (EVENTS.INSTRUCTION, _instruction),
-        (EVENTS.PY_RETURN, _valued),
-        (EVENTS.PY_YIELD, _valued),
         (EVENTS.PY_START, _started),
         (EVENTS.LINE, _line_started),
     ):
@@ -117,7 +93,7 @@ def _branched_left(code, offset, _destination):
     if found is None:
         return DISABLE
     evaluations, actions = found
-    evaluations.note(id(sys._getframe(1)), actions, None)
+    evaluations.note(id(sys._getframe(1)), actions)
 
 
 def _branched_right(code, offset, destination):
@@ -129,18 +105,16 @@ def _branched_right(code, offset, destination):
         return DISABLE
     evaluations, goes_to, actions = found
     if destination == goes_to:
-        evaluations.note(id(sys._getframe(1)), actions, None)
+        evaluations.note(id(sys._getframe(1)), actions)
 
 
 def _instruction(code, offset):
-    """Logs what reaching the instruction at offset in code means, with the
-    truth of the value just written to the name it reads, if any."""
+    """Logs what reaching the instruction at offset in code means."""
     found = _marks.get((id(code), offset))
     if found is None:
         return DISABLE
-    evaluations, actions, name = found
-    frame = sys._getframe(1)
-    evaluations.note(id(frame), actions, None if name is None else _written(frame, name))
+    evaluations, actions = found
+    evaluations.note(id(sys._getframe(1)), actions)
 
 
 def _line_started(code, _line):
@@ -157,34 +131,14 @@ def _kept(code, offset):
     return None if (id(code), offset) in _marks else DISABLE
 
 
-def _written(frame, name):
-    """The truth of the value of name in frame: a local's, else, as for a
-    name declared global, a global's."""
-    local = frame.f_locals
-    return bool(local[name] if name in local else frame.f_globals[name])
-
-
-def _valued(code, offset, value):
-    """Logs what returning or yielding value at offset in code means, with
-    value's truth."""
-    found = _values.get((id(code), offset))
+def _started(code, _offset):
+    """Counts the entry of a measured function; disables the start of any
+    other code."""
+    found = _entries.get(id(code))
     if found is None:
         return DISABLE
-    evaluations, actions = found
-    evaluations.note(id(sys._getframe(1)), actions, bool(value))
-
-
-def _started(code, _offset):
-    """Counts the entry of an adopted function; offers a module's code, as
-    it starts, to be adopted."""
-    found = _entries.get(id(code))
-    if found is not None:
-        evaluations, name = found
-        evaluations.reach(name)
-        return None
-    if code.co_name == "<module>":
-        _adopt(code)
-    return DISABLE
+    evaluations, name = found
+    evaluations.reach(name)
 
 
 # This package's tool id, claimed once, as it is first imported.

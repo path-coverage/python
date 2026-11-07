@@ -1,7 +1,7 @@
 """Rebuilds each evaluation of a decision from what sys.monitoring saw of it,
-in the order it happened: the outcome of each leaf a branch tested, each
-case a match reached, each item a block call was given, and each value a
-decision gave where no branch tests its last leaf. Events of evaluations of
+in the order it happened: the outcome of each leaf a branch tested, or a
+call around an and/or's last operand counted, each case a match reached,
+and each item a block call was given. Events of evaluations of
 the same decision in different frames, as a leaf calling the function
 holding it makes, can interleave, so each evaluation under way is kept by
 its frame."""
@@ -18,9 +18,7 @@ class Shape:
     """What rebuilding needs of one decision: its name; its possible paths,
     as decision_paths.possible gives them; and fixed, {leaf index: outcome}
     of each leaf whose form fixes its outcome and which no branch tests, as
-    Python compiles it to no test at all; and silent, True when some other
-    leaf no branch tests, as the last of an and whose value is used, so
-    only the value the decision gives tells its outcome."""
+    Python compiles it to no test at all."""
 
     def __init__(self, name, possible):
         """The shape of the decision named name, with possible its paths."""
@@ -28,7 +26,6 @@ class Shape:
         self.possible = frozenset(map(tuple, possible))
         self.size = len(possible[0])
         self.fixed = {}
-        self.silent = False
         self.following = _following(self.possible)
 
 
@@ -51,8 +48,8 @@ class Evaluations:
     {"truthy": n, "falsy": n}} of every leaf reached; decision_paths,
     {decision: {path: n}} of every evaluation completed; and reached,
     {name: runs} of every statement reached, eg {"k.py:3:4": 2}. Events
-    are logged as they happen, as (frame id, actions, value's truth), and
-    rebuilt into these counts by flush."""
+    are logged as they happen, as (frame id, actions), and rebuilt into
+    these counts by flush."""
 
     def __init__(self, limit=LIMIT):
         """Starts with nothing counted; the log is rebuilt once it holds
@@ -65,10 +62,10 @@ class Evaluations:
         self._open = {}
         self._blocks = {}
 
-    def note(self, frame, actions, truth):
-        """Logs actions, seen in the frame of id frame, truth the value's
-        that a value action needs; rebuilds the log once it is full."""
-        self.log.append((frame, actions, truth))
+    def note(self, frame, actions):
+        """Logs actions, seen in the frame of id frame; rebuilds the log
+        once it is full."""
+        self.log.append((frame, actions))
         if len(self.log) >= self.limit:
             self.flush()
 
@@ -76,23 +73,15 @@ class Evaluations:
         """Applies every logged action, in the order logged, emptying the
         log."""
         log, self.log = self.log, []
-        for frame, actions, truth in log:
+        for frame, actions in log:
             for action in actions:
-                action.apply(self, frame, truth)
+                action.apply(self, frame)
 
     def outcome(self, frame, shape, index, outcome):
         """Notes outcome of leaf index of shape's evaluation in frame. A leaf
         already noted starts a new evaluation, the one before it never
         completed, as one that raised."""
         self._set(frame, shape, self._evaluation(frame, shape, index), index, outcome)
-
-    def value(self, frame, shape, outcome):
-        """Notes outcome as that of the leaf shape's evaluation in frame is
-        waiting for, its last, which no branch tests, so the value the
-        decision gave tells it. Nothing when no evaluation is waiting."""
-        outcomes = self._open.pop((frame, shape), None)
-        if outcomes is not None:
-            self._set(frame, shape, outcomes, shape.following[tuple(outcomes)], outcome)
 
     def matched(self, frame, shape, pattern, earlier):
         """Notes, on a match's evaluation in frame, its case's pattern, leaf
@@ -201,29 +190,16 @@ class Evaluations:
 
 @dataclass(frozen=True)
 class Outcome:
-    """A branch's outcome for leaf index of shape's decision."""
+    """The outcome of leaf index of shape's decision, as a branch, or the
+    call around an and/or's last operand, tells it."""
 
     shape: Shape
     index: int
     outcome: bool
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Notes the leaf's outcome on its evaluation in frame."""
         evaluations.outcome(frame, self.shape, self.index, self.outcome)
-
-
-@dataclass(frozen=True)
-class Value:
-    """A value shape's decision gave, its truth the decision's, flipped when
-    flip, as a not between them flips it."""
-
-    shape: Shape
-    flip: bool
-
-    def apply(self, evaluations, frame, truth):
-        """Notes the value's truth as the outcome of the leaf the
-        evaluation in frame waits for."""
-        evaluations.value(frame, self.shape, truth != self.flip)
 
 
 @dataclass(frozen=True)
@@ -235,7 +211,7 @@ class Matched:
     pattern: int
     earlier: tuple
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Notes the pattern matched, on the evaluation in frame."""
         evaluations.matched(frame, self.shape, self.pattern, self.earlier)
 
@@ -246,7 +222,7 @@ class Opened:
 
     shape: Shape
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Opens the match's evaluation in frame."""
         evaluations.opened(frame, self.shape)
 
@@ -258,7 +234,7 @@ class Unmatched:
     shape: Shape
     patterns: tuple
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Notes every pattern not yet matched as not, on the evaluation in
         frame."""
         evaluations.unmatched(frame, self.shape, self.patterns)
@@ -270,7 +246,7 @@ class Begin:
 
     shape: Shape
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Starts the block call's evaluation in frame."""
         evaluations.begin(frame, self.shape)
 
@@ -281,7 +257,7 @@ class Item:
 
     shape: Shape
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Counts the item on the evaluation in frame."""
         evaluations.item(frame, self.shape)
 
@@ -293,7 +269,7 @@ class Answer:
     shape: Shape
     outcome: bool
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Notes the answer on the evaluation in frame."""
         evaluations.answer(frame, self.shape, self.outcome)
 
@@ -304,7 +280,7 @@ class End:
 
     shape: Shape
 
-    def apply(self, evaluations, frame, _truth):
+    def apply(self, evaluations, frame):
         """Completes the evaluation in frame."""
         evaluations.end(frame, self.shape)
 
@@ -315,6 +291,6 @@ class Reach:
 
     name: str
 
-    def apply(self, evaluations, _frame, _truth):
+    def apply(self, evaluations, _frame):
         """Counts the run."""
         evaluations.reach(self.name)

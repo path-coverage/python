@@ -63,10 +63,11 @@ test/test_method_statements.py unless stated.
 ## Counting
 
 12. A row that is not a decision is counted where its statement's first
-    instruction runs, an instruction event code_map marks with a Reach of
-    its "path:line:col"; a function's entry where its code starts. No code
-    is changed, so line traces are unchanged. (test/test_code_map.py
-    7b20d401, test/test_monitor.py d86a1f0c)
+    instruction runs, at every copy Python makes of it, an instruction
+    event code_map marks with a Reach of its "path:line:col"; a function's
+    entry where its code starts. No statement is added, so line traces are
+    unchanged. (test/test_code_map.py 7b20d401, 7b20d40e,
+    test/test_monitor.py d86a1f0c, d86a1f16)
 
 13. Every run measures within each method; there is no measure setting.
     The JSON report's "reached" key is always written, even empty. When

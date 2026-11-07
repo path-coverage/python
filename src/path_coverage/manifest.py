@@ -312,6 +312,15 @@ def irrefutable(pattern):
             return False
 
 
+def wrapped(node, parent):
+    """True for node, held by parent, when it is the last operand of an
+    and/or and no and/or itself: the one leaf whose outcome no branch need
+    test, as the and/or's value may be used, eg x = a or b, so a call
+    around it counts it. The one place this is decided, for the rewrite
+    that wraps it and for code_map, which counts no branch for it."""
+    return isinstance(parent, ast.BoolOp) and parent.values[-1] is node and not isinstance(node, ast.BoolOp)
+
+
 def matches_anything(case):
     """True for a match statement's case that is taken whatever the
     subject: an irrefutable pattern with no guard. The one place this is
