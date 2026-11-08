@@ -29,9 +29,10 @@ rm -rf "${ROOT}/site"
 mkdir -p "${ROOT}/site"
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${ROOT}/src" COVERAGE_DIR="${ROOT}/site" \
   "${PYTHON}" "${ROOT}/demo/run.py"
-docker run --rm \
+schema_check="$(docker run --rm \
   --volume "${ROOT}/site:/paths:ro" \
-  ghcr.io/path-coverage/schemas /paths > /dev/null
+  ghcr.io/path-coverage/schemas /paths 2>&1)" \
+  || { echo "${schema_check}" >&2; exit 1; }
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --volume "${ROOT}/site:/site" \
