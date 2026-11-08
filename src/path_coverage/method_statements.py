@@ -9,7 +9,9 @@ from . import decision_paths, leaving
 from . import totals as path_totals
 from .columns import Columns
 from .manifest import (
+    INLINED,
     Arm,
+    loop_places,
     block_generator,
     builtin_blocks,
     if_keywords,
@@ -51,23 +53,57 @@ UNSEEN = (
     ast.GeneratorExp,
 )
 
+# The nodes whose code runs in a frame of its own, not its function's.
+OWN_FRAMES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda, ast.GeneratorExp)
+
 
 def of(source, path):
     """{def decision: [Statement, ...]} for each function in source, in source
     order. Example: def f(): x = 1; return x gives = and return rows."""
-    return {decision: rows for decision, (_, rows) in _collect(source, path).items()}
+    return {decision: rows for decision, (_, rows) in collected(source, path).items()}
 
 
 def names(source, path):
     """{def decision: its name} for each function in source, eg {"k.py:4:4":
     "ship"}, each its card's title."""
-    return {decision: node.name for decision, (node, _) in _collect(source, path).items()}
+    return {decision: node.name for decision, (node, _) in collected(source, path).items()}
 
 
 def lasts(source, path):
     """{def decision: its last line} for each function in source, eg
     {"k.py:4:4": 6}, where its card ends."""
-    return {decision: node.end_lineno for decision, (node, _) in _collect(source, path).items()}
+    return {decision: node.end_lineno for decision, (node, _) in collected(source, path).items()}
+
+
+def loops(source, path):
+    """{def decision: the names of its loops} for each function in source,
+    in source order, each a for statement or a generator of a list, set or
+    dict comprehension its own calls run, named by its for keyword; none
+    inside a nested def, class, lambda or generator expression, whose code
+    runs in a frame of its own. Example: {"k.py:1:0": ["k.py:3:4"]}."""
+    columns = Columns(source)
+    found = {}
+    for decision, (node, _) in collected(source, path).items():
+        places = loop_places(source, node)
+        found[decision] = [columns.name(path, *places[loop]) for loop in _own_loops(node)]
+    return found
+
+
+def _own_loops(function):
+    """The loops in function's body, as loop_places finds them, in source
+    order, but those in a scope of their own inside it."""
+    found = []
+    waiting = list(reversed(function.body))
+    while waiting:
+        node = waiting.pop()
+        if isinstance(node, OWN_FRAMES):
+            continue
+        if isinstance(node, ast.For):
+            found.append(node)
+        if isinstance(node, INLINED):
+            found += node.generators
+        waiting += reversed(list(ast.iter_child_nodes(node)))
+    return found
 
 
 def reaches(source, path):
@@ -174,7 +210,7 @@ def _taken_decision(row, paths):
     return sum(1 for each in paths[row.decision] if each["count"] > 0)
 
 
-def _collect(source, path):
+def collected(source, path):
     """{def decision: (def node, rows)} for each function in source, in source
     order."""
     tree = ast.parse(source)

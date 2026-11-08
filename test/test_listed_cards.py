@@ -51,6 +51,14 @@ def test_d3c9a101():
             "calls": 0,
             "rows": [{"at": "3:22", "top": "and", "paths": 3, "taken": 1, "decision": "k.py:3:22"}],
             "taken": [],
+            "passes": {},
+            "covered": [],
+            "gaps": [
+                [{"at": "3:22", "path": [True, True]}],
+                [{"at": "3:22", "path": [True, False]}],
+                [{"at": "3:22", "path": [False, None]}],
+            ],
+            "impossible": [],
         },
         "k.py:1:0": {
             "name": "file",
@@ -98,3 +106,73 @@ def test_d3c9a102():
     ]
     assert rows == [[1], [None]]
     assert [row["decision"] for row in _listed(source, {}, {})["k.py:1:0"]["rows"]] == [None]
+
+
+def test_d3c9a104():
+    """Example: save, an if on dry_run whose arm returns, a for loop, an
+    if on not dry_run, a return; called twice, dry_run false, 2+ records.
+    A function card lists the possible paths of its machine some call
+    witnessed, covered, each with how many calls did; its gaps, those no
+    call witnessed; and its impossible paths, each giving the stable
+    dry_run both outcomes, neither with a count. The for is a fork, 0 or
+    1+ items; the calls' 2+ passes witness its 1+ items path. Its ways
+    are its possible paths."""
+    source = (
+        "def save(records, dry_run, db):\n"
+        "    if dry_run:\n"
+        "        return 0\n"
+        "    for record in records:\n"
+        "        db.append(record)\n"
+        "    if not dry_run:\n"
+        "        db.append('done')\n"
+        "    return len(db)\n"
+    )
+    decisions = manifest.decisions(source, "k.py")
+    taken = (("k.py:2:4", (False,)), ("k.py:4:4", ("2+ items",), frozenset({()})), ("k.py:6:4", (True,)), ("k.py:8:4",))
+    counted = ({"k.py:1:0": 2}, {"k.py:1:0": {taken: 2}})
+    paths = {
+        "k.py:2:4": [{"path": [True], "count": 0}, {"path": [False], "count": 2}],
+        "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
+    }
+    files = {"k.py": (source, decisions)}
+    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
+    on = {"at": "2:04", "path": [False]}
+    none, some = {"at": "4:04", "path": ["0 items"]}, {"at": "4:04", "path": ["1+ items"]}
+    assert (card["ways"], card["covered"], card["gaps"], card["impossible"]) == (
+        3,
+        [{"way": [on, some, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2}],
+        [[{"at": "2:04", "path": [True]}, {"at": "3:08"}], [on, none, {"at": "6:04", "path": [True]}, {"at": "8:04"}]],
+        [[on, loop, {"at": "6:04", "path": [False]}, {"at": "8:04"}] for loop in (none, some)],
+    )
+
+
+def test_d3c9a105():
+    """Example: half, an if whose condition is an or, then a return;
+    called once, with a child.
+    A call steps the or, decided first, before the if holding it, though
+    the card's tree lists the if first; the machine steps in that order
+    too, so a taken way matches its possible path, and each gap lists its
+    steps as a call would take them."""
+    source = (
+        "def half(age, price):\n"
+        "    if age < 16 or age >= 65:\n"
+        "        price //= 2\n"
+        "    return price\n"
+    )
+    decisions = manifest.decisions(source, "k.py")
+    taken = (("k.py:2:16", (True, None)), ("k.py:2:4", (True,)), ("k.py:4:4",))
+    counted = ({"k.py:1:0": 1}, {"k.py:1:0": {taken: 1}})
+    paths = {
+        "k.py:2:4": [{"path": [True], "count": 1}, {"path": [False], "count": 0}],
+        "k.py:2:16": [
+            {"path": [True, None], "count": 1},
+            {"path": [False, True], "count": 0},
+            {"path": [False, False], "count": 0},
+        ],
+    }
+    files = {"k.py": (source, decisions)}
+    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
+    assert card["gaps"] == [
+        [{"at": "2:16", "path": [False, True]}, {"at": "2:04", "path": [True]}, {"at": "4:04"}],
+        [{"at": "2:16", "path": [False, False]}, {"at": "2:04", "path": [False]}, {"at": "4:04"}],
+    ]

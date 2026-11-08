@@ -9,6 +9,7 @@ its frame."""
 from dataclasses import dataclass
 
 from .kinds.block import ITEMS
+from .walk import Walk
 
 # How many events the log holds before they are rebuilt.
 LIMIT = 100_000
@@ -57,6 +58,7 @@ class Evaluations:
         self.decision_paths = {}
         self.reached = {}
         self.ways = {}
+        self.loops = {}
         self.log = []
         self.limit = limit
         self._open = {}
@@ -141,14 +143,30 @@ class Evaluations:
         the id of one that has finished, and a new call always enters
         before anything else happens in it."""
         self._walked(frame)
-        self._walking[frame] = (name, [])
+        self._walking[frame] = Walk(name, self.ways, self.loops)
         self.reach(name)
+
+    def unwalked(self, frame):
+        """Ends the way under way in frame, if any, as code that has no
+        card, eg a generator expression, starts in a frame of its id, so
+        that way's call has finished; starts none."""
+        self._walked(frame)
 
     def ran(self, frame, name):
         """Counts a run of the statement named name, a step of the way
         under way in frame."""
         self.reach(name)
         self._step(frame, (name,))
+
+    def passed(self, frame, loop):
+        """Starts a pass of the loop named loop on the way under way in
+        frame."""
+        self._walk(frame, Walk.passed, loop)
+
+    def exhausted(self, frame, loop):
+        """Ends the loop named loop, its items all given, on the way under
+        way in frame."""
+        self._walk(frame, Walk.exhausted, loop)
 
     def close(self):
         """Ends every way still under way, as the run is over, counting
@@ -159,19 +177,21 @@ class Evaluations:
     def _walked(self, frame):
         """Counts the way under way in frame, when there is one, as taken
         once more."""
-        walking = self._walking.pop(frame, None)
-        if walking is not None:
-            entry, steps = walking
-            ways = self.ways.setdefault(entry, {})
-            way = tuple(steps)
-            ways[way] = ways.get(way, 0) + 1
+        walk = self._walking.pop(frame, None)
+        if walk is not None:
+            walk.finish()
 
     def _step(self, frame, step):
-        """Adds step to the way under way in frame; nothing in a frame no
-        measured function entered, eg a module's top level."""
-        walking = self._walking.get(frame)
-        if walking is not None:
-            walking[1].append(step)
+        """Adds step to the way under way in frame."""
+        self._walk(frame, Walk.step, step)
+
+    def _walk(self, frame, move, argument):
+        """Moves the way under way in frame by move, given argument;
+        nothing in a frame no measured function entered, eg a module's top
+        level."""
+        walk = self._walking.get(frame)
+        if walk is not None:
+            move(walk, argument)
 
     def _evaluation(self, frame, shape, index):
         """The outcomes of shape's evaluation under way in frame, taken out
@@ -336,3 +356,35 @@ class Enter:
     def apply(self, evaluations, frame):
         """Starts the call's way in frame."""
         evaluations.enter(frame, self.name)
+
+
+@dataclass(frozen=True)
+class Unwalked:
+    """The start of code that has no card, eg a generator expression, a
+    lambda or a module's top level."""
+
+    def apply(self, evaluations, frame):
+        """Ends any way under way in frame."""
+        evaluations.unwalked(frame)
+
+
+@dataclass(frozen=True)
+class Pass:
+    """A pass of the for loop named loop starting, given one more item."""
+
+    loop: str
+
+    def apply(self, evaluations, frame):
+        """Starts the pass on the way under way in frame."""
+        evaluations.passed(frame, self.loop)
+
+
+@dataclass(frozen=True)
+class Exhausted:
+    """The for loop named loop ending, its items all given."""
+
+    loop: str
+
+    def apply(self, evaluations, frame):
+        """Ends the loop on the way under way in frame."""
+        evaluations.exhausted(frame, self.loop)

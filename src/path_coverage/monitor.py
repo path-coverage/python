@@ -12,7 +12,7 @@ import ast
 import sys
 
 from . import code_map, wrapped_leaves
-from .evaluations import Enter
+from .evaluations import Enter, Unwalked
 
 MONITORING = sys.monitoring
 EVENTS = MONITORING.events
@@ -27,8 +27,8 @@ TOOLS = (3, 4, 5, 2, 0, 1)
 
 # What each event means, by (id(code), offset): branches left, (Evaluations,
 # actions); branches right, (Evaluations, offset gone to, actions);
-# instructions, (Evaluations, actions). Entries by id(code): (Evaluations,
-# name).
+# instructions, (Evaluations, actions). Starts by id(code): (Evaluations,
+# actions), a function's its entry, other code's that it has no card.
 _left = {}
 _right = {}
 _marks = {}
@@ -63,6 +63,7 @@ def measure(code, source, evaluations):
     code on line 0, its top level, logging what each event means on
     evaluations. Code on no kept line gets no events, so runs as plain
     Python."""
+    evaluations.loops.update(source.loops)
     for each, table in code_map.tables(code, source).items():
         if (0 if each is code else each.co_firstlineno) not in source.kept:
             continue
@@ -73,8 +74,7 @@ def measure(code, source, evaluations):
         _left.update({(key, alias): _left[(key, offset)] for alias, offset in table.left_aliases.items()})
         _right.update({(key, alias): _right[(key, offset)] for alias, offset in table.right_aliases.items()})
         _marks.update({(key, offset): (evaluations, actions) for offset, actions in table.marks.items()})
-        if table.entry is not None:
-            _entries[key] = (evaluations, (Enter(table.entry),))
+        _entries[key] = (evaluations, (Unwalked(),) if table.entry is None else (Enter(table.entry),))
         MONITORING.set_local_events(_tool, each, LOCAL)
 
 
@@ -139,8 +139,10 @@ def _kept(code, offset):
 
 
 def _started(code, _offset):
-    """Logs the entry of a measured function, in its frame, which starts
-    that call's way; disables the start of any other code."""
+    """Logs the start of measured code, in its frame: a function's entry
+    starts its call's way; other code, eg a generator expression, ends
+    any way left under way in a frame of its id, as CPython reuses a
+    finished frame's id. Disables the start of code never measured."""
     found = _entries.get(id(code))
     if found is None:
         return DISABLE

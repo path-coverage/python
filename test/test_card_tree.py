@@ -128,6 +128,32 @@ def test_5be7c007():
     }
 
 
+def test_5be7c009():
+    """Example: size, a match of four cases, each returning.
+    A case's body is a region of the match, run on the paths that pick
+    that case, as decision_paths.cases_picked gives them: each return is
+    placed in its case, on its own path."""
+    source = (
+        "def size(order):\n"
+        "    match len(order['items']):\n"
+        "        case 0:\n"
+        "            return 'empty'\n"
+        "        case 1 | 2:\n"
+        "            return 'small'\n"
+        "        case count if count > 10:\n"
+        "            return 'large'\n"
+        "        case _:\n"
+        "            return 'medium'\n"
+    )
+    assert _places(source) == {
+        "2:4": TOP,
+        "4:12": ("2:4", "case", [0], None, None),
+        "6:12": ("2:4", "case", [1], None, None),
+        "8:12": ("2:4", "case", [2], None, None),
+        "10:12": ("2:4", "case", [3], None, None),
+    }
+
+
 def test_5be7c005():
     """Example: every Python file of the package's src and test.
     Every row placed in a parent is placed in a row of its own card, on

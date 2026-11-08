@@ -3,14 +3,18 @@ from path_coverage.evaluations import (
     Answer,
     Begin,
     End,
+    Enter,
     Evaluations,
+    Exhausted,
     Item,
     Matched,
     Opened,
     Outcome,
+    Pass,
     Reach,
     Shape,
     Unmatched,
+    Unwalked,
 )
 
 
@@ -223,3 +227,192 @@ def test_3c9e510b():
     evaluations.note(1, (Outcome(shape, 1, True),))
     assert evaluations.log == []
     assert evaluations.decision_paths == {"k.py:2:24": {(True, True): 1}}
+
+
+TOTAL = (
+    "def total(orders):\n"
+    "    amount = 0\n"
+    "    for order in orders:\n"
+    "        if order.paid:\n"
+    "            amount += order.amount\n"
+    "    return amount\n"
+)
+
+# Where each of TOTAL's rows runs: the loops holding it, outermost first.
+TOTAL_LOOPS = {"k.py:3:4": (), "k.py:4:8": ("k.py:3:4",), "k.py:6:4": ()}
+
+
+def _paid(shape, *paid):
+    """The events of one pass of total's for per order, paid or not."""
+    return [event for each in paid for event in ((1, (Pass("k.py:3:4"),)), (1, (Outcome(shape, 0, each),)))]
+
+
+def test_3c9e510d():
+    """Example: total called on 3 orders, paid, unpaid, paid; then on 1
+    paid order; then on none
+    A call's way holds its loop once, as 0, 1 or 2+ items, however many
+    passes it made, with the set of ways its passes took, so a call
+    witnesses each of them; each pass's own way is counted on the loop.
+    The ways kept never grow with the passes made, only with the body's
+    distinct ways."""
+    shape = _shape(TOTAL, "k.py:4:8")
+    evaluations = Evaluations()
+    evaluations.loops.update(TOTAL_LOOPS)
+    for orders in ((True, False, True), (True,), ()):
+        evaluations.log.append((1, (Enter("k.py:1:0"),)))
+        evaluations.log.extend(_paid(shape, *orders))
+        evaluations.log += [(1, (Exhausted("k.py:3:4"),)), (1, (Reach("k.py:6:4"),))]
+    evaluations.flush()
+    evaluations.close()
+    paid, unpaid = (("k.py:4:8", (True,)),), (("k.py:4:8", (False,)),)
+    assert evaluations.ways == {
+        "k.py:1:0": {
+            (("k.py:3:4", ("2+ items",), frozenset({paid, unpaid})), ("k.py:6:4",)): 1,
+            (("k.py:3:4", ("1 item",), frozenset({paid})), ("k.py:6:4",)): 1,
+            (("k.py:3:4", ("0 items",), frozenset()), ("k.py:6:4",)): 1,
+        },
+        "k.py:3:4": {(("k.py:4:8", (True,)),): 3, (("k.py:4:8", (False,)),): 1},
+    }
+
+
+FIRST_LATE = (
+    "def first_late(orders):\n"
+    "    for order in orders:\n"
+    "        if order.late:\n"
+    "            return order\n"
+    "    return None\n"
+)
+
+# Where each of FIRST_LATE's rows runs: the loops holding it, outermost
+# first.
+FIRST_LATE_LOOPS = {"k.py:2:4": (), "k.py:3:8": ("k.py:2:4",), "k.py:4:12": ("k.py:2:4",), "k.py:5:4": ()}
+
+
+def test_3c9e510e():
+    """Example: first_late of a prompt order then a late one, its return
+    inside the for; then first_late of 1 prompt order
+    A loop left by a return, no Exhausted seen, ends with its call: its
+    last pass is counted, and the call's way holds it."""
+    shape = _shape(FIRST_LATE, "k.py:3:8")
+    evaluations = Evaluations()
+    evaluations.loops.update(FIRST_LATE_LOOPS)
+    _run(
+        evaluations,
+        (2, (Enter("k.py:1:0"),)),
+        (2, (Pass("k.py:2:4"),)),
+        (2, (Outcome(shape, 0, False),)),
+        (2, (Pass("k.py:2:4"),)),
+        (2, (Outcome(shape, 0, True),)),
+        (2, (Reach("k.py:4:12"),)),
+        (2, (Enter("k.py:1:0"),)),
+        (2, (Pass("k.py:2:4"),)),
+        (2, (Outcome(shape, 0, False),)),
+        (2, (Exhausted("k.py:2:4"),)),
+        (2, (Reach("k.py:5:4"),)),
+    )
+    evaluations.close()
+    prompt, late = (("k.py:3:8", (False,)),), (("k.py:3:8", (True,)), ("k.py:4:12",))
+    assert evaluations.ways == {
+        "k.py:1:0": {
+            (("k.py:2:4", ("2+ items",), frozenset({prompt, late})),): 1,
+            (("k.py:2:4", ("1 item",), frozenset({prompt})), ("k.py:5:4",)): 1,
+        },
+        "k.py:2:4": {
+            (("k.py:3:8", (False,)),): 2,
+            (("k.py:3:8", (True,)), ("k.py:4:12",)): 1,
+        },
+    }
+
+
+AUDIT = (
+    "def audit(orders, refunds):\n"
+    "    for order in orders:\n"
+    "        if order.late:\n"
+    "            break\n"
+    "    for refund in refunds:\n"
+    "        if refund.big:\n"
+    "            return refund\n"
+)
+
+
+def test_3c9e5110():
+    """Example: audit of a late order, its first for left by a break, then
+    of a small refund
+    A pass of a loop after it closes the loop before it, though no row
+    outside both ran between them: each holds its own pass's way."""
+    late, big = _shape(AUDIT, "k.py:3:8"), _shape(AUDIT, "k.py:6:8")
+    evaluations = Evaluations()
+    evaluations.loops.update({"k.py:2:4": (), "k.py:3:8": ("k.py:2:4",), "k.py:5:4": (), "k.py:6:8": ("k.py:5:4",)})
+    _run(
+        evaluations,
+        (4, (Enter("k.py:1:0"),)),
+        (4, (Pass("k.py:2:4"),)),
+        (4, (Outcome(late, 0, True),)),
+        (4, (Pass("k.py:5:4"),)),
+        (4, (Outcome(big, 0, False),)),
+        (4, (Exhausted("k.py:5:4"),)),
+    )
+    evaluations.close()
+    assert evaluations.ways == {
+        "k.py:1:0": {
+            (
+                ("k.py:2:4", ("1 item",), frozenset({(("k.py:3:8", (True,)),)})),
+                ("k.py:5:4", ("1 item",), frozenset({(("k.py:6:8", (False,)),)})),
+            ): 1
+        },
+        "k.py:2:4": {(("k.py:3:8", (True,)),): 1},
+        "k.py:5:4": {(("k.py:6:8", (False,)),): 1},
+    }
+
+
+SPANS = (
+    "def within(inner, outer):\n"
+    "    return outer[0] <= inner[0] and inner[1] <= outer[1]\n"
+    "\n"
+    "def span(parts):\n"
+    "    return tuple(-1 if part is None else part for part in parts)\n"
+)
+
+
+def test_3c9e5111():
+    """Example: within called, then span's generator expression run in a
+    frame of the id within's frame had, as CPython reuses a finished
+    frame's id
+    The start of code that has no card, eg a generator expression, ends
+    the way under way in its frame, and starts none: within's way holds
+    only its own steps."""
+    within, part = _shape(SPANS, "k.py:2:32"), _shape(SPANS, "k.py:5:20")
+    evaluations = Evaluations()
+    evaluations.loops.update({"k.py:2:32": (), "k.py:5:20": ()})
+    _run(
+        evaluations,
+        (6, (Enter("k.py:1:0"),)),
+        (6, (Outcome(within, 0, False),)),
+        (6, (Unwalked(),)),
+        (6, (Outcome(part, 0, True),)),
+        (6, (Outcome(part, 0, False),)),
+    )
+    evaluations.close()
+    assert evaluations.ways == {"k.py:1:0": {(("k.py:2:32", (False, None)),): 1}}
+
+
+def test_3c9e510f():
+    """Example: a loop like first_late's, its if's body a break, so its
+    return None follows, given one late order
+    A loop left by a break, no Exhausted seen, ends at the next row
+    outside it, which follows it on the call's way."""
+    shape = _shape(FIRST_LATE, "k.py:3:8")
+    evaluations = Evaluations()
+    evaluations.loops.update(FIRST_LATE_LOOPS)
+    _run(
+        evaluations,
+        (3, (Enter("k.py:1:0"),)),
+        (3, (Pass("k.py:2:4"),)),
+        (3, (Outcome(shape, 0, True),)),
+        (3, (Reach("k.py:5:4"),)),
+    )
+    evaluations.close()
+    assert evaluations.ways == {
+        "k.py:1:0": {(("k.py:2:4", ("1 item",), frozenset({(("k.py:3:8", (True,)),)})), ("k.py:5:4",)): 1},
+        "k.py:2:4": {(("k.py:3:8", (True,)),): 1},
+    }

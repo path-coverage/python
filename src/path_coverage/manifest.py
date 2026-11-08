@@ -393,24 +393,44 @@ def found(source, path):
 def if_keywords(source):
     """[(line, col), ...] of every if keyword in source, in order, columns
     counted in UTF-8 bytes, as ast counts them."""
-    lines = source.splitlines(keepends=True)
-    return [
-        (line, len(lines[line - 1][:col].encode()))
-        for kind, text, (line, col), _, _ in tokenize.generate_tokens(io.StringIO(source).readline)
-        if kind == tokenize.NAME and text == "if"
-    ]
+    return _keywords(source, ("if",))
 
 
 def operator_keywords(source):
     """[(line, col), ...] of every and, or and if keyword in source, in
     order, columns counted as if_keywords counts them: where decision_at names
     the operators' decisions."""
+    return _keywords(source, ("and", "or", "if"))
+
+
+def _keywords(source, words):
+    """[(line, col), ...] of every keyword of words in source, in order,
+    columns counted in UTF-8 bytes, as ast counts them."""
     lines = source.splitlines(keepends=True)
     return [
         (line, len(lines[line - 1][:col].encode()))
         for kind, text, (line, col), _, _ in tokenize.generate_tokens(io.StringIO(source).readline)
-        if kind == tokenize.NAME and text in ("and", "or", "if")
+        if kind == tokenize.NAME and text in words
     ]
+
+
+# The comprehensions Python runs in the frame of the code holding them.
+INLINED = (ast.ListComp, ast.SetComp, ast.DictComp)
+
+
+def loop_places(source, tree):
+    """{loop node: (line, col) of its for keyword} of every loop in tree,
+    source's parse, run in the frame of the code holding it: each for
+    statement, and each generator of a list, set or dict comprehension;
+    none of a generator expression, which runs in a frame of its own."""
+    fors = _keywords(source, ("for",))
+    places = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.For):
+            places[node] = (node.lineno, node.col_offset)
+        if isinstance(node, INLINED):
+            places.update({generator: keyword_before(fors, generator.target) for generator in node.generators})
+    return places
 
 
 def decision_at(operators, node):

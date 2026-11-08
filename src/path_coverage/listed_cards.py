@@ -4,7 +4,7 @@ without the page."""
 
 import ast
 
-from . import card_tree, card_ways, method_statements, ways_report
+from . import card_tree, card_ways, method_machine, method_statements, ways_report
 from .source_lines import lines_of
 
 
@@ -47,12 +47,23 @@ def function_cards(source, at, paths, counted):
     reached, ways = counted
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
+    loops = method_statements.loops(source, path)
+    listed = method_machine.ways(source, path)
     cards = {}
     for decision, rows in method_statements.of(source, path).items():
         calls = None if reached is None else reached.get(decision, 0)
-        title = (names[decision], lasts[decision], card_ways.card(source, decisions, rows), calls)
+        possible = listed[decision]["possible"]
+        title = (names[decision], lasts[decision], len(possible), calls)
         cards[decision] = card(decision, title, rows, method_statements.taken(rows, paths, reached))
         cards[decision]["taken"] = ways_report.taken(ways.get(decision, {}))
+        cards[decision]["passes"] = {ways_report.at(loop): ways_report.taken(ways.get(loop, {})) for loop in loops[decision]}
+        seen = {}
+        for way, count in ways.get(decision, {}).items():
+            for each in method_machine.witnessed(way):
+                seen[each] = seen.get(each, 0) + count
+        cards[decision]["covered"] = [{"way": ways_report.way(way), "count": seen[way]} for way in possible if way in seen]
+        cards[decision]["gaps"] = [ways_report.way(way) for way in possible if way not in seen]
+        cards[decision]["impossible"] = [ways_report.way(way) for way in listed[decision]["impossible"]]
     return cards
 
 

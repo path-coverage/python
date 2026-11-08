@@ -334,7 +334,7 @@ def _report(config, evaluations, part):
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     if part is not None:
         part_report = _report_json(operands, paths, files, reached)
-        part_report["cards"] = {entry: {"taken": ways_report.taken(walked)} for entry, walked in ways.items()}
+        part_report["ways"] = ways_report.listed(ways)
         part_file = config.coverage_dir / f"path_coverage.{part}.json"
         part_file.write_text(json.dumps(part_report, indent=2))
         return
@@ -342,7 +342,7 @@ def _report(config, evaluations, part):
     operands = merge([operands, *(each["decisions"] for each in parts)])
     paths = merge_paths([paths, *(_taken(each) for each in parts)])
     reached = _reached([reached, *(each.get("reached") for each in parts)])
-    ways = merge_ways([ways, *(ways_report.ways(each) for each in parts)])
+    ways = merge_ways([ways, *(ways_report.unlisted(each["ways"]) for each in parts)])
     _finish(config, files, operands, paths, (reached, ways))
 
 

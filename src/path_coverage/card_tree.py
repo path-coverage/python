@@ -2,6 +2,7 @@
 the arm of that decision it is in, and the paths of that decision on which it runs,
 so a reader can tell which paths reach a row."""
 
+import ast
 from dataclasses import dataclass
 
 from . import method_statements, decision_paths, decision_tree
@@ -98,9 +99,31 @@ def _regions(source, starts, owner, condition):
     arms', then its leaves'."""
     possible = decision_paths.possible(condition)
     node = decision_tree.node(source, condition, possible)
-    return _arm_regions(starts, owner, condition, node) + _leaf_regions(
-        starts, owner, condition, possible
+    return (
+        _arm_regions(starts, owner, condition, node)
+        + _case_regions(source, starts, owner, condition)
+        + _leaf_regions(starts, owner, condition, possible)
     )
+
+
+def _case_regions(source, starts, owner, condition):
+    """The regions of the case bodies of condition, a match's; none for
+    any other decision. A case's body runs on the paths that pick it, as
+    decision_paths.cases_picked gives them."""
+    if condition.operator != "match":
+        return []
+    line, col = condition.extent[:2]
+    match = next(
+        node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Match) and (node.lineno, node.col_offset) == (line, col)
+    )
+    picked = decision_paths.cases_picked(condition)
+    regions = []
+    for index, case in enumerate(match.cases):
+        on = tuple(i for i, each in enumerate(picked) if each == index)
+        body = (case.body[0].lineno, case.body[0].col_offset, case.body[-1].end_lineno, case.body[-1].end_col_offset)
+        begin, end = _span(starts, body)
+        regions.append(Region(owner, begin, end, "case", on, None))
+    return regions
 
 
 def _leaf_regions(starts, owner, condition, possible):

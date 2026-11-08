@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 from . import decision_paths, manifest, method_statements, scopes
 from .columns import Columns
-from .evaluations import Answer, Begin, End, Item, Matched, Opened, Outcome, Reach, Shape, Unmatched
+from .evaluations import Answer, Begin, End, Exhausted, Item, Matched, Opened, Outcome, Pass, Reach, Shape, Unmatched
 
 # The jumps that test a value, and those of them that test it is None.
 JUMPS = ("POP_JUMP_IF_TRUE", "POP_JUMP_IF_FALSE", "POP_JUMP_IF_NONE", "POP_JUMP_IF_NOT_NONE")
@@ -41,7 +41,7 @@ ENDS = ("RETURN_VALUE", "RAISE_VARARGS", "RERAISE", "JUMP_FORWARD", "JUMP_BACKWA
 FUSED = ("STORE_FAST_LOAD_FAST", "LOAD_FAST_LOAD_FAST", "LOAD_FAST_BORROW_LOAD_FAST_BORROW")
 
 # The nodes Python compiles to a code object of their own.
-SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda, ast.GeneratorExp)
+SCOPES = method_statements.OWN_FRAMES
 
 # The name Python gives the code object of a scope with no name of its own.
 SCOPE_NAMES = {ast.Lambda: "<lambda>", ast.GeneratorExp: "<genexpr>"}
@@ -109,6 +109,12 @@ class Source:
             if isinstance(node, (ast.Return, ast.Raise))
             if (name := columns.name(path, node.lineno, node.col_offset)) in reaches
         ]
+        self._loop_names = {
+            node: columns.name(path, *place) for node, place in manifest.loop_places(source, tree).items() if place[0] in kept
+        }
+        self.fors = {_span(node.iter): name for node, name in self._loop_names.items()}
+        held = [*((nodes[name], name) for name in conditions), *self.statements, *self._loop_names.items()]
+        self.loops = {name: self._holding(node) for node, name in held}
 
     def _note(self, shape, condition, node):
         """Notes the decision of shape, its Condition condition and its node
@@ -125,6 +131,33 @@ class Source:
         for index, leaf in enumerate(condition.leaves()):
             if index not in patterns:
                 self.leaves.setdefault((leaf.line, leaf.col, leaf.end_line, leaf.end_col), []).append((shape, index))
+
+    def _holding(self, node):
+        """The names of the loops each pass of which runs node again, in
+        its own scope, outermost first: a for whose body holds it, not its
+        iterable or its else, which run once; a comprehension's generators
+        up to the one whose filter or target holds it, or before the one
+        whose iterable holds it, or all of them for its element."""
+        holding = []
+        # A generator runs again as its iterable does.
+        child, parent = (node.iter, node) if isinstance(node, ast.comprehension) else (node, self.parents.get(node))
+        while parent is not None and not isinstance(parent, SCOPES):
+            holding += reversed(self._repeating(child, parent))
+            child, parent = parent, self.parents.get(parent)
+        return tuple(reversed(holding))
+
+    def _repeating(self, child, parent):
+        """The names, outermost first, of the loops of parent each pass of
+        which runs child, a node right inside it, again."""
+        if isinstance(parent, ast.For):
+            return [self._loop_names[parent]] if parent in self._loop_names and child in parent.body else []
+        if isinstance(parent, ast.comprehension) and isinstance(self.parents[parent], manifest.INLINED):
+            generators = self.parents[parent].generators
+            upto = generators.index(parent) + (child is not parent.iter)
+            return [self._loop_names[each] for each in generators[:upto]]
+        if isinstance(parent, manifest.INLINED) and not isinstance(child, ast.comprehension):
+            return [self._loop_names[each] for each in parent.generators]
+        return []
 
     def producer(self, ins, after):
         """The node whose value instruction ins leaves for a jump to test,
@@ -246,13 +279,13 @@ def _branches(table, instructions, source):
             handled |= {begin.offset, test.offset}
             stops_on = test.opname == "POP_JUMP_IF_TRUE"
             table.left[begin.offset], table.right[begin.offset] = (Begin(shape),), (begin.argval, ())
-            table.left[loop.offset] = (Item(shape),)
-            # The loop's END_FOR, where it jumps when done, then its POP_ITER.
-            pop_iter = instructions[index[loop.argval] + 1]
-            table.right[loop.offset] = (pop_iter.offset + 2, (End(shape),))
-            table.right_aliases[pop_iter.offset] = loop.offset
+            _loop(table, instructions, index, loop, (Item(shape),), (End(shape),))
             table.left[test.offset] = (Answer(shape, not stops_on),)
             table.right[test.offset] = (test.argval, (Answer(shape, stops_on), End(shape)))
+    for ins in instructions:
+        if ins.opname == "FOR_ITER" and _at(ins) in source.fors:
+            name = source.fors[_at(ins)]
+            _loop(table, instructions, index, ins, (Pass(name),), (Exhausted(name),))
     producers = {}
     copies = {}
     for at, ins in enumerate(instructions):
@@ -272,6 +305,17 @@ def _branches(table, instructions, source):
     for at, ins in enumerate(instructions):
         if ins.opname == "NOT_TAKEN" and instructions[at - 1].offset in table.left:
             table.left_aliases[ins.offset] = instructions[at - 1].offset
+
+
+def _loop(table, instructions, index, loop, given, done):
+    """Adds to table the actions of loop, a FOR_ITER among instructions,
+    index being {offset: position}: given, as it gives an item, and done,
+    as it is exhausted, going to its END_FOR, then its POP_ITER, which
+    Python 3.14 reports that branch from."""
+    pop_iter = instructions[index[loop.argval] + 1]
+    table.left[loop.offset] = given
+    table.right[loop.offset] = (pop_iter.offset + 2, done)
+    table.right_aliases[pop_iter.offset] = loop.offset
 
 
 def _marks(instructions, handlers, source, scope):

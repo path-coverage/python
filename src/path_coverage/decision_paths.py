@@ -15,6 +15,24 @@ def possible(condition):
     ]
 
 
+def cases_picked(condition):
+    """The index of the case each possible path of condition, a match's,
+    picks, in possible's order; None for a path picking none. A path picks
+    the case whose last leaf, its pattern's or its guard's, is the last
+    leaf it reaches, and true there. Example: [0, 1, None] for case 0,
+    then case n if n > 9, its paths [[True, None, None], [False, True,
+    True], [False, True, False]]."""
+    lasts = []
+    for operand in condition.operands:
+        first = lasts[-1] + 1 if lasts else 0
+        lasts.append(first + (len(operand.leaves()) if isinstance(operand, Condition) else 1) - 1)
+    picked = []
+    for path in possible(condition):
+        reached = max(index for index, outcome in enumerate(path) if outcome is not None)
+        picked.append(lasts.index(reached) if path[reached] is True else None)
+    return picked
+
+
 def values(condition):
     """The value of condition as a whole on each of its possible paths, in
     possible's order, None where its kind notes none, eg [False, True,

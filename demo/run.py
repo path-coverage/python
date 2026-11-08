@@ -17,11 +17,22 @@ path_coverage.start(
 )
 sys.path.insert(0, str(HERE / "source"))
 
-import fee  # noqa: E402 - imported once coverage has started, to be measured
+import fare  # noqa: E402 - imported once coverage has started, to be measured
+import fee  # noqa: E402
 import group  # noqa: E402
 import kata  # noqa: E402
 import shop  # noqa: E402
 import team  # noqa: E402
+
+# Fares: 20 of their 25 possible ways, staff and all but a senior's
+# off-peak trips and a senior's peak weekend return.
+fare.fare(40, True, False, False, True)
+for age in (40, 9, 70):
+    for peak in (True, False):
+        for weekend in (True, False):
+            for return_trip in (True, False):
+                if age != 70 or (peak and not (weekend and return_trip)):
+                    fare.fare(age, peak, weekend, return_trip, False)
 
 # Every outcome of both operands: covered.
 kata.is_id("Kp9sA2")

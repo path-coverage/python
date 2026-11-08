@@ -93,6 +93,13 @@ def test_e5a70c01(tmp_path, capsys):
                     {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
                     {"way": [{"at": "6:30", "path": [False, None]}], "count": 1},
                 ],
+                "passes": {},
+                "covered": [
+                    {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
+                    {"way": [{"at": "6:30", "path": [False, None]}], "count": 1},
+                ],
+                "gaps": [[{"at": "6:30", "path": [True, False]}]],
+                "impossible": [],
             }
         },
         "tree": {
@@ -1263,6 +1270,188 @@ def test_e5a70c2f(tmp_path):
             {"way": [{"at": "3:04", "path": [False]}], "count": 1},
         ],
     ]
+
+
+def test_e5a70c30(tmp_path):
+    """Example: total of 3 orders, paid, unpaid, paid; then of 1 paid
+    order; then of none
+    A call's way holds its for once, as 0, 1 or 2+ items, however many
+    passes it made; the card lists each pass's own way under its for, so
+    the ways kept never grow with the passes made."""
+    amounts = _totalled(tmp_path, tmp_path)
+    card = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]["src/totals.py:1:0"]
+    assert [amounts, card["taken"], card["passes"]] == [[60, 30, 0], *TOTALLED]
+
+
+def test_e5a70c31(tmp_path):
+    """Example: total of 3 orders, then of 1, then of none; that run's
+    JSON report rendered
+    The merged report lists the same passes of total's for, read back
+    from the report's cards."""
+    _totalled(tmp_path, tmp_path / "run")
+    settings = {"root": tmp_path, "cover": ["src/*.py"], "report": []}
+    path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
+    card = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["cards"]["src/totals.py:1:0"]
+    assert [card["taken"], card["passes"]] == TOTALLED
+
+
+def test_e5a70c32(tmp_path):
+    """Example: first_late of a prompt order, a late one, then another
+    prompt one, returning inside its for; then of 1 prompt order
+    A loop left by a return still counts its passes: the call's way ends
+    on it, 2+ items, its last pass ending on the return."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lateness.py").write_text(
+        "def first_late(orders):\n"
+        "    for order in orders:\n"
+        "        if order['late']:\n"
+        "            return order['id']\n"
+        "    return None\n"
+    )
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        lateness = _imported(tmp_path, "lateness")
+        prompt, late = {"id": "O1", "late": False}, {"id": "O2", "late": True}
+        found = [lateness.first_late([prompt, late, prompt]), lateness.first_late([prompt])]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    card = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]["src/lateness.py:1:0"]
+    prompt, late = [{"at": "3:08", "path": [False]}], [{"at": "3:08", "path": [True]}, {"at": "4:12"}]
+    assert [found, card["taken"], card["passes"]] == [
+        ["O2", None],
+        [
+            {"way": [{"at": "2:04", "path": ["2+ items"], "passes": [prompt, late]}], "count": 1},
+            {"way": [{"at": "2:04", "path": ["1 item"], "passes": [prompt]}, {"at": "5:04"}], "count": 1},
+        ],
+        {
+            "2:04": [
+                {"way": [{"at": "3:08", "path": [False]}], "count": 2},
+                {"way": [{"at": "3:08", "path": [True]}, {"at": "4:12"}], "count": 1},
+            ]
+        },
+    ]
+
+
+def test_e5a70c33(tmp_path):
+    """Example: insides of 3 spans, each spanned, its None a -1, by a
+    generator expression, then tested within (1, 9)
+    A finished call's frame id, reused by a generator expression's frame,
+    takes none of its steps: each of span's and within's ways holds its
+    own call's steps alone."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "spans.py").write_text(
+        "def within(inner, outer):\n"
+        "    return outer[0] <= inner[0] and inner[1] <= outer[1]\n"
+        "\n"
+        "def span(parts):\n"
+        "    return tuple(-1 if part is None else part for part in parts)\n"
+        "\n"
+        "def insides(spans, outer):\n"
+        "    return [within(span(parts), outer) for parts in spans]\n"
+    )
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        found = _imported(tmp_path, "spans").insides([(2, 5), (0, None), (4, 12)], (1, 9))
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    cards = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]
+    assert [found, cards["src/spans.py:1:0"]["taken"], cards["src/spans.py:4:0"]["taken"]] == [
+        [True, False, False],
+        [
+            {"way": [{"at": "2:32", "path": [True, True]}], "count": 1},
+            {"way": [{"at": "2:32", "path": [False, None]}], "count": 1},
+            {"way": [{"at": "2:32", "path": [True, False]}], "count": 1},
+        ],
+        [{"way": [{"at": "5:04"}], "count": 3}],
+    ]
+
+
+def test_e5a70c34(tmp_path):
+    """Example: paid_amounts, a list comprehension with a filter, of 3
+    orders, paid, unpaid, paid; then of 1 paid order; then of none
+    A list comprehension is a loop as a for is: the call's way holds it
+    once, as 0, 1 or 2+ items, and each item's own way, its filter's
+    path, is counted under it."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "amounts.py").write_text(
+        "def paid_amounts(orders):\n"
+        "    return [order['amount'] for order in orders if order['paid']]\n"
+    )
+    exits = []
+    path_coverage.start(root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], on_exit=exits.append)
+    try:
+        amounts = _imported(tmp_path, "amounts")
+        paid, unpaid = {"paid": True, "amount": 30}, {"paid": False, "amount": 12}
+        found = [amounts.paid_amounts([paid, unpaid, paid]), amounts.paid_amounts([paid]), amounts.paid_amounts([])]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    card = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]["src/amounts.py:1:0"]
+    paid, unpaid = [{"at": "2:48", "path": [True]}], [{"at": "2:48", "path": [False]}]
+    assert [found, card["taken"], card["passes"]] == [
+        [[30, 30], [30], []],
+        [
+            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["2+ items"], "passes": [unpaid, paid]}], "count": 1},
+            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["1 item"], "passes": [paid]}], "count": 1},
+            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["0 items"], "passes": []}], "count": 1},
+        ],
+        {
+            "2:28": [
+                {"way": [{"at": "2:48", "path": [True]}], "count": 3},
+                {"way": [{"at": "2:48", "path": [False]}], "count": 1},
+            ]
+        },
+    ]
+
+
+TOTALS = (
+    "def total(orders):\n"
+    "    amount = 0\n"
+    "    for order in orders:\n"
+    "        if order['paid']:\n"
+    "            amount += order['amount']\n"
+    "    return amount\n"
+)
+
+# The taken ways, then the passes, of total's card, called on 3 orders,
+# paid, unpaid, paid, then on 1 paid order, then on none.
+PAID_PASS, UNPAID_PASS = [{"at": "4:08", "path": [True]}], [{"at": "4:08", "path": [False]}]
+
+TOTALLED = [
+    [
+        {"way": [{"at": "3:04", "path": ["2+ items"], "passes": [UNPAID_PASS, PAID_PASS]}, {"at": "6:04"}], "count": 1},
+        {"way": [{"at": "3:04", "path": ["1 item"], "passes": [PAID_PASS]}, {"at": "6:04"}], "count": 1},
+        {"way": [{"at": "3:04", "path": ["0 items"], "passes": []}, {"at": "6:04"}], "count": 1},
+    ],
+    {
+        "3:04": [
+            {"way": [{"at": "4:08", "path": [True]}], "count": 3},
+            {"way": [{"at": "4:08", "path": [False]}], "count": 1},
+        ]
+    },
+]
+
+
+def _totalled(project, coverage_dir):
+    """The amounts total gives, written as TOTALS in project's src/, called
+    on 3 orders, paid, unpaid, paid, then on 1 paid order, then on none,
+    measured into coverage_dir."""
+    (project / "src").mkdir()
+    (project / "src" / "totals.py").write_text(TOTALS)
+    exits = []
+    path_coverage.start(root=project, cover=["src/*.py"], coverage_dir=coverage_dir, report=[], on_exit=exits.append)
+    try:
+        totals = _imported(project, "totals")
+        paid, unpaid = {"paid": True, "amount": 30}, {"paid": False, "amount": 12}
+        amounts = [totals.total([paid, unpaid, paid]), totals.total([paid]), totals.total([])]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    return amounts
 
 
 def test_e5a70c13(tmp_path):

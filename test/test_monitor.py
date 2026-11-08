@@ -3,7 +3,7 @@ import threading
 from types import SimpleNamespace
 
 from path_coverage import code_map, monitor, scopes, wrapped_leaves
-from path_coverage.evaluations import Evaluations
+from path_coverage.evaluations import Enter, Evaluations, Unwalked
 
 DISABLE = sys.monitoring.DISABLE
 
@@ -399,11 +399,32 @@ def test_d86a1f14():
 
 
 def test_d86a1f13():
-    """Example: the start callback, for member's code, and for the
-    module's
+    """Example: the start callback, for member's code, for the module's,
+    and for code never measured
     member's start logs its entry, counted once the log is rebuilt; the
-    module's, no function's, is disabled, never seen again."""
+    module's, no function's, logs that it has no card, so it ends any way
+    left under way in a frame of its id; code never measured is disabled,
+    never seen again."""
     module, functions, evaluations = _codes(MEMBER)
-    assert [monitor._started(functions["member"], 0), monitor._started(module, 0)] == [None, DISABLE]
+    unmeasured = compile("RATE = 3\n", "k.py", "exec")
+    started = [monitor._started(code, 0) for code in (functions["member"], module, unmeasured)]
+    assert [started, [actions for _, actions in evaluations.log]] == [
+        [None, None, DISABLE],
+        [(Enter("k.py:1:0"),), (Unwalked(),)],
+    ]
     evaluations.flush()
     assert evaluations.reached == {"k.py:1:0": 1}
+
+
+def test_d86a1f17():
+    """Example: the start callback for span's generator expression
+    A generator expression has no card, so its start logs that, ending any
+    way left under way in a frame of its id, as a finished call's frame id
+    is reused."""
+    _, functions, evaluations = _codes(
+        "def span(parts):\n"
+        '    """parts as a tuple, each None as -1."""\n'
+        "    return tuple(-1 if part is None else part for part in parts)\n"
+    )
+    [genexpr] = [const for const in functions["span"].co_consts if hasattr(const, "co_code")]
+    assert [monitor._started(genexpr, 0), [actions for _, actions in evaluations.log]] == [None, [(Unwalked(),)]]

@@ -270,12 +270,16 @@ def test_7b20d40c():
     comprehension, in what reads first after the write, its filters, then
     its element; else inside what the next instruction reads. A pattern's
     test of None gives nothing; the if's predicate, a ternary, is counted
-    by the call around it, so only the ternary's test is a branch."""
+    by the call around it, so only the ternary's test is a branch. Each
+    list comprehension, run in the function's frame, is a loop: its item
+    given, a pass, its items done, its end."""
     tables = _tables(SHAPES)
     assert _branches(tables["<genexpr>"]) == [([("Outcome", "k.py:2:36", 0, False)], [("Outcome", "k.py:2:36", 0, True)])]
     assert _branches(tables["shapes"]) == [
+        ([("Pass", "k.py:3:27")], [("Exhausted", "k.py:3:27")]),
         ([("Outcome", "k.py:3:18", 0, True)], [("Outcome", "k.py:3:18", 0, False)]),
         ([("Outcome", "k.py:7:10", 0, True)], [("Outcome", "k.py:7:10", 0, False)]),
+        ([("Pass", "k.py:10:18")], [("Exhausted", "k.py:10:18")]),
         ([("Outcome", "k.py:10:36", 0, False)], [("Outcome", "k.py:10:36", 0, True)]),
         ([("Outcome", "k.py:11:32", 0, True)], [("Outcome", "k.py:11:32", 0, False)]),
         ([("Outcome", "k.py:12:19", 0, True)], [("Outcome", "k.py:12:19", 0, False)]),
@@ -331,6 +335,72 @@ def test_7b20d40e():
         ("Reach", "k.py:6:12"),
         ("Reach", "k.py:7:4"),
     )] == [1, 2, 1, 2, 1]
+
+
+def test_7b20d40f():
+    """Example: first_ok, its for's iterable an or, its body an if and a
+    return, its else a raise
+    Only a row in a for's body is held by it, as only the body runs again
+    on each pass: its iterable and its else run once."""
+    source = (
+        "def first_ok(orders, fallback):\n"
+        "    for order in (orders or fallback):\n"
+        "        if order.ok:\n"
+        "            return order\n"
+        "    else:\n"
+        "        raise LookupError('no order is ok')\n"
+    )
+    assert code_map.Source(source, "k.py", scopes.whole(source)).loops == {
+        "k.py:2:25": (),
+        "k.py:3:8": ("k.py:2:4",),
+        "k.py:4:12": ("k.py:2:4",),
+        "k.py:6:8": (),
+        "k.py:2:4": (),
+    }
+
+
+def test_7b20d410():
+    """Example: paid, then first_paid, its for on lines not kept, as
+    measuring only paid
+    A for on no kept line is no loop: nothing is held by it, nor named by
+    it."""
+    source = (
+        "def paid(order):\n"
+        "    return order.paid and not order.refunded\n"
+        "\n"
+        "def first_paid(orders):\n"
+        "    for order in orders:\n"
+        "        if paid(order):\n"
+        "            return order\n"
+    )
+    assert code_map.Source(source, "k.py", scopes.lines(source, "paid")).loops == {
+        "k.py:2:22": (),
+        "k.py:7:12": (),
+    }
+
+
+def test_7b20d411():
+    """Example: late_refunds, a list comprehension of two generators, each
+    with a filter
+    Each generator of a comprehension run in its function's frame is a
+    loop, named by its for keyword: its filter is held by it and every
+    generator before it, its iterable by those before it only, as each
+    runs once per item of the one before."""
+    source = (
+        "def late_refunds(orders, refunds):\n"
+        "    return [r for o in orders if o.late for r in refunds if r.big]\n"
+    )
+    found = code_map.Source(source, "k.py", scopes.whole(source))
+    assert [found.loops, found.fors] == [
+        {
+            "k.py:2:30": ("k.py:2:14",),
+            "k.py:2:57": ("k.py:2:14", "k.py:2:40"),
+            "k.py:2:4": (),
+            "k.py:2:14": (),
+            "k.py:2:40": ("k.py:2:14",),
+        },
+        {(2, 23, 2, 29): "k.py:2:14", (2, 49, 2, 56): "k.py:2:40"},
+    ]
 
 
 def test_7b20d40a():
