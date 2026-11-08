@@ -66,9 +66,10 @@ fi
 PYTHONPATH="${ROOT}/src:${ROOT}/test" \
   "${PYTHON}" -m pytest -p no:cacheprovider -p suites -p self_coverage --quiet "${coverage[@]}" "$@"
 
-docker run --rm \
+schema_check="$(docker run --rm \
   --volume "${ROOT}/reports/paths:/paths:ro" \
-  ghcr.io/path-coverage/schemas /paths > /dev/null
+  ghcr.io/path-coverage/schemas /paths 2>&1)" \
+  || { echo "${schema_check}" >&2; exit 1; }
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --volume "${ROOT}/reports/paths:/paths" \
