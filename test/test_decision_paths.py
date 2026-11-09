@@ -13,15 +13,27 @@ def test_7b3d9101():
     An `and` goes on to its next leaf only when a leaf is true.
     So its paths are [True, True], [True, False] and [False, None].
     None marks a leaf the path never reaches."""
-    condition = _only_decision("def k(id):\n    return ok(id) and new(id)\n")
+    condition = _only_decision("def k(id):\n    assert ok(id) and new(id)\n")
     assert possible(condition) == [[True, True], [True, False], [False, None]]
+
+
+def test_7b3d910b():
+    """Example: return ok(id) and new(id), then return cached(id) or
+    (fetch(id) and fresh(id))
+    An and/or whose value is only used, not tested, forks only where its
+    leaves before the last are tested: its last leaf is evaluated or not,
+    but its truth decides nothing, so it is no leaf, nested and/ors'
+    last included."""
+    assert possible(_only_decision("def k(id):\n    return ok(id) and new(id)\n")) == [[True], [False]]
+    source = "def k(id):\n    return cached(id) or (fetch(id) and fresh(id))\n"
+    assert possible(_only_decision(source)) == [[True, None], [False, True], [False, False]]
 
 
 def test_7b3d9102():
     """Example: cached(id) or fetch(id)
     An `or` goes on to its next leaf only when a leaf is false.
     So its paths are [True, None], [False, True] and [False, False]."""
-    condition = _only_decision("def k(id):\n    return cached(id) or fetch(id)\n")
+    condition = _only_decision("def k(id):\n    assert cached(id) or fetch(id)\n")
     assert possible(condition) == [[True, None], [False, True], [False, False]]
 
 
@@ -29,7 +41,7 @@ def test_7b3d9103():
     """Example: ok(id) and (new(id) or len(id) == 6)
     The nested `or` is walked inside the `and`.
     Its leaves follow ok(id), numbered left to right."""
-    source = "def k(id):\n    return ok(id) and (new(id) or len(id) == 6)\n"
+    source = "def k(id):\n    assert ok(id) and (new(id) or len(id) == 6)\n"
     assert possible(_only_decision(source)) == [
         [True, True, None],
         [True, False, True],
@@ -52,7 +64,7 @@ def test_7b3d9106():
     A false predicate picks the plain else arm, so ends the path."""
     source = (
         "def k(user, flow):\n"
-        "    return user.admin or flow.public if user.active else False\n"
+        "    assert user.admin or flow.public if user.active else False\n"
     )
     assert possible(_only_decision(source)) == [
         [True, True, None],
@@ -133,5 +145,5 @@ def test_7b3d9104():
     """Example: options.get("tags") or []
     [] can only be falsy, so a path needing it true is impossible.
     The paths are [True, None] and [False, False]."""
-    source = 'def k(options):\n    return options.get("tags") or []\n'
+    source = 'def k(options):\n    assert options.get("tags") or []\n'
     assert possible(_only_decision(source)) == [[True, None], [False, False]]

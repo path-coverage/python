@@ -3,4 +3,4 @@
 
 def is_new(trail_id, trails):
     """True when trails holds trail_id and that trail is new."""
-    return trail_id in trails and trails[trail_id]["new"]
+    return True if trail_id in trails and trails[trail_id]["new"] else False

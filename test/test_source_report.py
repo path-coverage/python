@@ -1,6 +1,6 @@
 from path_coverage import decision_paths, manifest, source_report
 
-KATA = "def kata(id):\n    return ok(id) and new(id)\n"
+KATA = "def kata(id):\n    assert ok(id) and new(id)\n"
 
 PATHS = [
     {"path": [True, True], "count": 1},
@@ -10,13 +10,13 @@ PATHS = [
 
 
 def test_5e2a9110():
-    """Example: def kata(id): return ok(id) and new(id)
+    """Example: def kata(id): assert ok(id) and new(id)
     Each line of a file's source, as the source report has it: its text and
     its coloured tokens, so a renderer can draw the code without parsing it.
     A line with no decision has its line too."""
     assert source_report.lines(KATA) == [
         {"text": "def kata(id):", "tokens": [[0, 3, "k"]]},
-        {"text": "    return ok(id) and new(id)", "tokens": [[4, 10, "k"], [18, 21, "k"]]},
+        {"text": "    assert ok(id) and new(id)", "tokens": [[4, 10, "k"], [18, 21, "k"]]},
     ]
 
 

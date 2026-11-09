@@ -47,15 +47,15 @@ def total(orders):              call's way:  for 0 / 1 / 2+ items, return
   loop, a pass of another loop, or the call's end closes it.
 - A missing name in `Evaluations.loops` raises, never quietly lands in
   the wrong unit.
-- The start of measured code with no card (a generator expression, a
-  lambda, a module) logs `Unwalked`, ending any way under way in its
-  frame. CPython reuses a finished frame's id, and without this a
-  generator expression's steps joined the last way left in a frame of
-  that id: self-coverage's report was 280 MB, one way 19,441 steps.
+- Each event is keyed by its frame's id and its code's id together.
+  CPython reuses a finished frame's id, and keyed by the frame's id
+  alone a generator expression's steps joined the last way left in a
+  frame of that id: self-coverage's report was 280 MB, one way 19,441
+  steps.
 
-Self-coverage's report: 280 MB with every loop pass a step, 104 MB with
-`Unwalked`, 4.9 MB with comprehensions as loops; its longest way 493
-steps, from a while loop.
+Self-coverage's report: 280 MB with every loop pass a step, 104 MB once
+code with no card no longer joined a way, 4.9 MB with comprehensions as
+loops; its longest way 493 steps, from a while loop.
 
 ## Open
 
@@ -69,3 +69,6 @@ steps, from a while loop.
 - The html-reporter's ways tab lists taken ways only: the possible ways
   never taken need enumerating, and impossible ones (the "special zero")
   need ruling out first.
+- A for over a literal has no way its literal rules out: no "0 items"
+  over a non-empty one, no "1+ items" over an empty one. These ways are
+  absent, not impossible (combined-is-path-coverage.md).

@@ -5,7 +5,7 @@ SOURCE = (
     "def can_attest(user, flow):\n"
     "    if user.active and user.admin:\n"
     "        return True\n"
-    "    return (\n"
+    "    assert (\n"
     "        flow.public\n"
     "        or flow.owner == user\n"
     "    )\n"
@@ -27,7 +27,7 @@ def test_0d9b5501():
         {"number": 1, "text": "def can_attest(user, flow):", "status": None, "span": None},
         {"number": 2, "text": "    if user.active and user.admin:", "status": "covered", "span": (2, 2)},
         {"number": 3, "text": "        return True", "status": None, "span": None},
-        {"number": 4, "text": "    return (", "status": None, "span": None},
+        {"number": 4, "text": "    assert (", "status": None, "span": None},
         {"number": 5, "text": "        flow.public", "status": "gaps", "span": (5, 6)},
         {"number": 6, "text": "        or flow.owner == user", "status": "gaps", "span": (5, 6)},
         {"number": 7, "text": "    )", "status": None, "span": None},

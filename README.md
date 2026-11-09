@@ -466,10 +466,9 @@ Path coverage report: .../path_coverage/reports/paths/index.html
 runs and measures, and whether its coverage is checked:
 
 - `all`, every test (`make test`, the default).
-- `core`, every test but the generated ones in `test/property`, and the
-  reference rewrite in `test/reference` that only they run, neither run
-  nor measured (`make test_core`): whether the hand-written tests alone
-  reach full coverage.
+- `core`, every test but the generated ones in `test/property`, neither
+  run nor measured (`make test_core`): whether the hand-written tests
+  alone reach full coverage.
 - `property`, the generated tests alone (`bin/test.sh --suite property`),
   whose coverage, of only part of the code, is not checked.
 
@@ -482,8 +481,7 @@ check that each function under path coverage returns or raises, and
 traces, exactly as compiled plainly; that the paths of each decision, as
 the oracle (`test/property/oracle.py`) derives them from the traces, and
 the statements' runs, are those path_coverage.json counts; that the
-wrapping of leaves compiles exactly when the source does; and, as a
-second opinion, against `test/reference`, the rewrite path_coverage
-measured with before `sys.monitoring` (its 4660fa2 rewriter and recorder,
-trimmed to what the grammar reaches), that each function's paths and
-statement runs are counted exactly as that rewrite counts them.
+records each events mode inserts compile exactly when the source does,
+and taken back out leave the parse as it was; and, as a second opinion,
+that each function's paths, statement runs and ways are counted exactly
+the same in rewrite mode as in monitoring mode.

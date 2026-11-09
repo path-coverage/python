@@ -3,7 +3,7 @@ from path_coverage import listed_cards, manifest, result
 SHOP = (
     "RATE = 2 if FAST else 1\n"
     "def ship(order):\n"
-    "    return order.paid and order.packed\n"
+    "    assert order.paid and order.packed\n"
     "class Shop:\n"
     "    SIZE = 3 if BIG else 1\n"
 )

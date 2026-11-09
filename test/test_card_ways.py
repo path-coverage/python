@@ -24,7 +24,7 @@ def test_3e0b9d01():
         "    y = 3 if b else 4\n"
         "    return [x, y]\n"
         "def led(xs):\n"
-        "    return any(x % 2 and x > 1 for x in xs) or not xs\n"
+        "    assert any(x % 2 and x > 1 for x in xs) or not xs\n"
     )
     assert card_ways.of(source, "k.py") == {"k.py:1:0": 4, "k.py:7:0": 4, "k.py:11:0": 12}
 

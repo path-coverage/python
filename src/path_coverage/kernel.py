@@ -1,6 +1,5 @@
 """The kernel: an import hook that measures each covered module as it is
-imported, with sys.monitoring and a call around each leaf no branch tells,
-and the report at exit."""
+imported, in the run's events mode, and the report at exit."""
 
 import atexit
 import importlib.machinery
@@ -12,6 +11,7 @@ from pathlib import Path
 from . import (
     console_summary,
     gaps,
+    inserted_records,
     kinds,
     listed_cards,
     manifest,
@@ -21,16 +21,22 @@ from . import (
     paths_report,
     post,
     result,
+    rewrite,
     scopes,
     source_report,
     summary,
     ways_report,
-    wrapped_leaves,
 )
 from .evaluations import Evaluations
 from .merge import merge, merge_paths, merge_ways
 
 REPORTERS = ("gaps", "post", "summary")
+
+# The modes a run's events can come from, each by what instruments a
+# covered module: sys.monitoring's events, plus a call around each leaf no
+# branch tells; or records inserted for every event.
+INSTRUMENTS = {"monitoring": monitor.instrument, "rewrite": rewrite.instrument}
+EVENTS = tuple(INSTRUMENTS)
 
 # The URL of the schema the JSON report follows.
 SCHEMA_URL = "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json"
@@ -94,8 +100,9 @@ class _Loader(importlib.machinery.SourceFileLoader):
         path = self.get_filename(module.__name__)
         text = importlib.util.decode_source(self.get_data(path))
         name = self.config.relative(path)
-        code, record = monitor.instrument(text, name, path, self.evaluations, self.compiled, self.config.lines[name])
-        module.__dict__[wrapped_leaves.NAME] = record
+        instrument = INSTRUMENTS[self.config.events]
+        code, record = instrument(text, name, path, self.evaluations, self.compiled, self.config.lines[name])
+        module.__dict__[inserted_records.NAME] = record
         exec(code, module.__dict__)  # noqa: S102 - running the module is the point
 
 
@@ -130,13 +137,15 @@ def _check(setting, names, known):
             raise ValueError(f"unknown {setting} {name!r}; the {setting}s are: {', '.join(known)}")
 
 
-def _config(root, cover, coverage_dir, report, collector, skip, groups=None):
-    """The settings, each checked: unknown reporters are refused by name,
-    as is the post reporter with no collector."""
+def _config(root, cover, coverage_dir, report, collector, skip, groups=None, events="monitoring"):
+    """The settings, each checked: unknown reporters and events modes are
+    refused by name, as is the post reporter with no collector."""
     _check("reporter", report, REPORTERS)
+    _check("events mode", [events], EVENTS)
     if "post" in report and not collector:
         raise ValueError("the post reporter needs a collector url")
     config = _Config(root, cover, coverage_dir, report, collector, skip, groups)
+    config.events = events
     _check_lists(config)
     config.lines = _lines(config)
     _check_filters(config)
@@ -153,6 +162,7 @@ def start(
     collector=None,
     groups=None,
     part=None,
+    events="monitoring",
     on_exit=atexit.register,
 ):
     """Measures every covered module imported from now on and reports at
@@ -166,10 +176,11 @@ def start(
     html-reporter makes a tab of its index page. A run given
     a part name (eg an xdist worker's) writes only its part file; the main
     run clears stale parts now and adds every part to its own report at
-    exit. on_exit is atexit.register except in tests, which must not print
-    a report as their own process exits."""
+    exit. events names the mode the events come from, one of EVENTS, and
+    the report names it. on_exit is atexit.register except in tests, which
+    must not print a report as their own process exits."""
     global _finder
-    config = _config(root, cover, coverage_dir, report, collector, skip, groups)
+    config = _config(root, cover, coverage_dir, report, collector, skip, groups, events)
     evaluations = Evaluations()
     if part is None:
         for stale in _parts(config):
@@ -186,7 +197,8 @@ def start_from_env(env, part=None, on_exit=atexit.register):
     PATH_COVERAGE_SKIP globs, reporting into PATH_COVERAGE_DIR with the
     comma-separated PATH_COVERAGE_REPORT reporters, and the comma-separated
     name:glob
-    PATH_COVERAGE_GROUPS, as part when given one. With
+    PATH_COVERAGE_GROUPS, as part when given one, in the events mode
+    PATH_COVERAGE_EVENTS, monitoring when it is not set. With
     PATH_COVERAGE_COLLECTOR, a url, the reporters default to post, sending
     there; otherwise to gaps. Returns whether it started; without
     PATH_COVERAGE_COVER it starts nothing."""
@@ -202,6 +214,7 @@ def start_from_env(env, part=None, on_exit=atexit.register):
         collector=collector,
         groups=_env_groups(_env_list(env, "PATH_COVERAGE_GROUPS", [])),
         part=part,
+        events=env.get("PATH_COVERAGE_EVENTS", "monitoring"),
         on_exit=on_exit,
     )
     return True
@@ -272,17 +285,18 @@ def render(
     skip=(),
     report=("gaps",),
     groups=None,
+    events="monitoring",
 ):
     """Runs the reporters from the JSON reports at runs (eg those a collector
     saved), their counts added together, parsing each covered file afresh,
     so the report shows only the gaps that every run left, and each
     statement's reaches added up. It writes the merged JSON report into
-    coverage_dir too. A run that measured other kinds, or was measured by
-    other tools or versions of them, is refused, as it can list a
-    decision's paths differently."""
-    config = _config(root, cover, coverage_dir, report, None, skip, groups)
+    coverage_dir too. A run that measured other kinds, was measured by
+    other tools or versions of them, or in another events mode than
+    events, is refused, as it can list a decision's paths differently."""
+    config = _config(root, cover, coverage_dir, report, None, skip, groups, events)
     files = _files(config)
-    reports = [_same_measuring(path) for path in runs]
+    reports = [_same_measuring(path, events) for path in runs]
     decisions = _decisions(files)
     operands = merge([result.operands(decisions, {}), *(each["decisions"] for each in reports)])
     paths = merge_paths([result.paths(decisions, {}), *(_taken(each) for each in reports)])
@@ -305,16 +319,18 @@ def _reached(runs):
     return total
 
 
-def _same_measuring(path):
+def _same_measuring(path, events):
     """The JSON report at path, when it measured the kinds this version
-    measures and was measured by the same tools at the same versions;
-    ValueError naming path and which differs when not, as either can list
-    a decision's paths differently."""
+    measures, was measured by the same tools at the same versions, and in
+    the events mode events; ValueError naming path and which differs when
+    not, as each can list a decision's paths differently."""
     report = json.loads(Path(path).read_text())
     if report.get("kinds") != kinds.names():
         raise ValueError(f"{path} measured other kinds")
     if report.get("measured_by") != measured_by.versions():
         raise ValueError(f"{path} was measured by other tools")
+    if report.get("events") != events:
+        raise ValueError(f"{path} was measured in {report.get('events')} mode, not {events}")
     return report
 
 
@@ -333,7 +349,7 @@ def _report(config, evaluations, part):
     ways = evaluations.ways
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     if part is not None:
-        part_report = _report_json(operands, paths, files, reached)
+        part_report = _report_json(operands, paths, files, reached, config.events)
         part_report["ways"] = ways_report.listed(ways)
         part_file = config.coverage_dir / f"path_coverage.{part}.json"
         part_file.write_text(json.dumps(part_report, indent=2))
@@ -359,7 +375,7 @@ def _finish(config, files, operands, paths, counted):
     kept_paths = _kept(paths, config.lines)
     kept_cards = _kept(cards, config.lines)
     kept_reached = None if reached is None else _kept(reached, config.lines)
-    report = _report_json(kept_operands, kept_paths, files, kept_reached)
+    report = _report_json(kept_operands, kept_paths, files, kept_reached, config.events)
     report["totals"] = console_summary.totals(kept_paths, kept_cards)
     if config.groups:
         report["totals"]["groups"] = console_summary.group_totals(kept_paths, kept_cards, config.groups)
@@ -480,19 +496,21 @@ def _taken(report):
     return {decision: each["taken"] for decision, each in report.get("paths", {}).items()}
 
 
-def _report_json(operands, paths, files, reached):
+def _report_json(operands, paths, files, reached, events):
     """The JSON report: {"$schema": its schema's URL, "decisions": operands,
     "paths": {decision: {"leaves": [...], "taken": [...]}}, "kinds": [name,
-    ...], "measured_by": {tool: version}}, the kinds naming what was
-    measured and measured_by the tools that measured it, and "reached":
-    {name: runs} when reached is known, even empty, as a run that reached
-    no statement says so."""
+    ...], "measured_by": {tool: version}, "events": events}, the kinds
+    naming what was measured, measured_by the tools that measured it and
+    events the mode its events came from, and "reached": {name: runs} when
+    reached is known, even empty, as a run that reached no statement says
+    so."""
     report = {
         "$schema": SCHEMA_URL,
         "decisions": operands,
         "paths": paths_report.of(paths, files),
         "kinds": kinds.names(),
         "measured_by": measured_by.versions(),
+        "events": events,
     }
     if reached is not None:
         report["reached"] = reached

@@ -82,17 +82,19 @@ FOLDABLE = (ast.BoolOp,)
 class _DecisionFinder(ast.NodeVisitor):
     """Collects each decision, in source order, and its Condition."""
 
-    def __init__(self, path, columns, keywords, builtins, operators):
+    def __init__(self, path, columns, keywords, builtins, operators, parents):
         """Starts with no decisions found, naming decisions after path, in
         the source's columns; keywords are where the source's if keywords
         are, as if_keywords gives them, builtins the block calls' names the
-        module leaves as builtins, and operators where its and, or and if
-        keywords are, as operator_keywords gives them."""
+        module leaves as builtins, operators where its and, or and if
+        keywords are, as operator_keywords gives them, and parents {node:
+        the node holding it} of its parse."""
         self.path = path
         self.columns = columns
         self.keywords = keywords
         self.builtins = builtins
         self.operators = operators
+        self.parents = parents
         self.decisions = {}
         # {decision: the node it is}, eg the BoolOp of an `and`; a
         # filter's is its test.
@@ -163,9 +165,38 @@ class _DecisionFinder(ast.NodeVisitor):
         line, col = decision_at(self.operators, node)
         decision = self.columns.name(self.path, line, col)
         self._claim(decision, node)
-        self.decisions[decision] = self._condition(node)
+        self.decisions[decision] = self._condition(node, self._decides(node))
 
     visit_IfExp = visit_BoolOp
+
+    def _decides(self, node):
+        """True when a branch forks on node's truth: it is, or its value
+        becomes, through any and/or, conditional expression's arm, walrus
+        or not holding it, the test of an if, a while, an assert or a
+        conditional expression, a filter, a guard, or the element of a
+        block call, eg any(...). False when its value is only used, eg x =
+        a or b, so the truth of its last leaf decides nothing."""
+        while True:
+            parent = self.parents.get(node)
+            match parent:
+                case ast.BoolOp() | ast.NamedExpr() | ast.UnaryOp(op=ast.Not()):
+                    node = parent
+                case ast.IfExp():
+                    if node is parent.test:
+                        return True
+                    node = parent
+                case ast.If() | ast.While() | ast.Assert():
+                    return node is parent.test
+                case ast.comprehension():
+                    return node in parent.ifs
+                case ast.match_case():
+                    # A guard is the only expression a case holds.
+                    return True
+                case ast.GeneratorExp():
+                    # Its element is the only expression it holds.
+                    return block_generator(self.parents.get(parent), self.builtins) is parent
+                case _:
+                    return False
 
     def visit_If(self, node):
         """Notes an if or elif statement as a decision, named at its keyword: its
@@ -181,42 +212,49 @@ class _DecisionFinder(ast.NodeVisitor):
         for statement in node.body + node.orelse:
             self.visit(statement)
 
-    def _condition(self, node):
-        """node as a Condition. An `and`/`or`: ast already flattens a chain
-        of one operator, so each operand is either the other operator,
-        nested, or a leaf. A conditional expression: its predicate, then its
-        then and else arms."""
+    def _condition(self, node, decides):
+        """node as a Condition, decides saying whether a branch forks on
+        its truth, as _decides gives it. An `and`/`or`: ast already flattens
+        a chain of one operator, so each operand is either the other
+        operator, nested, or a leaf; but when its truth decides nothing, its
+        last operand is no leaf, only evaluated or not, so it is left out,
+        once any decision inside it is noted. A conditional expression: its
+        predicate, then its then and else arms."""
         if isinstance(node, ast.IfExp):
             return Condition(
                 operator="ternary",
                 operands=(
                     self._leaf(node.test),
-                    self._arm("then", node.body),
-                    self._arm("else", node.orelse),
+                    self._arm("then", node.body, decides),
+                    self._arm("else", node.orelse, decides),
                 ),
                 extent=_extent(node),
             )
-        return Condition(
-            operator=OPERATORS[type(node.op)],
-            operands=tuple(self._operand(value) for value in node.values),
-            extent=_extent(node),
-        )
+        *tested, last = node.values
+        operands = [self._operand(value, True) for value in tested]
+        if decides or isinstance(last, ast.BoolOp):
+            operands.append(self._operand(last, decides))
+        else:
+            self.visit(last)
+        return Condition(operator=OPERATORS[type(node.op)], operands=tuple(operands), extent=_extent(node))
 
-    def _arm(self, kind, node):
+    def _arm(self, kind, node, decides):
         """An Arm holding node's condition when node is one a choice folds
-        into its decision, else a plain Arm, once any decision inside node is
+        into its decision, decides saying whether a branch forks on the
+        choice's truth, else a plain Arm, once any decision inside node is
         noted."""
         at = _extent(node)
         if isinstance(node, FOLDABLE):
-            return Arm(kind, self._condition(node), at, at)
+            return Arm(kind, self._condition(node, decides), at, at)
         self.visit(node)
         return Arm(kind, None, at, at)
 
-    def _operand(self, node):
-        """node as a nested Condition when it is an `and`/`or`, else a Leaf,
-        once any decision inside the leaf is noted too."""
+    def _operand(self, node, decides):
+        """node as a nested Condition when it is an `and`/`or`, decides
+        saying whether a branch forks on its truth, else a Leaf, once any
+        decision inside the leaf is noted too."""
         if isinstance(node, ast.BoolOp):
-            return self._condition(node)
+            return self._condition(node, decides)
         return self._leaf(node)
 
     def _leaf(self, node):
@@ -385,7 +423,8 @@ def found(source, path):
     traced to its decision."""
     tree = ast.parse(source)
     operators = operator_keywords(source)
-    finder = _DecisionFinder(path, Columns(source), if_keywords(source), builtin_blocks(tree), operators)
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    finder = _DecisionFinder(path, Columns(source), if_keywords(source), builtin_blocks(tree), operators, parents)
     finder.visit(tree)
     return tree, finder.decisions, finder.nodes
 

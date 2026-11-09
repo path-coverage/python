@@ -14,7 +14,6 @@ from path_coverage.evaluations import (
     Reach,
     Shape,
     Unmatched,
-    Unwalked,
 )
 
 
@@ -33,7 +32,7 @@ def _run(evaluations, *events):
     return evaluations
 
 
-TRAILS = "def is_new(trail_id, trails):\n    return ok(trail_id) and new(trail_id)\n"
+TRAILS = "def is_new(trail_id, trails):\n    assert ok(trail_id) and new(trail_id)\n"
 
 
 def test_3c9e5101():
@@ -90,7 +89,7 @@ def test_3c9e5104():
     around it counts it; then member false
     The last operand's outcome, from its call, completes the evaluation
     its branch began."""
-    shape = _shape("def f(member, vip):\n    return member and vip\n", "k.py:2:18")
+    shape = _shape("def f(member, vip):\n    assert member and vip\n", "k.py:2:18")
     ran = _run(
         Evaluations(),
         (5, (Outcome(shape, 0, True),)),
@@ -367,30 +366,67 @@ def test_3c9e5110():
 
 SPANS = (
     "def within(inner, outer):\n"
-    "    return outer[0] <= inner[0] and inner[1] <= outer[1]\n"
+    "    assert outer[0] <= inner[0] and inner[1] <= outer[1]\n"
     "\n"
     "def span(parts):\n"
     "    return tuple(-1 if part is None else part for part in parts)\n"
 )
 
 
+DRAIN = (
+    "def drain(queue, limit):\n"
+    "    taken = 0\n"
+    "    while queue and taken < limit:\n"
+    "        if queue.pop():\n"
+    "            taken += 1\n"
+    "    return taken\n"
+)
+
+
+def test_3c9e5112():
+    """Example: drain given a queue of one truthy item and a limit of 5:
+    its test true, one pass, its test false, then its return
+    The while's test steps the call's way once, as first run: each later
+    run repeats the loop's fork, so takes no step, though its path is
+    counted. The loop steps the way as its passes end, as a for does."""
+    test, popped = _shape(DRAIN, "k.py:3:16"), _shape(DRAIN, "k.py:4:8")
+    evaluations = Evaluations()
+    evaluations.loops.update({"k.py:3:16": (), "k.py:4:8": ("k.py:3:4",), "k.py:6:4": (), "k.py:3:4": ()})
+    evaluations.repeats.update({"k.py:3:16": "k.py:3:4"})
+    _run(
+        evaluations,
+        (1, (Enter("k.py:1:0"),)),
+        (1, (Outcome(test, 0, True), Outcome(test, 1, True))),
+        (1, (Pass("k.py:3:4"),)),
+        (1, (Outcome(popped, 0, True),)),
+        (1, (Outcome(test, 0, False),)),
+        (1, (Exhausted("k.py:3:4"),)),
+        (1, (Reach("k.py:6:4"),)),
+    )
+    evaluations.close()
+    pass_way = (("k.py:4:8", (True,)),)
+    assert evaluations.ways == {
+        "k.py:1:0": {(("k.py:3:16", (True, True)), ("k.py:3:4", ("1 item",), frozenset({pass_way})), ("k.py:6:4",)): 1},
+        "k.py:3:4": {pass_way: 1},
+    }
+    assert evaluations.decision_paths["k.py:3:16"] == {(True, True): 1, (False, None): 1}
+
+
 def test_3c9e5111():
     """Example: within called, then span's generator expression run in a
     frame of the id within's frame had, as CPython reuses a finished
-    frame's id
-    The start of code that has no card, eg a generator expression, ends
-    the way under way in its frame, and starts none: within's way holds
-    only its own steps."""
+    frame's id, its code another
+    Events are kept apart by frame and code together, so the generator
+    expression's never join within's way, which holds only its own steps."""
     within, part = _shape(SPANS, "k.py:2:32"), _shape(SPANS, "k.py:5:20")
     evaluations = Evaluations()
     evaluations.loops.update({"k.py:2:32": (), "k.py:5:20": ()})
     _run(
         evaluations,
-        (6, (Enter("k.py:1:0"),)),
-        (6, (Outcome(within, 0, False),)),
-        (6, (Unwalked(),)),
-        (6, (Outcome(part, 0, True),)),
-        (6, (Outcome(part, 0, False),)),
+        ((6, 1), (Enter("k.py:1:0"),)),
+        ((6, 1), (Outcome(within, 0, False),)),
+        ((6, 2), (Outcome(part, 0, True),)),
+        ((6, 2), (Outcome(part, 0, False),)),
     )
     evaluations.close()
     assert evaluations.ways == {"k.py:1:0": {(("k.py:2:32", (False, None)),): 1}}

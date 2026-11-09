@@ -2,7 +2,7 @@ import ast
 import dataclasses
 import dis
 
-from path_coverage import code_map, scopes, wrapped_leaves
+from path_coverage import code_map, inserted_records, scopes, source_map
 from path_coverage.evaluations import Evaluations, Shape
 
 
@@ -16,8 +16,8 @@ def _said(action):
 def _module(source):
     """source, the file k.py, compiled as path_coverage compiles it, each
     leaf manifest.wrapped names wrapped."""
-    found = code_map.Source(source, "k.py", scopes.whole(source))
-    tree = wrapped_leaves.rewrite(ast.parse(source), found, wrapped_leaves.Leaves(Evaluations()))
+    found = source_map.Source(source, "k.py", scopes.whole(source))
+    tree = inserted_records.rewrite(ast.parse(source), found, inserted_records.Recorder(Evaluations()), "monitoring")
     return compile(tree, "k.py", "exec")
 
 
@@ -25,7 +25,7 @@ def _tables(source):
     """{code name: Table} for each code object compiled from source, a file
     k.py, as code_map maps them."""
     module = _module(source)
-    return {code.co_name: table for code, table in code_map.tables(module, code_map.Source(source, "k.py", scopes.whole(source))).items()}
+    return {code.co_name: table for code, table in code_map.tables(module, source_map.Source(source, "k.py", scopes.whole(source))).items()}
 
 
 def _branches(table):
@@ -77,7 +77,7 @@ def test_7b20d402():
     take."""
     module = _module(FEE)
     fee = module.co_consts[0]
-    tables = code_map.tables(module, code_map.Source(FEE, "k.py", scopes.whole(FEE)))
+    tables = code_map.tables(module, source_map.Source(FEE, "k.py", scopes.whole(FEE)))
     jump = next(ins for ins in dis.get_instructions(fee) if ins.opname.startswith("POP_JUMP"))
     assert tables[fee].right[jump.offset][0] == jump.argval
 
@@ -233,7 +233,7 @@ def test_7b20d40b():
     POP_ITER after its END_FOR, so each is found there as well."""
     module = compile(LATE, "k.py", "exec")
     late = module.co_consts[0]
-    table = code_map.tables(module, code_map.Source(LATE, "k.py", scopes.whole(LATE)))[late]
+    table = code_map.tables(module, source_map.Source(LATE, "k.py", scopes.whole(LATE)))[late]
     listed = list(dis.get_instructions(late))
     after = {ins.offset: listed[at + 1] for at, ins in enumerate(listed[:-1])}
     jumps = [offset for offset in sorted(table.left) if after[offset].opname == "NOT_TAKEN"]
@@ -335,72 +335,6 @@ def test_7b20d40e():
         ("Reach", "k.py:6:12"),
         ("Reach", "k.py:7:4"),
     )] == [1, 2, 1, 2, 1]
-
-
-def test_7b20d40f():
-    """Example: first_ok, its for's iterable an or, its body an if and a
-    return, its else a raise
-    Only a row in a for's body is held by it, as only the body runs again
-    on each pass: its iterable and its else run once."""
-    source = (
-        "def first_ok(orders, fallback):\n"
-        "    for order in (orders or fallback):\n"
-        "        if order.ok:\n"
-        "            return order\n"
-        "    else:\n"
-        "        raise LookupError('no order is ok')\n"
-    )
-    assert code_map.Source(source, "k.py", scopes.whole(source)).loops == {
-        "k.py:2:25": (),
-        "k.py:3:8": ("k.py:2:4",),
-        "k.py:4:12": ("k.py:2:4",),
-        "k.py:6:8": (),
-        "k.py:2:4": (),
-    }
-
-
-def test_7b20d410():
-    """Example: paid, then first_paid, its for on lines not kept, as
-    measuring only paid
-    A for on no kept line is no loop: nothing is held by it, nor named by
-    it."""
-    source = (
-        "def paid(order):\n"
-        "    return order.paid and not order.refunded\n"
-        "\n"
-        "def first_paid(orders):\n"
-        "    for order in orders:\n"
-        "        if paid(order):\n"
-        "            return order\n"
-    )
-    assert code_map.Source(source, "k.py", scopes.lines(source, "paid")).loops == {
-        "k.py:2:22": (),
-        "k.py:7:12": (),
-    }
-
-
-def test_7b20d411():
-    """Example: late_refunds, a list comprehension of two generators, each
-    with a filter
-    Each generator of a comprehension run in its function's frame is a
-    loop, named by its for keyword: its filter is held by it and every
-    generator before it, its iterable by those before it only, as each
-    runs once per item of the one before."""
-    source = (
-        "def late_refunds(orders, refunds):\n"
-        "    return [r for o in orders if o.late for r in refunds if r.big]\n"
-    )
-    found = code_map.Source(source, "k.py", scopes.whole(source))
-    assert [found.loops, found.fors] == [
-        {
-            "k.py:2:30": ("k.py:2:14",),
-            "k.py:2:57": ("k.py:2:14", "k.py:2:40"),
-            "k.py:2:4": (),
-            "k.py:2:14": (),
-            "k.py:2:40": ("k.py:2:14",),
-        },
-        {(2, 23, 2, 29): "k.py:2:14", (2, 49, 2, 56): "k.py:2:40"},
-    ]
 
 
 def test_7b20d40a():

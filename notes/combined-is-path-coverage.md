@@ -65,6 +65,31 @@ Literal arms, impossible only in combination:
 Alone keeps this gap: as a primitive, the `and` has the path. Path
 coverage drops it, as neither arm can be falsy.
 
+## Impossible or absent
+
+Decided 2026-11-08, for both implementations. A path that cannot
+happen is one of two things:
+
+- Impossible: the code is wrong, so the path goes in the card's
+  Impossible tab and its fix is a change to the code.
+- Absent: the code is fine and control simply does not fork there, so
+  the path is never generated at all (as for Q1's last operand whose
+  truth decides nothing).
+
+The rules that find either stay few and syntactic, needing no tracking
+of values. Past them, the uncovered paths are themselves the measure
+that the code is too complex to reason about; the rules do not get
+smarter to chase a perfect answer.
+
+    return x; y = 1               Impossible: y = 1 after an exit
+    if a: return 1                Impossible: the statement after an
+    else: raise E; z = 2            if/else whose arms all exit
+    if False: / 0 and a           Impossible: a literal test
+    while True: ... else:         Impossible: the else, with no break
+    for c in ("red", "green"):    Absent: no "0 items" way
+    for c in ():                  Absent: no "1+ items" way
+    while True: ... break         Absent: no False exit of the test
+
 ## Cautions
 
 - A false "impossible" tells the dev to delete code that is needed.

@@ -338,16 +338,16 @@ def test_5b1f3c10():
     A statement that is a row steps where it starts, before the decisions
     in it. A generator expression runs in a frame of its own, but for its
     first iterable, run where it is written: the or is a step of the
-    method, the filter is not."""
+    method, the filter is not. The or's value is iterated, its truth
+    tested by no branch, so fallback is no leaf of it."""
     source = (
         "def paid(orders, fallback):\n"
         "    return sum(1 for order in (orders or fallback) if order.paid)\n"
     )
     assert method_machine.paths(source, "k.py") == {
         "k.py:1:0": [
-            (("k.py:2:4",), ("k.py:2:38", (True, None))),
-            (("k.py:2:4",), ("k.py:2:38", (False, True))),
-            (("k.py:2:4",), ("k.py:2:38", (False, False))),
+            (("k.py:2:4",), ("k.py:2:38", (True,))),
+            (("k.py:2:4",), ("k.py:2:38", (False,))),
         ]
     }
 
@@ -365,13 +365,13 @@ def test_5b1f3c11():
     its own."""
     source = (
         "def one(truth, a, b):\n"
-        "    return truth if a or b else None\n"
+        "    assert truth if a or b else None\n"
         "def two(a, b):\n"
-        "    return a and (1 if b else 2)\n"
+        "    assert a and (1 if b else 2)\n"
         "def three(x, c, a, b):\n"
-        "    return x if c else (a and b)\n"
+        "    assert x if c else (a and b)\n"
         "def four(f, x, c, y, z):\n"
-        "    return f(x if c else y) or z\n"
+        "    assert f(x if c else y) or z\n"
     )
     either = ((True,), (False,))
     assert method_machine.paths(source, "k.py") == {
@@ -402,7 +402,7 @@ def test_5b1f3c12():
     expression's frame, so its and takes no step here."""
     source = (
         "def led(xs):\n"
-        "    return any(x % 2 and x > 1 for x in xs) or not xs\n"
+        "    assert any(x % 2 and x > 1 for x in xs) or not xs\n"
     )
     falsy = (("0 items", None), ("1 item", False), ("2+ items", False))
     assert method_machine.paths(source, "k.py") == {

@@ -28,17 +28,23 @@ class Walk:
     """The way under way of one call of the function whose entry is
     named entry, counting each way it ends on ways, {unit's name: {way:
     count}}, loops being {row's name: the names of the loops holding it,
-    outermost first}."""
+    outermost first}, and repeats {decision's name: the name of the while
+    whose test holds it}."""
 
-    def __init__(self, entry, ways, loops):
+    def __init__(self, entry, ways, loops, repeats):
         """A call just entered, no step taken yet."""
         self.ways = ways
         self.loops = loops
+        self.repeats = repeats
         self.units = [_Unit(entry)]
 
     def step(self, step):
         """Adds step, a row's (name, ...), to the way of the innermost
-        loop under way holding its row, or the call's own."""
+        loop under way holding its row, or the call's own; but no step of
+        a decision in the test of a while under way, as each test after
+        its first repeats the while's fork."""
+        if self.repeats.get(step[0]) in [unit.name for unit in self.units[1:]]:
+            return
         self._close_to(self.loops[step[0]])
         self.units[-1].steps.append(step)
 
@@ -72,13 +78,11 @@ class Walk:
         self._count(self.units[0])
 
     def _close_to(self, holding):
-        """Closes each loop under way, innermost first, but those leading
-        holding, the loops holding a row, outermost first."""
-        open_loops = [unit.name for unit in self.units[1:]]
-        kept = 0
-        while kept < min(len(open_loops), len(holding)) and open_loops[kept] == holding[kept]:
-            kept += 1
-        while len(self.units) - 1 > kept:
+        """Closes each loop under way, innermost first, until one of
+        holding, the loops holding a row, is innermost. A loop of holding
+        that is not under way is passed over, as monitoring mode never
+        opens a while, though its rows are held by it."""
+        while len(self.units) > 1 and self.units[-1].name not in holding:
             self._close()
 
     def _close(self):

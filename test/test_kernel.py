@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import path_coverage
-from path_coverage import wrapped_leaves
+from path_coverage import inserted_records
 
 PROJECTS = Path(__file__).parent / "projects"
 
@@ -24,7 +24,7 @@ def _imported(project, module_name):
 
 
 NEW = '`trails[trail_id]["new"]`'
-LEAVES = [["6:11", "6:29"], ["6:34", "6:57"]]
+LEAVES = [["6:19", "6:37"], ["6:42", "6:65"]]
 
 
 def _taken(tt, tf, f):
@@ -64,23 +64,30 @@ def test_e5a70c01(tmp_path, capsys):
         path_coverage.stop()
     [report] = exits
     report()
-    decision = "src/single_and_trails.py:6:30"
+    decision = "src/single_and_trails.py:6:38"
+    ternary = "src/single_and_trails.py:6:16"
+    then, otherwise = {"at": "6:16", "path": [True]}, {"at": "6:16", "path": [False]}
     assert json.loads((tmp_path / "path_coverage.json").read_text()) == {
         "$schema": "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json",
         "decisions": {
+            ternary: [{"truthy": 1, "falsy": 1}],
             decision: [
                 {"truthy": 1, "falsy": 1},
                 {"truthy": 1, "falsy": 0},
-            ]
+            ],
         },
-        "paths": {decision: {"leaves": LEAVES, "taken": _taken(1, 0, 1)}},
+        "paths": {
+            ternary: {"leaves": [["6:19", "6:65"]], "taken": [{"path": [True], "count": 1}, {"path": [False], "count": 1}]},
+            decision: {"leaves": LEAVES, "taken": _taken(1, 0, 1)},
+        },
         "kinds": ["block", "case", "chain", "choice"],
         "measured_by": {
             "python": platform.python_version(),
             "path_coverage": path_coverage.__version__,
         },
+        "events": "monitoring",
         "reached": {"src/single_and_trails.py:4:0": 2},
-        "totals": {"alone": [2, 3], "combined": [2, 3]},
+        "totals": {"alone": [4, 5], "combined": [4, 5]},
         "cards": {
             "src/single_and_trails.py:4:0": {
                 "name": "is_new",
@@ -88,24 +95,28 @@ def test_e5a70c01(tmp_path, capsys):
                 "last": 6,
                 "ways": 3,
                 "calls": 2,
-                "rows": [{"at": "6:30", "top": "and", "paths": 3, "taken": 2, "decision": decision}],
+                "rows": [
+                    {"at": "6:16", "top": "ternary", "paths": 2, "taken": 2, "decision": ternary},
+                    {"at": "6:38", "top": "and", "paths": 3, "taken": 2, "decision": decision},
+                ],
                 "taken": [
-                    {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
-                    {"way": [{"at": "6:30", "path": [False, None]}], "count": 1},
+                    {"way": [{"at": "6:38", "path": [True, True]}, then], "count": 1},
+                    {"way": [{"at": "6:38", "path": [False, None]}, otherwise], "count": 1},
                 ],
                 "passes": {},
                 "covered": [
-                    {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
-                    {"way": [{"at": "6:30", "path": [False, None]}], "count": 1},
+                    {"way": [{"at": "6:38", "path": [True, True]}, then], "count": 1},
+                    {"way": [{"at": "6:38", "path": [False, None]}, otherwise], "count": 1},
                 ],
-                "gaps": [[{"at": "6:30", "path": [True, False]}]],
+                "gaps": [[{"at": "6:38", "path": [True, False]}, otherwise]],
                 "impossible": [],
             }
         },
         "tree": {
             "src/single_and_trails.py": {
                 "4:0": {
-                    "6:30": {"parent": None, "in": None, "on": None, "leaf": None, "gives": None}
+                    "6:16": {"parent": None, "in": None, "on": None, "leaf": None, "gives": None},
+                    "6:38": {"parent": "6:16", "in": None, "on": [0, 1], "leaf": 0, "gives": [True, False, False]},
                 }
             }
         },
@@ -135,8 +146,11 @@ def test_e5a70c17(tmp_path, capsys):
     source = json.loads((tmp_path / "path_coverage.source.json").read_text())
     file = source["files"]["src/single_and_trails.py"]
     assert len(file["lines"]) == 6
-    assert list(file["decisions"]) == ["src/single_and_trails.py:6:30"]
-    assert source["labels"] == {"and": {"text": "and", "tokens": [[0, 3, "k"]]}}
+    assert list(file["decisions"]) == ["src/single_and_trails.py:6:16", "src/single_and_trails.py:6:38"]
+    assert source["labels"] == {
+        "and": {"text": "and", "tokens": [[0, 3, "k"]]},
+        "ternary": {"text": "ternary", "tokens": []},
+    }
 
 
 def test_e5a70c02(tmp_path, capsys):
@@ -160,10 +174,11 @@ def test_e5a70c02(tmp_path, capsys):
     assert started is True
     [report] = exits
     report()
-    decision = "src/single_and_trails.py:6:30"
+    decision = "src/single_and_trails.py:6:38"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["paths"][decision]["taken"] == _taken(0, 1, 0)
     assert capsys.readouterr().out == (
+        f"src/single_and_trails.py:6:16 path never taken: `trail_id in trails and {NEW[1:-1]}` true\n"
         f"{decision} path never taken: `trail_id in trails` true, {NEW} true\n"
         f"{decision} path never taken: `trail_id in trails` false\n"
     )
@@ -196,18 +211,19 @@ def test_e5a70c04(tmp_path, capsys):
     assert capsys.readouterr().out == ""
     assert sorted(p.name for p in tmp_path.iterdir()) == ["path_coverage.gw0.json"]
     main_exits[0]()
-    decision = "src/single_and_trails.py:6:30"
+    decision = "src/single_and_trails.py:6:38"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["decisions"] == {
+        "src/single_and_trails.py:6:16": [{"truthy": 1, "falsy": 1}],
         decision: [
             {"truthy": 2, "falsy": 0},
             {"truthy": 1, "falsy": 1},
-        ]
+        ],
     }
     assert report["paths"][decision]["taken"] == _taken(1, 1, 0)
     assert report["cards"]["src/single_and_trails.py:4:0"]["taken"] == [
-        {"way": [{"at": "6:30", "path": [True, True]}], "count": 1},
-        {"way": [{"at": "6:30", "path": [True, False]}], "count": 1},
+        {"way": [{"at": "6:38", "path": [True, True]}, {"at": "6:16", "path": [True]}], "count": 1},
+        {"way": [{"at": "6:38", "path": [True, False]}, {"at": "6:16", "path": [False]}], "count": 1},
     ]
     assert capsys.readouterr().out == (
         f"{decision} path never taken: `trail_id in trails` false\n"
@@ -248,11 +264,7 @@ def test_e5a70c06(tmp_path, capsys):
     finally:
         path_coverage.stop()
     exits[0]()
-    assert capsys.readouterr().out == (
-        "src/never_imported_flows.py:6:26 path never taken: "
-        '`flow["public"]` false, `flow["owner"] == "everyone"` false\n'
-        "src/never_imported_policies.py:6:29 never reached\n"
-    )
+    assert capsys.readouterr().out == "src/never_imported_policies.py:6:29 never reached\n"
 
 
 def test_e5a70c07(tmp_path, capsys):
@@ -277,7 +289,7 @@ def test_e5a70c07(tmp_path, capsys):
     assert capsys.readouterr().out == ""
     source = json.loads((tmp_path / "path_coverage.source.json").read_text())
     decisions = source["files"]["src/single_and_trails.py"]["decisions"]
-    leaf = decisions["src/single_and_trails.py:6:30"]["fold"][2]["label"]
+    leaf = decisions["src/single_and_trails.py:6:38"]["fold"][2]["label"]
     assert leaf == {"text": 'trails[trail_id]["new"]', "tokens": [[17, 22, "s"]]}
 
 
@@ -297,8 +309,9 @@ def test_e5a70c08(tmp_path):
 
 def test_e5a70c09(tmp_path, capsys):
     """start_from_env takes the reporters, comma-separated, from
-    PATH_COVERAGE_REPORT: summary alone prints the totals, none of the and's
-    3 paths taken as nothing was imported, and no gaps."""
+    PATH_COVERAGE_REPORT: summary alone prints the totals, none of the 5
+    paths taken, the conditional expression's 2 and its and's 3, as
+    nothing was imported, and no gaps."""
     exits = []
     path_coverage.start_from_env(
         {
@@ -312,8 +325,8 @@ def test_e5a70c09(tmp_path, capsys):
     path_coverage.stop()
     exits[0]()
     assert capsys.readouterr().out == (
-        "Paths alone: 0 / 3 (0.00%)\n"
-        "Paths combined: 0 / 3 (0.00%)\n"
+        "Paths alone: 0 / 5 (0.00%)\n"
+        "Paths combined: 0 / 5 (0.00%)\n"
     )
 
 
@@ -494,6 +507,94 @@ def test_e5a70c1b(tmp_path, capsys):
     assert not (tmp_path / "merged").exists()
 
 
+def test_e5a70c35(tmp_path, capsys):
+    """Example: the JSON report of a run started with no events mode
+    It names the mode its events came from, "monitoring", the default, as
+    each mode can count a decision's paths differently."""
+    project = PROJECTS / "single_and"
+    exits = []
+    path_coverage.start(root=project, cover=["src/**/*.py"], coverage_dir=tmp_path, on_exit=exits.append)
+    try:
+        _imported(project, "single_and_trails").is_new("T2", {})
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    capsys.readouterr()
+    assert json.loads((tmp_path / "path_coverage.json").read_text())["events"] == "monitoring"
+
+
+def test_e5a70c36(tmp_path, capsys):
+    """Example: render, in monitoring mode, of a run whose JSON names
+    "rewrite" under "events"
+    Runs measured in different modes can count a decision's paths
+    differently, so render refuses it, naming the run and its mode, and
+    writes no report."""
+    project = PROJECTS / "single_and"
+    settings = {"root": project, "cover": ["src/**/*.py"]}
+    exits = []
+    path_coverage.start(**settings, coverage_dir=tmp_path / "run", on_exit=exits.append)
+    try:
+        _imported(project, "single_and_trails").is_new("T2", {})
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    capsys.readouterr()
+    run = tmp_path / "run" / "path_coverage.json"
+    report = json.loads(run.read_text())
+    report["events"] = "rewrite"
+    run.write_text(json.dumps(report))
+    with pytest.raises(ValueError) as refused:
+        path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
+    assert str(refused.value) == f"{run} was measured in rewrite mode, not monitoring"
+    assert not (tmp_path / "merged").exists()
+
+
+def test_e5a70c37(tmp_path):
+    """Example: events="trace"
+    An unknown events mode is refused by name, listing the modes."""
+    with pytest.raises(ValueError) as refused:
+        path_coverage.start(
+            root=PROJECTS / "never_imported",
+            cover=["src/*.py"],
+            coverage_dir=tmp_path,
+            events="trace",
+            on_exit=lambda report: None,
+        )
+    assert str(refused.value) == "unknown events mode 'trace'; the events modes are: monitoring, rewrite"
+
+
+def _single_and_report(env, coverage_dir):
+    """The JSON report of single_and_trails.is_new called three ways, its
+    paths each taken once, measured as started from env, a run's own
+    PATH_COVERAGE_* variables, into coverage_dir."""
+    project = PROJECTS / "single_and"
+    exits = []
+    path_coverage.start_from_env(
+        {"PATH_COVERAGE_ROOT": str(project), "PATH_COVERAGE_COVER": "src/**/*.py", "PATH_COVERAGE_DIR": str(coverage_dir), **env},
+        on_exit=exits.append,
+    )
+    try:
+        trails = _imported(project, "single_and_trails")
+        for trail_id, known in (("T1", {}), ("T2", {"T2": {"new": True}}), ("T3", {"T3": {"new": False}})):
+            trails.is_new(trail_id, known)
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    return json.loads((coverage_dir / "path_coverage.json").read_text())
+
+
+def test_e5a70c38(tmp_path, capsys):
+    """Example: single_and_trails.is_new called three ways, started from
+    PATH_COVERAGE_EVENTS=rewrite, then with no PATH_COVERAGE_EVENTS
+    The rewrite mode's report names its mode, and, but for that, is the
+    monitoring mode's: every count, path, card and way the same."""
+    rewritten = _single_and_report({"PATH_COVERAGE_EVENTS": "rewrite"}, tmp_path / "rewrite")
+    monitored = _single_and_report({}, tmp_path / "monitoring")
+    capsys.readouterr()
+    assert [rewritten.pop("events"), monitored.pop("events")] == ["rewrite", "monitoring"]
+    assert rewritten == monitored
+
+
 def test_e5a70c0d(tmp_path):
     """Example: report=["post"] with no collector
     The post reporter needs a collector to send to, so it is refused."""
@@ -558,8 +659,9 @@ def _is_public_twice(project, start):
 
 
 def test_e5a70c0f(tmp_path, capsys):
-    """Example: report=["summary"], no groups, flows taking 2 of its 3
-    paths and policies none of its 3
+    """Example: report=["summary"], no groups, flows taking both of its 2
+    paths and policies neither of its 2, each an and/or returned, so its
+    last operand no leaf
     The summary reporter prints the paths taken of all possible alone,
     then combined, over every covered file."""
     project = PROJECTS / "never_imported"
@@ -574,8 +676,8 @@ def test_e5a70c0f(tmp_path, capsys):
         ),
     )
     assert capsys.readouterr().out == (
-        "Paths alone: 2 / 6 (33.33%)\n"
-        "Paths combined: 2 / 6 (33.33%)\n"
+        "Paths alone: 2 / 4 (50.00%)\n"
+        "Paths combined: 2 / 4 (50.00%)\n"
     )
 
 
@@ -611,19 +713,19 @@ def test_e5a70c10(tmp_path, capsys):
         _is_public_twice(project, start)
         assert capsys.readouterr().out == (
             "flows:\n"
-            "  Paths alone: 2 / 3 (66.67%)\n"
-            "  Paths combined: 2 / 3 (66.67%)\n"
+            "  Paths alone: 2 / 2 (100.00%)\n"
+            "  Paths combined: 2 / 2 (100.00%)\n"
             "policies:\n"
-            "  Paths alone: 0 / 3 (0.00%)\n"
-            "  Paths combined: 0 / 3 (0.00%)\n"
+            "  Paths alone: 0 / 2 (0.00%)\n"
+            "  Paths combined: 0 / 2 (0.00%)\n"
         )
         report = json.loads((tmp_path / "path_coverage.json").read_text())
         assert report["totals"] == {
-            "alone": [2, 6],
-            "combined": [2, 6],
+            "alone": [2, 4],
+            "combined": [2, 4],
             "groups": {
-                "flows": {"alone": [2, 3], "combined": [2, 3]},
-                "policies": {"alone": [0, 3], "combined": [0, 3]},
+                "flows": {"alone": [2, 2], "combined": [2, 2]},
+                "policies": {"alone": [0, 2], "combined": [0, 2]},
             },
         }
         source = json.loads((tmp_path / "path_coverage.source.json").read_text())
@@ -1144,7 +1246,7 @@ def test_e5a70c22(tmp_path):
         "\n"
         "    @property\n"
         "    def carrier(self):\n"
-        "        return self.express and self.paid\n"
+        "        return True if self.express and self.paid else False\n"
         "\n"
         "    def total(self, items, vip):\n"
         "        return sum(items) if vip or items else 0\n"
@@ -1163,8 +1265,8 @@ def test_e5a70c22(tmp_path):
         seen = [
             sys.monitoring.get_local_events(tool, carrier) != 0,
             sys.monitoring.get_local_events(tool, total),
-            wrapped_leaves.NAME in carrier.co_names,
-            wrapped_leaves.NAME in total.co_names,
+            inserted_records.NAME in carrier.co_names,
+            inserted_records.NAME in total.co_names,
         ]
     finally:
         path_coverage.stop()
@@ -1362,9 +1464,8 @@ def test_e5a70c33(tmp_path):
     assert [found, cards["src/spans.py:1:0"]["taken"], cards["src/spans.py:4:0"]["taken"]] == [
         [True, False, False],
         [
-            {"way": [{"at": "2:32", "path": [True, True]}], "count": 1},
-            {"way": [{"at": "2:32", "path": [False, None]}], "count": 1},
-            {"way": [{"at": "2:32", "path": [True, False]}], "count": 1},
+            {"way": [{"at": "2:32", "path": [True]}], "count": 2},
+            {"way": [{"at": "2:32", "path": [False]}], "count": 1},
         ],
         [{"way": [{"at": "5:04"}], "count": 3}],
     ]

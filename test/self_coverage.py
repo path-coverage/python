@@ -71,7 +71,8 @@ def _asserting_loader(kernel):
 def start():
     """Copies the package, then starts the copy covering src/ and test/,
     groups code and test, reporting html and JSON into REPORTS when pytest
-    unconfigures. This file and suites.py, loaded before it starts, run
+    unconfigures, in the events mode PATH_COVERAGE_SELF_EVENTS names,
+    monitoring when it is not set. This file and suites.py, loaded before it starts, run
     outside the measured run, so are skipped; so are the files the suite
     leaves out, which never run."""
     into = Path(tempfile.mkdtemp(prefix="path_coverage_self."))
@@ -88,6 +89,7 @@ def start():
         coverage_dir=REPORTS,
         report=[],
         groups={"code": ["src/**/*.py"], "test": ["test/**/*.py"]},
+        events=os.environ.get("PATH_COVERAGE_SELF_EVENTS", "monitoring"),
         on_exit=_reports.append,
     )
     _reports.append(lambda: shutil.rmtree(into))

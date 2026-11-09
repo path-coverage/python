@@ -78,7 +78,7 @@ def test_5be7c003():
     The any is the whole of that leaf, so it also names what each of its
     own possible paths gives the leaf: its value, False with 0 items, else
     its last answer."""
-    source = "def kept(a, xs):\n    return a and any(x > 1 for x in xs)\n"
+    source = "def kept(a, xs):\n    assert a and any(x > 1 for x in xs)\n"
     gives = [False, True, False, True, False]
     assert _places(source) == {
         "2:13": TOP,
@@ -94,7 +94,7 @@ def test_5be7c004():
     itself is a row, the whole of the and's second leaf, giving it a value
     not known on each of its paths, as neither arm's truthiness is noted;
     the any is in an arm, in no leaf, so gives nothing."""
-    source = "def each_if(a, b, xs):\n    return a and (3 if b else any(x for x in xs))\n"
+    source = "def each_if(a, b, xs):\n    assert a and (3 if b else any(x for x in xs))\n"
     assert _places(source) == {
         "2:13": TOP,
         "2:20": ("2:13", None, [0, 1], 1, [None, None]),
@@ -121,7 +121,7 @@ def test_5be7c007():
     expression's third, so it runs only on the paths that take the else
     arm and evaluate that leaf: where a and b were both false. It is the
     whole of its leaf, so gives the leaf its value."""
-    source = "def pick(a, b, xs):\n    return 1 if a else (b or any(x for x in xs))\n"
+    source = "def pick(a, b, xs):\n    assert 1 if a else (b or any(x for x in xs))\n"
     assert _places(source) == {
         "2:13": TOP,
         "2:29": ("2:13", "else", [2, 3], 2, [False, True, False, True, False]),

@@ -40,5 +40,5 @@ def test_b8e2f601(tmp_path):
     assert run.returncode == 0, run.stdout + run.stderr
     report = json.loads((tmp_path / "coverage" / "path_coverage.json").read_text())
     assert report["reached"] == {"src/single_and_trails.py:4:0": 1}
-    counts = {tuple(each["path"]): each["count"] for each in report["paths"]["src/single_and_trails.py:6:30"]["taken"]}
+    counts = {tuple(each["path"]): each["count"] for each in report["paths"]["src/single_and_trails.py:6:38"]["taken"]}
     assert counts == {(True, True): 1, (True, False): 0, (False, None): 0}

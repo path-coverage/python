@@ -1,7 +1,6 @@
 """The suites a run can be, each the test files it runs and whether its
 coverage is checked: all, every test; core, the hand-written tests, without
-the generated ones in test/property and the reference rewrite in
-test/reference that only they run, neither run nor measured; property,
+the generated ones in test/property, neither run nor measured; property,
 those alone, whose coverage covers only part of the code, so, as a run of
 chosen tests, is not checked. The one place a suite is decided: a pytest
 plugin, loaded by bin/test.sh with -p suites, which collects only the
@@ -19,13 +18,9 @@ ROOT = Path(__file__).resolve().parent.parent
 # The generated tests and the grammar they are generated from.
 PROPERTY = "test/property/**"
 
-# The reference rewrite the generated differential test checks against,
-# which only that test runs.
-REFERENCE = "test/reference/**"
-
 TABLE = {
     "all": {"runs": "test/**", "without": [], "checked": True},
-    "core": {"runs": "test/**", "without": [PROPERTY, REFERENCE], "checked": True},
+    "core": {"runs": "test/**", "without": [PROPERTY], "checked": True},
     "property": {"runs": PROPERTY, "without": [], "checked": False},
 }
 

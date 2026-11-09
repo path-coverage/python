@@ -2,8 +2,8 @@ import sys
 import threading
 from types import SimpleNamespace
 
-from path_coverage import code_map, monitor, scopes, wrapped_leaves
-from path_coverage.evaluations import Enter, Evaluations, Unwalked
+from path_coverage import code_map, inserted_records, monitor, scopes, source_map
+from path_coverage.evaluations import Enter, Evaluations
 
 DISABLE = sys.monitoring.DISABLE
 
@@ -13,7 +13,7 @@ def _measured(source, name, path="k.py"):
     the file path, is instrumented and has run as a module."""
     evaluations = Evaluations()
     code, record = monitor.instrument(source, path, path, evaluations, monitor.compiled, scopes.whole(source))
-    namespace = {wrapped_leaves.NAME: record}
+    namespace = {inserted_records.NAME: record}
     exec(code, namespace)  # noqa: S102 - running the measured code is the point
     return namespace[name], evaluations
 
@@ -30,12 +30,12 @@ CAN_ATTEST = "def can_attest(user, flow):\n    return user.active and (user.admi
 def test_d86a1f01():
     """Example: user.active and (user.admin or flow.public), with active,
     not admin, and a public flow
-    Each leaf a branch tests gives its outcome; flow.public, the last
-    operand, which none tests, the call around it. The value is
-    unchanged."""
+    Each leaf a branch tests gives its outcome. flow.public, the last
+    operand, is returned, its truth tested by no branch, so it is no
+    leaf. The value is unchanged."""
     can_attest, evaluations = _measured(CAN_ATTEST, "can_attest", "src/model/flow.py")
     assert can_attest(SimpleNamespace(active=True, admin=False), SimpleNamespace(public="yes")) == "yes"
-    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(True, False, True): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(True, False): 1}}
 
 
 def test_d86a1f02():
@@ -44,7 +44,7 @@ def test_d86a1f02():
     skips are never counted, and stay None on its path."""
     can_attest, evaluations = _measured(CAN_ATTEST, "can_attest", "src/model/flow.py")
     assert can_attest(SimpleNamespace(active=False, admin=True), None) is False
-    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(False, None, None): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(False, None): 1}}
     assert list(evaluations.counts) == [("src/model/flow.py:2:23", 0)]
 
 
@@ -52,14 +52,15 @@ def test_d86a1f03():
     """Example: user.admin or flow.public if user.active else False, called
     twice
     The conditional expression is one decision: its predicate leaf 0, the
-    then arm's `or` leaves 1 and 2. The values it returns are unchanged."""
+    then arm's `or` leaf 1, its last operand being returned, so no leaf.
+    The values it returns are unchanged."""
     source = "def can_see(user, flow):\n    return user.admin or flow.public if user.active else False\n"
     can_see, evaluations = _measured(source, "can_see", "src/model/flow.py")
     flow = SimpleNamespace(public="yes")
     assert can_see(SimpleNamespace(active=True, admin=False), flow) == "yes"
     assert can_see(SimpleNamespace(active=False, admin=True), flow) is False
     assert _rebuilt(evaluations).decision_paths == {
-        "src/model/flow.py:2:37": {(True, False, True): 1, (False, None, None): 1},
+        "src/model/flow.py:2:37": {(True, False): 1, (False, None): 1},
     }
 
 
@@ -156,12 +157,12 @@ def test_d86a1f08():
 
 
 def test_d86a1f09():
-    """Example: a generator suspended inside an and, at its yield, then
-    resumed in another thread
+    """Example: a generator suspended inside an if's and, at its yield,
+    then resumed in another thread
     The evaluation is kept by the generator's frame, wherever it resumes,
-    so its path is counted: a true, and the value written to got, 5, true.
+    so its path is counted: a true, and the value sent, 5, true.
     The generator gives what it would unmeasured."""
-    source = 'def ask(a):\n    got = a and (yield "asked")\n    yield got\n'
+    source = 'def ask(a):\n    if a and (yield "asked"):\n        yield "yes"\n'
     ask, evaluations = _measured(source, "ask")
     asking = ask(True)
     assert next(asking) == "asked"
@@ -169,8 +170,8 @@ def test_d86a1f09():
     thread = threading.Thread(target=lambda: answers.append(asking.send(5)))
     thread.start()
     thread.join(5)
-    assert answers == [5]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:12": {(True, True): 1}}
+    assert answers == ["yes"]
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): 1}, "k.py:2:9": {(True, True): 1}}
 
 
 LATE = "def late(orders):\n    return any(o.late for o in orders)\n"
@@ -232,8 +233,9 @@ def test_d86a1f0d():
     """Example: depth(1), whose and's second leaf calls depth(0), whose
     first leaf raises, caught back in the outer leaf
     The inner evaluation raised, so is never counted; the outer one, kept
-    by its own frame, completes with the value depth returns, so its path
-    is. The if in check is counted both ways."""
+    by its own frame, completes with the value attempt gives, so its path
+    is, as is the conditional expression testing it. The if in check is
+    counted both ways."""
     source = (
         "def check(n):\n"
         "    if n == 0:\n"
@@ -245,13 +247,14 @@ def test_d86a1f0d():
         "    except ValueError:\n"
         "        return False\n"
         "def depth(n):\n"
-        "    return check(n) and attempt(lambda: depth(n - 1))\n"
+        "    return True if check(n) and attempt(lambda: depth(n - 1)) else False\n"
     )
     depth, evaluations = _measured(source, "depth")
     assert depth(1) is False
     assert _rebuilt(evaluations).decision_paths == {
         "k.py:2:4": {(False,): 1, (True,): 1},
-        "k.py:11:20": {(True, False): 1},
+        "k.py:11:28": {(True, False): 1},
+        "k.py:11:16": {(False,): 1},
     }
 
 
@@ -285,26 +288,26 @@ def test_d86a1f0f():
 def test_d86a1f10():
     """Example: FLAG = a and b, FLAG declared global, called with a true
     and b true
-    b, the last operand, is tested by no branch, so the call around it
-    counts its outcome."""
+    b, the last operand, is written, its truth tested by no branch, so it
+    is no leaf: the and's path is a's alone."""
     source = "FLAG = None\n\ndef flag(a, b):\n    global FLAG\n    FLAG = a and b\n"
     flag, evaluations = _measured(source, "flag")
     flag(True, "yes")
-    assert _rebuilt(evaluations).decision_paths == {"k.py:5:13": {(True, True): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:5:13": {(True,): 1}}
 
 
 def test_d86a1f15():
     """Example: t += len(f"{a or b}") and t += (0 < t < 3) or b, called
     twice
-    An and/or's last operand, inside an f-string or a write, is counted by
-    the call around it; a chained comparison whose value is an and/or's
-    operand is counted once, by that and/or's test of it."""
+    An and/or's last operand, inside an f-string or a write, is no leaf,
+    its truth tested by no branch; a chained comparison whose value is an
+    and/or's operand is counted once, by that and/or's test of it."""
     source = "def run(a, b, t):\n    t += len(f\"{a or b}\")\n    t += (0 < t < 3) or b\n    return t\n"
     run, evaluations = _measured(source, "run")
     assert [run(False, True, 0), run(True, False, 1)] == [5, 5]
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:18": {(False, True): 1, (True, None): 1},
-        "k.py:3:21": {(False, True): 1, (False, False): 1},
+        "k.py:2:18": {(False,): 1, (True,): 1},
+        "k.py:3:21": {(False,): 2},
     }
     assert evaluations.reached == {"k.py:1:0": 2, "k.py:4:4": 2}
 
@@ -352,7 +355,7 @@ def _codes(source):
     k.py, once measured, logging on the Evaluations returned third."""
     module = compile(source, "k.py", "exec")
     evaluations = Evaluations()
-    monitor.measure(module, code_map.Source(source, "k.py", scopes.whole(source)), evaluations)
+    monitor.measure(module, source_map.Source(source, "k.py", scopes.whole(source)), evaluations)
     functions = {const.co_name: const for const in module.co_consts if hasattr(const, "co_code")}
     return module, functions, evaluations
 
@@ -360,12 +363,12 @@ def _codes(source):
 def test_d86a1f11():
     """Example: member and fee measured, then each branch and mark
     callback called as sys.monitoring calls it, from this frame
-    An event that means something is logged by this frame's id; one that
-    means nothing is disabled where it happens; a right branch that goes
-    where its jump does not is ignored."""
+    An event that means something is logged by this frame's id and its
+    code's; one that means nothing is disabled where it happens; a right
+    branch that goes where its jump does not is ignored."""
     _, functions, evaluations = _codes(MEMBER)
     member, fee = functions["member"], functions["fee"]
-    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py", scopes.whole(MEMBER)))
+    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), source_map.Source(MEMBER, "k.py", scopes.whole(MEMBER)))
     member_table, fee_table = (table for code, table in tables.items() if code.co_name in functions)
     jump = min(member_table.left)
     goes_to, _ = member_table.right[jump]
@@ -379,8 +382,8 @@ def test_d86a1f11():
         monitor._instruction(member, 0),
     ] == [None] * 4 + [DISABLE] * 3
     here = id(sys._getframe())
-    assert [frame for frame, _ in evaluations.log] == [here, here, here]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:16": {(False, None): 1}}
+    assert [frame for frame, _ in evaluations.log] == [(here, id(member)), (here, id(member)), (here, id(fee))]
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:16": {(False,): 1, (True,): 1}}
     assert evaluations.reached == {"k.py:6:4": 1}
 
 
@@ -393,7 +396,7 @@ def test_d86a1f14():
     anywhere else."""
     _, functions, _ = _codes(MEMBER)
     fee = functions["fee"]
-    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), code_map.Source(MEMBER, "k.py", scopes.whole(MEMBER)))
+    tables = code_map.tables(compile(MEMBER, "k.py", "exec"), source_map.Source(MEMBER, "k.py", scopes.whole(MEMBER)))
     mark = min(next(table for code, table in tables.items() if code.co_name == "fee").marks)
     assert [monitor._kept(fee, mark), monitor._kept(fee, 0), monitor._line_started(fee, 6)] == [None, DISABLE, DISABLE]
 
@@ -402,15 +405,14 @@ def test_d86a1f13():
     """Example: the start callback, for member's code, for the module's,
     and for code never measured
     member's start logs its entry, counted once the log is rebuilt; the
-    module's, no function's, logs that it has no card, so it ends any way
-    left under way in a frame of its id; code never measured is disabled,
-    never seen again."""
+    module's, no function's, has no card, so it is disabled, as is the
+    start of code never measured: never seen again."""
     module, functions, evaluations = _codes(MEMBER)
     unmeasured = compile("RATE = 3\n", "k.py", "exec")
     started = [monitor._started(code, 0) for code in (functions["member"], module, unmeasured)]
     assert [started, [actions for _, actions in evaluations.log]] == [
-        [None, None, DISABLE],
-        [(Enter("k.py:1:0"),), (Unwalked(),)],
+        [None, DISABLE, DISABLE],
+        [(Enter("k.py:1:0"),)],
     ]
     evaluations.flush()
     assert evaluations.reached == {"k.py:1:0": 1}
@@ -418,13 +420,14 @@ def test_d86a1f13():
 
 def test_d86a1f17():
     """Example: the start callback for span's generator expression
-    A generator expression has no card, so its start logs that, ending any
-    way left under way in a frame of its id, as a finished call's frame id
-    is reused."""
+    A generator expression has no card, so its start is disabled. Its
+    events are logged by its own code's id as well as its frame's, so,
+    though CPython gives its frame a finished call's frame id, they never
+    join a way left under way there."""
     _, functions, evaluations = _codes(
         "def span(parts):\n"
         '    """parts as a tuple, each None as -1."""\n'
         "    return tuple(-1 if part is None else part for part in parts)\n"
     )
     [genexpr] = [const for const in functions["span"].co_consts if hasattr(const, "co_code")]
-    assert [monitor._started(genexpr, 0), [actions for _, actions in evaluations.log]] == [None, [(Unwalked(),)]]
+    assert [monitor._started(genexpr, 0), evaluations.log] == [DISABLE, []]

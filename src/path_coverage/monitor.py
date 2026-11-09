@@ -1,18 +1,19 @@
-"""Measures covered code with sys.monitoring and one call around each leaf
-whose outcome no branch tells: instrument wraps those leaves, as
-wrapped_leaves does, compiles the module, then has code_map map its code objects, nested
+"""Measures covered code in monitoring mode, with sys.monitoring and one
+call around each leaf whose outcome no branch tells: instrument wraps those
+leaves, as inserted_records does for this mode, compiles the module, then
+has code_map map its code objects, nested
 ones included, once, and turns on their own events. Each event's callback
-looks up what it means and logs it, by the id of the frame it happened in,
-on the Evaluations of the run that measures it, which rebuilds them later;
+looks up what it means and logs it, by the ids of the frame it happened in
+and of its code, on the Evaluations of the run that measures it, which
+rebuilds them later;
 an event that means nothing is disabled where it happened, so it is never
 seen there again. The package is never itself measured, as it would
 measure itself."""
 
-import ast
 import sys
 
-from . import code_map, wrapped_leaves
-from .evaluations import Enter, Unwalked
+from . import code_map, inserted_records
+from .evaluations import Enter
 
 MONITORING = sys.monitoring
 EVENTS = MONITORING.events
@@ -28,7 +29,7 @@ TOOLS = (3, 4, 5, 2, 0, 1)
 # What each event means, by (id(code), offset): branches left, (Evaluations,
 # actions); branches right, (Evaluations, offset gone to, actions);
 # instructions, (Evaluations, actions). Starts by id(code): (Evaluations,
-# actions), a function's its entry, other code's that it has no card.
+# actions), each a function's entry.
 _left = {}
 _right = {}
 _marks = {}
@@ -49,12 +50,10 @@ def instrument(text, name, path, evaluations, compiler, kept):
     kept line wrapped in a call of record, compiled by compiler, eg
     compiled, then measured where kept, the line numbers measured, eg
     scopes.whole(text), logging on evaluations. The module must bind
-    record as wrapped_leaves.NAME."""
-    source = code_map.Source(text, name, kept)
-    leaves = wrapped_leaves.Leaves(evaluations)
-    code = compiler(wrapped_leaves.rewrite(ast.parse(text), source, leaves), path)
+    record as inserted_records.NAME."""
+    code, record, source = inserted_records.instrumented(text, name, path, evaluations, compiler, kept, "monitoring")
     measure(code, source, evaluations)
-    return code, leaves.record
+    return code, record
 
 
 def measure(code, source, evaluations):
@@ -74,7 +73,8 @@ def measure(code, source, evaluations):
         _left.update({(key, alias): _left[(key, offset)] for alias, offset in table.left_aliases.items()})
         _right.update({(key, alias): _right[(key, offset)] for alias, offset in table.right_aliases.items()})
         _marks.update({(key, offset): (evaluations, actions) for offset, actions in table.marks.items()})
-        _entries[key] = (evaluations, (Unwalked(),) if table.entry is None else (Enter(table.entry),))
+        if table.entry is not None:
+            _entries[key] = (evaluations, (Enter(table.entry),))
         MONITORING.set_local_events(_tool, each, LOCAL)
 
 
@@ -94,13 +94,21 @@ def _claim():
     return tool
 
 
+def _key(code):
+    """The key an event in code is logged by, from a callback called by
+    sys.monitoring: the ids of the frame running code and of code itself,
+    so code with no card, eg a generator expression, never logs into the
+    way of a finished call whose frame id CPython has reused."""
+    return (id(sys._getframe(2)), id(code))
+
+
 def _branched_left(code, offset, _destination):
     """Logs what a left branch at offset in code means."""
     found = _left.get((id(code), offset))
     if found is None:
         return DISABLE
     evaluations, actions = found
-    evaluations.note(id(sys._getframe(1)), actions)
+    evaluations.note(_key(code), actions)
 
 
 def _branched_right(code, offset, destination):
@@ -112,7 +120,7 @@ def _branched_right(code, offset, destination):
         return DISABLE
     evaluations, goes_to, actions = found
     if destination == goes_to:
-        evaluations.note(id(sys._getframe(1)), actions)
+        evaluations.note(_key(code), actions)
 
 
 def _instruction(code, offset):
@@ -121,7 +129,7 @@ def _instruction(code, offset):
     if found is None:
         return DISABLE
     evaluations, actions = found
-    evaluations.note(id(sys._getframe(1)), actions)
+    evaluations.note(_key(code), actions)
 
 
 def _line_started(code, _line):
@@ -139,15 +147,15 @@ def _kept(code, offset):
 
 
 def _started(code, _offset):
-    """Logs the start of measured code, in its frame: a function's entry
-    starts its call's way; other code, eg a generator expression, ends
-    any way left under way in a frame of its id, as CPython reuses a
-    finished frame's id. Disables the start of code never measured."""
+    """Logs the start of a measured function, its entry, which starts its
+    call's way in its frame. Disables the start of any other code, eg a
+    generator expression's, which has no card, and of code never
+    measured."""
     found = _entries.get(id(code))
     if found is None:
         return DISABLE
     evaluations, actions = found
-    evaluations.note(id(sys._getframe(1)), actions)
+    evaluations.note(_key(code), actions)
 
 
 # This package's tool id, claimed once, as it is first imported.

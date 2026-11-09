@@ -100,7 +100,7 @@ def test_5c1e9a0e():
         "from flags import any\n"
         "\n"
         "def late(orders):\n"
-        "    return any(o.late for o in orders) or all(o.paid for o in orders)\n"
+        "    assert any(o.late for o in orders) or all(o.paid for o in orders)\n"
     )
     assert decisions(source, "k.py") == {
         "k.py:4:39": Condition(operator="or", operands=(Leaf(4, 11, 4, 38), Leaf(4, 42, 4, 69))),
@@ -229,7 +229,7 @@ def test_5c1e9a06():
     Its leaves are numbered after the predicate's."""
     source = (
         "def can_see(user, flow):\n"
-        "    return user.admin or flow.public if user.active else False\n"
+        "    assert user.admin or flow.public if user.active else False\n"
     )
     either = Condition(operator="or", operands=(Leaf(2, 11, 2, 21), Leaf(2, 25, 2, 36)))
     condition = Condition(
@@ -246,7 +246,7 @@ def test_5c1e9a01():
     right."""
     source = (
         "def is_new(trail_id, trails):\n"
-        "    return trail_id in trails and trails[trail_id].is_new\n"
+        "    assert trail_id in trails and trails[trail_id].is_new\n"
     )
     assert decisions(source, "src/model/trail.py") == {
         "src/model/trail.py:2:30": Condition(
@@ -261,7 +261,7 @@ def test_5c1e9a02():
     within the one decision, and a chain of one operator stays flat."""
     source = (
         "def can_attest(user, flow):\n"
-        "    return user.active and (user.admin or flow.public or flow.owner == user)\n"
+        "    assert user.active and (user.admin or flow.public or flow.owner == user)\n"
     )
     assert decisions(source, "src/model/flow.py") == {
         "src/model/flow.py:2:23": Condition(
@@ -288,15 +288,15 @@ def test_5c1e9a04():
     literal text. Anything that may unpack to empty, or call anything, is
     left open."""
     source = (
-        "name = (payload.get('name') or '').strip()\n"
-        "tags = record.get('tags') or []\n"
-        "versions = versions or [None]\n"
-        "label = label or f'v{n}'\n"
-        "key = key or (lambda d: d.name)\n"
-        "merged = extra or {**defaults}\n"
-        "config = stored or NotificationConfig()\n"
-        "limit = limit or 0\n"
-        "ids = ids or [*mine, *theirs]\n"
+        "assert payload.get('name') or ''\n"
+        "assert record.get('tags') or []\n"
+        "assert versions or [None]\n"
+        "assert label or f'v{n}'\n"
+        "assert key or (lambda d: d.name)\n"
+        "assert extra or {**defaults}\n"
+        "assert stored or NotificationConfig()\n"
+        "assert limit or 0\n"
+        "assert ids or [*mine, *theirs]\n"
     )
     found = decisions(source, "src/model/defaults.py")
     assert [leaf.only for condition in found.values() for leaf in condition.leaves()] == [
@@ -319,14 +319,48 @@ def test_5c1e9a11():
     expressions give. One that is only expressions may be either, and so
     may an empty one, as nothing is known of its parts."""
     source = (
-        "a = name or f''\n"
-        "b = name or f'x'\n"
-        "c = name or f'{n}'\n"
-        "d = name or f'{a}{b}'\n"
-        "e = name or f'{n} items'\n"
+        "assert name or f''\n"
+        "assert name or f'x'\n"
+        "assert name or f'{n}'\n"
+        "assert name or f'{a}{b}'\n"
+        "assert name or f'{n} items'\n"
     )
     onlys = [condition.leaves()[1].only for condition in decisions(source, "k.py").values()]
     assert onlys == [None, "truthy", None, None, "truthy"]
+
+
+def test_5c1e9a14():
+    """Example: ship, a or b written, walrused into an if's test, under a
+    not, as a conditional expression's test, as a while's test, as an
+    assert's message, as a comprehension's iterable and its filter, as a
+    guard, as any's element and sum's; then conditional expressions in an
+    or and in another's arm
+    An or's last operand is a leaf only when a branch forks on the or's
+    truth: as, or through a walrus, a not or an arm, the test of an if,
+    a conditional expression, a while, a filter, a guard or a block
+    call's element. Where its value is only used, it is evaluated or
+    not, and no leaf."""
+    source = (
+        "def ship(a, b, xs, m):\n"
+        "    x = a or b\n"
+        "    if (y := a or b):\n"
+        "        pass\n"
+        "    z = not (a or b)\n"
+        "    w = 1 if a or b else 2\n"
+        "    while a or b:\n"
+        "        break\n"
+        "    assert m, a or b\n"
+        "    u = [x for x in a or b if a or b]\n"
+        "    match m:\n"
+        "        case 1 if a or b:\n"
+        "            pass\n"
+        "    t = any(a or b for x in xs)\n"
+        "    s = sum(a or b for x in xs)\n"
+        "    q = (1 if a else 2) or b\n"
+        "    v = 1 if m else (2 if a else 3)\n"
+    )
+    ors = [len(condition.leaves()) for condition in decisions(source, "k.py").values() if condition.operator == "or"]
+    assert ors == [1, 2, 1, 2, 2, 1, 1, 2, 2, 2, 1, 1]
 
 
 def test_5c1e9a12():
@@ -352,7 +386,7 @@ def test_5c1e9a03():
     keyword, so each keeps a name of its own."""
     source = (
         "def all_compliant(trails, strict):\n"
-        "    return any(t.done and t.ok for t in trails) or not strict\n"
+        "    assert any(t.done and t.ok for t in trails) or not strict\n"
     )
     assert decisions(source, "src/model/trail.py") == {
         "src/model/trail.py:2:48": Condition(

@@ -48,8 +48,11 @@ class Evaluations:
     {name: runs} of every statement reached, eg {"k.py:3:4": 2}; and
     ways, {function's entry: {way: calls}}, each way the steps one call
     took, in order, a decision's (name, path) or a statement's (name,).
-    Events are logged as they happen, as (frame id, actions), and rebuilt
-    into these counts by flush."""
+    Events are logged as they happen, as (frame, actions), and rebuilt
+    into these counts by flush: a frame is the key of the code running,
+    the ids of its frame and of its code, so two runs share one only when
+    they are one call, or a new call of the same function whose frame
+    reuses a finished one's id, which enters before anything else."""
 
     def __init__(self, limit=LIMIT):
         """Starts with nothing counted; the log is rebuilt once it holds
@@ -59,6 +62,7 @@ class Evaluations:
         self.reached = {}
         self.ways = {}
         self.loops = {}
+        self.repeats = {}
         self.log = []
         self.limit = limit
         self._open = {}
@@ -66,7 +70,7 @@ class Evaluations:
         self._walking = {}
 
     def note(self, frame, actions):
-        """Logs actions, seen in the frame of id frame; rebuilds the log
+        """Logs actions, seen in the code run keyed frame; rebuilds the log
         once it is full."""
         self.log.append((frame, actions))
         if len(self.log) >= self.limit:
@@ -143,14 +147,8 @@ class Evaluations:
         the id of one that has finished, and a new call always enters
         before anything else happens in it."""
         self._walked(frame)
-        self._walking[frame] = Walk(name, self.ways, self.loops)
+        self._walking[frame] = Walk(name, self.ways, self.loops, self.repeats)
         self.reach(name)
-
-    def unwalked(self, frame):
-        """Ends the way under way in frame, if any, as code that has no
-        card, eg a generator expression, starts in a frame of its id, so
-        that way's call has finished; starts none."""
-        self._walked(frame)
 
     def ran(self, frame, name):
         """Counts a run of the statement named name, a step of the way
@@ -356,16 +354,6 @@ class Enter:
     def apply(self, evaluations, frame):
         """Starts the call's way in frame."""
         evaluations.enter(frame, self.name)
-
-
-@dataclass(frozen=True)
-class Unwalked:
-    """The start of code that has no card, eg a generator expression, a
-    lambda or a module's top level."""
-
-    def apply(self, evaluations, frame):
-        """Ends any way under way in frame."""
-        evaluations.unwalked(frame)
 
 
 @dataclass(frozen=True)

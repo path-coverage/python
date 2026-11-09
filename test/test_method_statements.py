@@ -101,7 +101,8 @@ def test_b47e3a07():
 def test_b47e3a08():
     """Example: ship, writing an and, an if, then a return
     A decision's row has as many paths as decision mode gives it.
-    An and of two operands has 3, an if 2.
+    An and of two operands whose value is written, not tested, has 2, as
+    its last operand's truth decides nothing; an if 2.
     A return has 1."""
     source = (
         "def ship(order):\n"
@@ -111,7 +112,7 @@ def test_b47e3a08():
         "    return order\n"
     )
     rows = _statements(source)["k.py:1:0"]
-    assert [(row.top, row.paths) for row in rows] == [("and", 3), ("if", 2), ("return", 1)]
+    assert [(row.top, row.paths) for row in rows] == [("and", 2), ("if", 2), ("return", 1)]
 
 
 def test_b47e3a09():
@@ -372,7 +373,7 @@ def test_b47e3a26():
 SHOP = (
     "RATE = 2 if FAST else 1\n"
     "def ship(order):\n"
-    "    return order.paid and order.packed\n"
+    "    assert order.paid and order.packed\n"
     "class Shop:\n"
     "    SIZE = 3 if BIG else 1\n"
 )

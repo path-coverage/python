@@ -3,10 +3,10 @@ from path_coverage.result import operands, paths
 
 SOURCE = (
     "def can_attest(user, flow):\n"
-    "    return user.active and (user.admin or flow.public)\n"
+    "    assert user.active and (user.admin or flow.public)\n"
     "\n"
     "def is_new(trail_id, trails):\n"
-    "    return trail_id in trails and trails[trail_id].is_new\n"
+    "    assert trail_id in trails and trails[trail_id].is_new\n"
 )
 
 
@@ -33,7 +33,7 @@ def test_c3b8f401():
 
 def test_c3b8f402():
     """A leaf that can have one outcome only carries it as only."""
-    source = "tags = record.get('tags') or []\n"
+    source = "assert record.get('tags') or []\n"
     decision = "src/model/tags.py:1:26"
     counts = {(decision, 0): {"truthy": 2, "falsy": 1}, (decision, 1): {"truthy": 0, "falsy": 1}}
     assert operands(decisions(source, "src/model/tags.py"), counts) == {

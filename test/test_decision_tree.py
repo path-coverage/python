@@ -38,7 +38,7 @@ def test_1a6c3e01():
     Paths never taken (count 0) come first, each with its count.
     Each leaf has its source text and its outcome on each path, None
     where unreached; the decision has its value on each path."""
-    source = "def kata(id):\n    return ok(id) and id.startswith('N')\n"
+    source = "def kata(id):\n    assert ok(id) and id.startswith('N')\n"
     assert _tree(source, [1, 0, 1]) == {
         "operator": "and",
         "counts": [0, 1, 1],
@@ -57,7 +57,7 @@ def test_1a6c3e02():
     is plain, so its tree is None.
     The ternary's value on a path is its taken arm's, None for a plain
     arm."""
-    source = 'def kata(id):\n    return new(id) or len(id) == 6 if ok(id) else "no"\n'
+    source = 'def kata(id):\n    assert new(id) or len(id) == 6 if ok(id) else "no"\n'
     tree = _tree(source, [1, 0, 2, 3])
     assert tree["counts"] == [0, 1, 2, 3]
     assert tree["cells"] == [True, True, False, None]
