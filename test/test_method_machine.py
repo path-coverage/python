@@ -686,6 +686,65 @@ def test_5b1f3c1e():
     }
 
 
+def test_5b1f3c1f():
+    """Example: left_in, returning a list comprehension whose filter is
+    not of an any.
+    A not flips its operand's value: the filter is true only on the any's
+    paths giving false, and false only on those giving true, so no path
+    pairs an any with the filter value it cannot give."""
+    source = (
+        "def left_in(xs, ys):\n"
+        "    return [x for x in xs if not any(x == y for y in ys)]\n"
+    )
+    passes = ("k.py:2:14", ("1+ items",))
+    falsy = (("0 items", None), ("1 item", False), ("2+ items", False))
+    truthy = (("1 item", True), ("2+ items", True))
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:2:4",), ("k.py:2:14", ("0 items",))),
+            *[(("k.py:2:4",), passes, ("k.py:2:33", path), ("k.py:2:26", (True,))) for path in falsy],
+            *[(("k.py:2:4",), passes, ("k.py:2:33", path), ("k.py:2:26", (False,))) for path in truthy],
+        ]
+    }
+
+
+def test_5b1f3c20():
+    """Example: ready, an assignment of not of an any, then a return.
+    A not that is no decision's leaf is given no value to give, so its
+    operand's decisions take every path: the any steps on each."""
+    source = (
+        "def ready(ys):\n"
+        "    done = not any(y for y in ys)\n"
+        "    return done\n"
+    )
+    paths = (("0 items", None), ("1 item", True), ("1 item", False), ("2+ items", True), ("2+ items", False))
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [(("k.py:2:15", path), ("k.py:3:4",)) for path in paths]
+    }
+
+
+def test_5b1f3c21():
+    """Example: gone, an if on not of an any, whose arm returns, then a
+    return.
+    The if's test is a not of the any, so the if takes its arm only on the
+    any's paths giving false, and goes on past it only on those giving
+    true."""
+    source = (
+        "def gone(xs):\n"
+        "    if not any(x for x in xs):\n"
+        "        return 0\n"
+        "    return 1\n"
+    )
+    falsy = (("0 items", None), ("1 item", False), ("2+ items", False))
+    truthy = (("1 item", True), ("2+ items", True))
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            *[(("k.py:2:11", path), ("k.py:2:4", (True,)), ("k.py:3:8",)) for path in falsy],
+            *[(("k.py:2:11", path), ("k.py:2:4", (False,)), ("k.py:4:4",)) for path in truthy],
+        ]
+    }
+
+
 def test_5b1f3c0e():
     """Example: reprice, a try raising KeyError when strict, its handlers
     of TypeError alone, of no class, of TypeError or ValueError, then of

@@ -271,8 +271,9 @@ class _Built:
         one of its paths, as _decided says, only those whose value is
         gives, unless gives or its value is None; a nested def, class or
         lambda runs in a frame of its own, so takes no step here, as does
-        a generator expression, but for its first iterable; any other node
-        runs the decisions in its children, one after another."""
+        a generator expression, but for its first iterable; a not runs its
+        operand, which gives the opposite of what the not gives; any other
+        node runs the decisions in its children, one after another."""
         if isinstance(node, _OWN_FRAMES):
             return then
         if isinstance(node, ast.GeneratorExp):
@@ -284,6 +285,8 @@ class _Built:
             return self._decided(name, lambda each: self._arm(node, self.conditions[name], each[0], then), gives)
         if name is not None:
             return self._decided(name, lambda _each: then, gives)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return self.expression(node.operand, then, None if gives is None else not gives)
         return self._in_order(list(ast.iter_child_nodes(node)), then)
 
     def _arm(self, node, condition, tested, then):
