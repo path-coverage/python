@@ -333,6 +333,9 @@ Add tests that take each of these paths:
   2. line 8 `user.member` false, then line 10 `order.big` true
 ```
 
+  Every run writes these lines to `path_coverage.ways.txt` in the
+  coverage dir, whichever reporters print, so a later check can show them.
+
 - `summary` prints the totals, as coverage tools print theirs; a total
   with no path possible shows `(-)`:
 

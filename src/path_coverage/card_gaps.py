@@ -13,6 +13,9 @@ def lines(cards, texts, parents):
     parent left out."""
     out = []
     for key, card in cards.items():
+        # A module's top card, run by no call, lists no ways to take.
+        if "gaps" not in card:
+            continue
         count = len(card["gaps"])
         if not count:
             continue

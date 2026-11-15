@@ -366,8 +366,9 @@ def _report(config, evaluations, part):
 
 
 def _finish(config, files, operands, paths, counted):
-    """Writes the JSON report, with its totals, and the source report into
-    coverage_dir, then runs the chosen reporters. counted is (reached,
+    """Writes the JSON report, with its totals, the source report, and the
+    ways lines, each function's untested paths, into coverage_dir, then
+    runs the chosen reporters. counted is (reached,
     ways): each statement's runs, None when not known, and each function's
     ways taken, as Evaluations.ways has them. A cover's ::qualname keeps
     only the decisions and cards inside its scope."""
@@ -391,11 +392,13 @@ def _finish(config, files, operands, paths, counted):
     source = source_report.of(kept_files, paths, report["cards"], config.groups)
     (config.coverage_dir / "path_coverage.source.json").write_text(json.dumps(source))
     texts = paths_report.texts(files)
+    ways = card_gaps.lines(report["cards"], texts, _parents(report["tree"]))
+    (config.coverage_dir / "path_coverage.ways.txt").write_text("".join(f"{line}\n" for line in ways))
     if "gaps" in config.report:
         for line in gaps.lines(kept_operands, kept_paths, texts):
             print(line)
     if "ways" in config.report:
-        for line in card_gaps.lines(report["cards"], texts, _parents(report["tree"])):
+        for line in ways:
             print(line)
     if "summary" in config.report:
         for line in console_summary.lines(kept_paths, kept_cards, config.groups):

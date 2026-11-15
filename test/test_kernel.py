@@ -1707,3 +1707,34 @@ def test_e5a70c39(tmp_path, capsys):
         f"  1. line 6 `trail_id in trails` true, {NEW} true\n"
         "  2. line 6 `trail_id in trails` false\n"
     )
+
+
+def test_e5a70c3a(tmp_path, capsys):
+    """Every run writes the ways lines to path_coverage.ways.txt in the
+    coverage dir, whatever reporters print, so a later check can show
+    them; ways itself prints them."""
+    project = PROJECTS / "single_and"
+    exits = []
+    path_coverage.start_from_env(
+        {
+            "PATH_COVERAGE_ROOT": str(project),
+            "PATH_COVERAGE_COVER": "src/**/*.py",
+            "PATH_COVERAGE_DIR": str(tmp_path),
+            "PATH_COVERAGE_REPORT": "summary",
+        },
+        on_exit=exits.append,
+    )
+    try:
+        trails = _imported(project, "single_and_trails")
+        assert trails.is_new("T3", {"T3": {"new": False}}) is False
+    finally:
+        path_coverage.stop()
+    [report] = exits
+    report()
+    capsys.readouterr()
+    assert (tmp_path / "path_coverage.ways.txt").read_text() == (
+        "src/single_and_trails.py:4 is_new has 2 untested paths.\n"
+        "Add tests that take each of these paths:\n"
+        f"  1. line 6 `trail_id in trails` true, {NEW} true\n"
+        "  2. line 6 `trail_id in trails` false\n"
+    )
