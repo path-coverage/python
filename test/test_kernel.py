@@ -304,7 +304,7 @@ def test_e5a70c08(tmp_path):
             report=["gaps", "html"],
             on_exit=lambda report: None,
         )
-    assert str(refused.value) == "unknown reporter 'html'; the reporters are: gaps, post, summary"
+    assert str(refused.value) == "unknown reporter 'html'; the reporters are: gaps, post, summary, ways"
 
 
 def test_e5a70c09(tmp_path, capsys):
@@ -1677,3 +1677,33 @@ def test_e5a70c16(tmp_path, capsys):
     server.close()
     assert capsys.readouterr().out == ""
     assert [path.name for path in (tmp_path / "runs").iterdir()] == ["run-0001.json"]
+
+
+def test_e5a70c39(tmp_path, capsys):
+    """The ways reporter prints each function's untested paths, each as
+    the choices a test must make, the ternary left out as its and decides
+    it."""
+    project = PROJECTS / "single_and"
+    exits = []
+    path_coverage.start_from_env(
+        {
+            "PATH_COVERAGE_ROOT": str(project),
+            "PATH_COVERAGE_COVER": "src/**/*.py",
+            "PATH_COVERAGE_DIR": str(tmp_path),
+            "PATH_COVERAGE_REPORT": "ways",
+        },
+        on_exit=exits.append,
+    )
+    try:
+        trails = _imported(project, "single_and_trails")
+        assert trails.is_new("T3", {"T3": {"new": False}}) is False
+    finally:
+        path_coverage.stop()
+    [report] = exits
+    report()
+    assert capsys.readouterr().out == (
+        "src/single_and_trails.py:4 is_new has 2 untested paths.\n"
+        "Add tests that take each of these paths:\n"
+        f"  1. line 6 `trail_id in trails` true, {NEW} true\n"
+        "  2. line 6 `trail_id in trails` false\n"
+    )

@@ -322,6 +322,17 @@ The JSON report's `cards` hold each card's rows, its `ways` and its
 ### Reporters
 
 - `gaps` prints the gap lines, as above.
+- `ways` prints, for each function with a path through it that no run
+  took, the choices a test must make to take each one, every leaf by its
+  source text; a loop is named by its line and how many items it ran:
+
+```text
+src/fee.py:5 fee has 2 untested paths.
+Add tests that take each of these paths:
+  1. line 8 `user.member` true, `order.paid` false, then line 10 `order.big` true
+  2. line 8 `user.member` false, then line 10 `order.big` true
+```
+
 - `summary` prints the totals, as coverage tools print theirs; a total
   with no path possible shows `(-)`:
 

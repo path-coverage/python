@@ -22,13 +22,13 @@ def _decision_gaps(decision, operands, paths, texts):
     if sum(counts["truthy"] + counts["falsy"] for counts in operands) == 0:
         return [f"{decision} never reached"]
     return [
-        f"{decision} path never taken: {_steps(each['path'], texts)}"
+        f"{decision} path never taken: {steps(each['path'], texts)}"
         for each in paths
         if each["count"] == 0
     ]
 
 
-def _steps(path, texts):
+def steps(path, texts):
     """Each leaf path reaches, by its text, with its outcome."""
     return ", ".join(
         f"{code(text)} {str(outcome).lower()}"

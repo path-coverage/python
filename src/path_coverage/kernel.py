@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from . import (
+    card_gaps,
     console_summary,
     gaps,
     inserted_records,
@@ -30,7 +31,7 @@ from . import (
 from .evaluations import Evaluations
 from .merge import merge, merge_paths, merge_ways
 
-REPORTERS = ("gaps", "post", "summary")
+REPORTERS = ("gaps", "post", "summary", "ways")
 
 # The modes a run's events can come from, each by what instruments a
 # covered module: sys.monitoring's events, plus a call around each leaf no
@@ -169,7 +170,9 @@ def start(
     exit, counting afresh: the paths within each decision, and within each
     method. skip lists globs of files not covered though a cover glob
     matches them. report names the reporters: "gaps" (the default) prints the
-    paths never taken, "summary" prints the totals, and "post" sends the
+    paths never taken, "ways" prints each function's untested paths through
+    it, as the choices a test must make, "summary" prints the totals, and
+    "post" sends the
     JSON report to collector, a url. groups, {name: [glob, ...]}, names
     groups of covered files: each gets its own summary lines, its own JSON
     totals, and its list of files in the source report, which
@@ -387,14 +390,30 @@ def _finish(config, files, operands, paths, counted):
     kept_files = {path: (source, _kept(decisions, config.lines)) for path, (source, decisions) in files.items()}
     source = source_report.of(kept_files, paths, report["cards"], config.groups)
     (config.coverage_dir / "path_coverage.source.json").write_text(json.dumps(source))
+    texts = paths_report.texts(files)
     if "gaps" in config.report:
-        for line in gaps.lines(kept_operands, kept_paths, paths_report.texts(files)):
+        for line in gaps.lines(kept_operands, kept_paths, texts):
+            print(line)
+    if "ways" in config.report:
+        for line in card_gaps.lines(report["cards"], texts, _parents(report["tree"])):
             print(line)
     if "summary" in config.report:
         for line in console_summary.lines(kept_paths, kept_cards, config.groups):
             print(line)
     if "post" in config.report:
         post.deliver(text, config.collector)
+
+
+def _parents(tree):
+    """{decision: its parent decision} of each decision in tree, as
+    report["tree"] has it, that has a parent, each named path:line:column."""
+    return {
+        f"{path}:{at}": f"{path}:{node['parent']}"
+        for path, cards in tree.items()
+        for decisions in cards.values()
+        for at, node in decisions.items()
+        if node["parent"] is not None
+    }
 
 
 def _matched(config, glob):
