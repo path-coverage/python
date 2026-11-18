@@ -61,6 +61,7 @@ def test_d3c9a101():
                 [{"at": "3:22", "path": [False, None]}],
             ],
             "impossible": [],
+            "impossible_taken": [],
         },
         "k.py:1:0": {
             "name": "file",
@@ -201,3 +202,23 @@ def test_d3c9a110():
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)
     assert cards["k.py:3:0"]["ways"] == 2**40
+
+
+def test_d3c9a120():
+    """Example: retry, a for loop over BACKOFFS whose line says
+    # path: impossible 0 items, called once with BACKOFFS empty.
+    The call takes the 0 items way the comment declared impossible, so
+    the card lists that way as an impossible way taken."""
+    source = (
+        "BACKOFFS = ()\n"
+        "def retry(call):\n"
+        "    for backoff in BACKOFFS:  # path: impossible 0 items\n"
+        "        call(backoff)\n"
+        "    return call\n"
+    )
+    decisions = manifest.decisions(source, "k.py")
+    taken = (("k.py:3:4", ("0 items",)), ("k.py:5:4",))
+    counted = ({"k.py:2:0": 1}, {"k.py:2:0": {taken: 1}})
+    files = {"k.py": (source, decisions)}
+    card = listed_cards.of(files, result.operands(decisions, {}), {}, counted)["k.py:2:0"]
+    assert card["impossible_taken"] == [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]]

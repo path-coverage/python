@@ -28,7 +28,7 @@ def test_a3c95e01():
         [{"at": "8:19", "path": [True, False]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [False]}, {"at": "12:04"}],
         [{"at": "8:19", "path": [False, None]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [True]}, {"at": "12:04"}],
     ]
-    cards = {CARD: {"name": "fee", "rows": ROWS, "gaps": gaps}}
+    cards = {CARD: {"name": "fee", "rows": ROWS, "gaps": gaps, "impossible_taken": []}}
     assert lines(cards, TEXTS, PARENTS) == [
         "source/fee.py:5 fee has 4 untested paths.",
         "Add tests that take each of these paths:",
@@ -43,11 +43,12 @@ def test_a3c95e02():
     """Example: fee with every path tested, beside a card with one gap
     A function with no untested path gets no lines at all; one with a
     single untested path says path, not paths."""
-    tested = {"name": "fee", "rows": ROWS, "gaps": []}
+    tested = {"name": "fee", "rows": ROWS, "gaps": [], "impossible_taken": []}
     untested = {
         "name": "fee",
         "rows": ROWS,
         "gaps": [[{"at": "8:19", "path": [False, None]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [True]}, {"at": "12:04"}]],
+        "impossible_taken": [],
     }
     cards = {CARD: tested, "source/fee_copy.py:5:0": untested}
     assert lines(cards, TEXTS, PARENTS) == [
@@ -67,10 +68,32 @@ def test_a3c95e03():
             "name": "left_in",
             "rows": rows,
             "gaps": [[{"at": "6:04"}, {"at": "6:14", "path": ["0 items"]}]],
+            "impossible_taken": [],
         }
     }
     assert lines(cards, {}, {}) == [
         "src/nested.py:4 left_in has 1 untested path.",
         "Add tests that take each of these paths:",
         "  1. line 6 loop: 0 items",
+    ]
+
+
+def test_a3c95e10():
+    """Example: retry, every possible path tested, whose for loop's line
+    declares # path: impossible 0 items, yet a call gave it no items
+    One heading for the function, then each impossible path a call took,
+    numbered, as the choices it made: the comment is wrong."""
+    rows = [{"at": "5:04", "top": "return", "paths": 1, "taken": 1, "decision": None}]
+    cards = {
+        "src/retry.py:2:0": {
+            "name": "retry",
+            "rows": rows,
+            "gaps": [],
+            "impossible_taken": [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]],
+        }
+    }
+    assert lines(cards, {}, {}) == [
+        "src/retry.py:2 retry took 1 path declared impossible.",
+        "Remove the # path: impossible comment that declares it:",
+        "  1. line 3 loop: 0 items",
     ]

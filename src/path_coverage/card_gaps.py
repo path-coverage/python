@@ -16,15 +16,32 @@ def lines(cards, texts, parents):
         # A module's top card, run by no call, lists no ways to take.
         if "gaps" not in card:
             continue
-        count = len(card["gaps"])
-        if not count:
-            continue
-        out.append(f"{_where(key)} {card['name']} has {count} untested {'path' if count == 1 else 'paths'}.")
-        out.append("Add tests that take each of these paths:")
         decisions = {row["at"]: row["decision"] for row in card["rows"]}
-        for number, gap in enumerate(card["gaps"], 1):
-            out.append(f"  {number}. {_choices(gap, decisions, texts, parents)}")
+        named = lambda way: _choices(way, decisions, texts, parents)  # noqa: E731
+        where = f"{_where(key)} {card['name']}"
+        gaps, taken = card["gaps"], card["impossible_taken"]
+        out += _section(f"{where} has {_paths(len(gaps), 'untested ')}.", UNTESTED, gaps, named)
+        out += _section(f"{where} took {_paths(len(taken), '')} declared impossible.", DECLARED, taken, named)
     return out
+
+
+# The instruction under a function's untested paths.
+UNTESTED = "Add tests that take each of these paths:"
+# The instruction under the impossible paths a function's calls took.
+DECLARED = "Remove the # path: impossible comment that declares it:"
+
+
+def _section(heading, instruction, ways, named):
+    """heading and instruction, then each of ways numbered, its choices as
+    named gives them; no lines at all when ways is empty."""
+    if not ways:
+        return []
+    return [heading, instruction, *(f"  {number}. {named(way)}" for number, way in enumerate(ways, 1))]
+
+
+def _paths(count, kind):
+    """count paths, of kind, eg "untested ", singular for one."""
+    return f"{count} {kind}{'path' if count == 1 else 'paths'}"
 
 
 def _choices(gap, decisions, texts, parents):

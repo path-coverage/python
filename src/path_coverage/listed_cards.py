@@ -72,7 +72,9 @@ def function_cards(source, at, paths, counted):
                 seen[each] = seen.get(each, 0) + count
         cards[decision]["covered"] = [{"way": ways_report.way(way), "count": seen[way]} for way in possible if way in seen]
         cards[decision]["gaps"] = [ways_report.way(way) for way in possible if way not in seen]
-        cards[decision]["impossible"] = [ways_report.way(way) for way in listed[decision]["impossible"]]
+        impossible = listed[decision]["impossible"]
+        cards[decision]["impossible"] = [ways_report.way(way) for way in impossible]
+        cards[decision]["impossible_taken"] = [ways_report.way(way) for way in impossible if way in seen]
     return cards
 
 

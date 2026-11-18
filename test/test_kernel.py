@@ -110,6 +110,7 @@ def test_e5a70c01(tmp_path, capsys):
                 ],
                 "gaps": [[{"at": "6:38", "path": [True, False]}, otherwise]],
                 "impossible": [],
+                "impossible_taken": [],
             }
         },
         "tree": {
