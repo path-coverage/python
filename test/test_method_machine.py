@@ -795,3 +795,68 @@ def test_5b1f3c0f():
             (("k.py:3:8", (False,)), ("k.py:5:8",)),
         ]
     }
+
+
+def test_5b1f3c30():
+    """Example: retry, a for loop over BACKOFFS whose line says
+    # path: impossible 0 items, then a return.
+    The comment declares the loop is never given no items, so its 0 items
+    way is impossible and only its 1+ items way is possible."""
+    source = (
+        "BACKOFFS = (1, 2)\n"
+        "def retry(call):\n"
+        "    for backoff in BACKOFFS:  # path: impossible 0 items\n"
+        "        call(backoff)\n"
+        "    return call\n"
+    )
+    assert method_machine.ways(source, "k.py") == {
+        "k.py:2:0": {
+            "possible": [(("k.py:3:4", ("1+ items",)), ("k.py:5:4",))],
+            "impossible": [(("k.py:3:4", ("0 items",)), ("k.py:5:4",))],
+        }
+    }
+
+
+def test_5b1f3c31():
+    """Example: retry, an if on quick whose arm returns, then a for loop
+    over BACKOFFS whose line says # path: impossible 0 items.
+    Only the way reaching the loop and giving it no items is impossible;
+    the if's returning arm never reaches the loop, so stays possible."""
+    source = (
+        "BACKOFFS = (1, 2)\n"
+        "def retry(call, quick):\n"
+        "    if quick:\n"
+        "        return call\n"
+        "    for backoff in BACKOFFS:  # path: impossible 0 items\n"
+        "        call(backoff)\n"
+        "    return call\n"
+    )
+    assert method_machine.ways(source, "k.py") == {
+        "k.py:2:0": {
+            "possible": [
+                (("k.py:3:4", (True,)), ("k.py:4:8",)),
+                (("k.py:3:4", (False,)), ("k.py:5:4", ("1+ items",)), ("k.py:7:4",)),
+            ],
+            "impossible": [
+                (("k.py:3:4", (False,)), ("k.py:5:4", ("0 items",)), ("k.py:7:4",)),
+            ],
+        }
+    }
+
+
+def test_5b1f3c32():
+    """Example: noop, a function with no decisions, in a file whose other
+    line says # path: impossible 0 items.
+    noop's one way takes no steps, so gives no loop no items, and stays
+    possible."""
+    source = (
+        "def noop():\n"
+        "    pass\n"
+        "def retry(call):\n"
+        "    for backoff in (1, 2):  # path: impossible 0 items\n"
+        "        call(backoff)\n"
+    )
+    assert method_machine.ways(source, "k.py")["k.py:1:0"] == {
+        "possible": [()],
+        "impossible": [],
+    }

@@ -68,6 +68,7 @@ def ways(source, path, skipping=frozenset()):
     as stable_names finds it, both outcomes."""
     conditions, machines = _machines(source, path)
     leaves = {name: _spans(condition) for name, condition in conditions.items()}
+    never_empty = _never_empty_lines(source)
     found = {}
     for decision, (function, entry) in machines.items():
         if decision in skipping:
@@ -75,7 +76,8 @@ def ways(source, path, skipping=frozenset()):
         stable = stable_names.of(function, [span for spans in leaves.values() for span in spans])
         split = {"possible": [], "impossible": []}
         for way in _walked(entry):
-            split["impossible" if _contradicts(way, leaves, stable) else "possible"].append(way)
+            impossible = _contradicts(way, leaves, stable) or _empties(way, never_empty)
+            split["impossible" if impossible else "possible"].append(way)
         found[decision] = split
     return found
 
@@ -124,6 +126,20 @@ def _spans(condition):
 def _span(node):
     """node's (line, col, end_line, end_col), as a leaf's are written."""
     return (node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
+
+
+# The comment on a loop's line declaring it is never given no items.
+NEVER_EMPTY = "# path: impossible 0 items"
+
+
+def _never_empty_lines(source):
+    """The line numbers of source whose line carries NEVER_EMPTY."""
+    return {number for number, line in enumerate(source.splitlines(), 1) if NEVER_EMPTY in line}
+
+
+def _empties(way, lines):
+    """Whether way gives no items to a loop on one of lines."""
+    return any(step[1:] == (("0 items",),) and int(step[0].split(":")[-2]) in lines for step in way)
 
 
 def _contradicts(way, leaves, stable):
