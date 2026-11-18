@@ -188,18 +188,15 @@ HUGE = (
 )
 
 
-def _raise_timeout(_signum, _frame):
-    """Stop a listing still running when its alarm goes off."""
-    raise TimeoutError("listing did not finish within 5 seconds")
-
-
 def test_d3c9a110():
     """A file holding a function with 2**40 ways is listed within 5 seconds,
     that function's card counting its ways."""
-    previous = signal.signal(signal.SIGALRM, _raise_timeout)
+    # A listing still running at the alarm is interrupted, not left to hang.
+    previous = signal.signal(signal.SIGALRM, signal.default_int_handler)
     signal.alarm(5)
     try:
-        cards = _listed(HUGE, {}, {})
+        never = {decision: _then_taken(0) for decision in manifest.decisions(HUGE, "k.py")}
+        cards = _listed(HUGE, never, {})
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)

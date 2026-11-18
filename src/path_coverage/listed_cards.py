@@ -7,6 +7,10 @@ import ast
 from . import card_tree, card_ways, method_machine, method_statements, ways_report
 from .source_lines import lines_of
 
+# The most ways a function's card lists one by one; listing grows with the
+# ways, and sequential choices multiply them into the billions.
+LIST_LIMIT = 4096
+
 
 def of(files, operands, paths, counted):
     """{card decision: card} of every card in files, {path relative to root:
@@ -48,15 +52,20 @@ def function_cards(source, at, paths, counted):
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
     loops = method_statements.loops(source, path)
-    listed = method_machine.ways(source, path)
+    counts = card_ways.of(source, path)
+    over = {decision for decision, count in counts.items() if count > LIST_LIMIT}
+    listed = method_machine.ways(source, path, skipping=over)
     cards = {}
     for decision, rows in method_statements.of(source, path).items():
         calls = None if reached is None else reached.get(decision, 0)
-        possible = listed[decision]["possible"]
-        title = (names[decision], lasts[decision], len(possible), calls)
+        count = counts[decision] if decision in over else len(listed[decision]["possible"])
+        title = (names[decision], lasts[decision], count, calls)
         cards[decision] = card(decision, title, rows, method_statements.taken(rows, paths, reached))
         cards[decision]["taken"] = ways_report.taken(ways.get(decision, {}))
         cards[decision]["passes"] = {ways_report.at(loop): ways_report.taken(ways.get(loop, {})) for loop in loops[decision]}
+        if decision in over:
+            continue
+        possible = listed[decision]["possible"]
         seen = {}
         for way, count in ways.get(decision, {}).items():
             for each in method_machine.witnessed(way):

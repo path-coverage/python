@@ -61,15 +61,17 @@ def paths(source, path):
     return {decision: list(_walked(entry)) for decision, (_, entry) in _machines(source, path)[1].items()}
 
 
-def ways(source, path):
+def ways(source, path, skipping=frozenset()):
     """{def decision: {"possible": paths, "impossible": paths}} of each
-    function in source, at path, its paths as paths gives them: impossible
-    those giving a stable name, as stable_names finds it, both
-    outcomes."""
+    function in source, at path, but those whose decision is in skipping,
+    its paths as paths gives them: impossible those giving a stable name,
+    as stable_names finds it, both outcomes."""
     conditions, machines = _machines(source, path)
     leaves = {name: _spans(condition) for name, condition in conditions.items()}
     found = {}
     for decision, (function, entry) in machines.items():
+        if decision in skipping:
+            continue
         stable = stable_names.of(function, [span for spans in leaves.values() for span in spans])
         split = {"possible": [], "impossible": []}
         for way in _walked(entry):
