@@ -1,3 +1,5 @@
+import signal
+
 from path_coverage import listed_cards, manifest, result
 
 SHOP = (
@@ -176,3 +178,29 @@ def test_d3c9a105():
         [{"at": "2:16", "path": [False, True]}, {"at": "2:04", "path": [True]}, {"at": "4:04"}],
         [{"at": "2:16", "path": [False, False]}, {"at": "2:04", "path": [False]}, {"at": "4:04"}],
     ]
+
+
+# A small function beside one with 2**40 ways: forty ternaries in a row.
+HUGE = (
+    "def ok(a):\n"
+    "    return 1 if a else 0\n"
+    "def huge(c):\n" + "".join(f"    v{i} = 1 if c[{i}] else 0\n" for i in range(40))
+)
+
+
+def _raise_timeout(_signum, _frame):
+    """Stop a listing still running when its alarm goes off."""
+    raise TimeoutError("listing did not finish within 5 seconds")
+
+
+def test_d3c9a110():
+    """A file holding a function with 2**40 ways is listed within 5 seconds,
+    that function's card counting its ways."""
+    previous = signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.alarm(5)
+    try:
+        cards = _listed(HUGE, {}, {})
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert cards["k.py:3:0"]["ways"] == 2**40
