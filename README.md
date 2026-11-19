@@ -18,7 +18,9 @@ coverage.
 
 Demo: https://path-coverage.github.io/python/ shows the HTML report for
 the mock source tree in `demo/`. `make demo` builds and opens the same
-report locally.
+report locally. `make demo_local` does too, first building the
+html-reporter image from `../html-reporter` as it is now, so a change to
+the pages shows without a publish.
 
 ## Overview
 
@@ -540,11 +542,11 @@ report is:
 
 ```text
 code:
-  Paths alone: 503 / 569 (88.40%)
-  Paths combined: 1321 / 1414 (93.42%)
+  Paths alone: 1138 / 1138 (100.00%)
+  Paths combined: 1592 / 1592 (100.00%)
 test:
-  Paths alone: 10 / 12 (83.33%)
-  Paths combined: 829 / 839 (98.81%)
+  Paths alone: 118 / 118 (100.00%)
+  Paths combined: 217 / 217 (100.00%)
 Path coverage report: .../path_coverage/reports/paths/index.html
 ```
 
