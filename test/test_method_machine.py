@@ -425,7 +425,7 @@ def test_5b1f3c13():
         "    return [x for x in xs if x]\n"
     )
     passes = ("k.py:2:14", ("1+ items",))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4",), ("k.py:2:14", ("0 items",))),
             (("k.py:2:4",), passes, ("k.py:2:26", (True,))),
@@ -448,7 +448,7 @@ def test_5b1f3c14():
         "            amount += order['amount']\n"
         "    return amount\n"
     )
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:3:4", ("0 items",)), ("k.py:6:4",)),
             (("k.py:3:4", ("1+ items",)), ("k.py:4:8", (True,)), ("k.py:6:4",)),
@@ -474,7 +474,7 @@ def test_5b1f3c15():
         "    return found\n"
     )
     passes = ("k.py:3:4", ("1+ items",))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:3:4", ("0 items",)), ("k.py:9:4",)),
             (passes, ("k.py:4:8", (True,)), ("k.py:9:4",)),
@@ -502,7 +502,7 @@ def test_5b1f3c16():
         "    return order\n"
     )
     passes = ("k.py:2:4", ("1+ items",))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4", ("0 items",)), ("k.py:8:8",)),
             (passes, ("k.py:3:8", (True,)), ("k.py:8:8",)),
@@ -529,7 +529,7 @@ def test_5b1f3c17():
         "    return queue\n"
     )
     passes = ("k.py:2:4", ("1+ items",))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4", ("0 items",)), ("k.py:9:4",)),
             *[
@@ -555,7 +555,7 @@ def test_5b1f3c18():
         "    return queue\n"
     )
     passes = ("k.py:2:4", ("1+ items",))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4", ("0 items",)), ("k.py:5:4",)),
             (passes, ("k.py:3:8", (True,)), ("k.py:5:4",)),
@@ -574,7 +574,7 @@ def test_5b1f3c19():
         "    return {item: (5 if member else 10) for item in items}\n"
     )
     passes = ("k.py:2:40", ("1+ items",))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4",), ("k.py:2:40", ("0 items",))),
             (("k.py:2:4",), passes, ("k.py:2:21", (True,))),
@@ -594,7 +594,7 @@ def test_5b1f3c1a():
     passes = ("k.py:3:4", ("1+ items",))
     three = (("k.py:3:4", ("2+ items",), frozenset({paid, unpaid})), ("k.py:6:4",))
     none = (("k.py:3:4", ("0 items",), frozenset()), ("k.py:6:4",))
-    assert [method_machine.witnessed(way) for way in (three, none)] == [
+    assert [method_machine.witnessed(way, loops=True) for way in (three, none)] == [
         {(passes, *paid, ("k.py:6:4",)), (passes, *unpaid, ("k.py:6:4",))},
         {(("k.py:3:4", ("0 items",)), ("k.py:6:4",))},
     ]
@@ -611,7 +611,7 @@ def test_5b1f3c1b():
         "    return [x for x in xs if x and strict]\n"
     )
     entered = (("k.py:2:4",), ("k.py:2:14", ("1+ items",)))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4",), ("k.py:2:14", ("0 items",))),
             (*entered, ("k.py:2:31", (True, True)), ("k.py:2:26", (True,))),
@@ -631,7 +631,7 @@ def test_5b1f3c1c():
         "    return [item for item in items if item] if strict else items\n"
     )
     taken = (("k.py:2:44", (True,)), ("k.py:2:17", ("1+ items",)))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:44", (True,)), ("k.py:2:17", ("0 items",))),
             (*taken, ("k.py:2:35", (True,))),
@@ -699,7 +699,7 @@ def test_5b1f3c1f():
     passes = ("k.py:2:14", ("1+ items",))
     falsy = (("0 items", None), ("1 item", False), ("2+ items", False))
     truthy = (("1 item", True), ("2+ items", True))
-    assert method_machine.paths(source, "k.py") == {
+    assert method_machine.paths(source, "k.py", loops=True) == {
         "k.py:1:0": [
             (("k.py:2:4",), ("k.py:2:14", ("0 items",))),
             *[(("k.py:2:4",), passes, ("k.py:2:33", path), ("k.py:2:26", (True,))) for path in falsy],
@@ -809,7 +809,7 @@ def test_5b1f3c30():
         "        call(backoff)\n"
         "    return call\n"
     )
-    assert method_machine.ways(source, "k.py") == {
+    assert method_machine.ways(source, "k.py", loops=True) == {
         "k.py:2:0": {
             "possible": [(("k.py:3:4", ("1+ items",)), ("k.py:5:4",))],
             "impossible": [(("k.py:3:4", ("0 items",)), ("k.py:5:4",))],
@@ -831,7 +831,7 @@ def test_5b1f3c31():
         "        call(backoff)\n"
         "    return call\n"
     )
-    assert method_machine.ways(source, "k.py") == {
+    assert method_machine.ways(source, "k.py", loops=True) == {
         "k.py:2:0": {
             "possible": [
                 (("k.py:3:4", (True,)), ("k.py:4:8",)),
@@ -859,4 +859,104 @@ def test_5b1f3c32():
     assert method_machine.ways(source, "k.py")["k.py:1:0"] == {
         "possible": [()],
         "impossible": [],
+    }
+
+
+def test_5b1f3c33():
+    """Example: total, a for loop whose body holds an if, then a return,
+    walked with loops as they are by default, off.
+    With loops off a loop is no fork and takes no step: its body is
+    walked once, inline, each of its body's ways a path of its own."""
+    source = (
+        "def total(orders):\n"
+        "    amount = 0\n"
+        "    for order in orders:\n"
+        "        if order['paid']:\n"
+        "            amount += order['amount']\n"
+        "    return amount\n"
+    )
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:4:8", (True,)), ("k.py:6:4",)),
+            (("k.py:4:8", (False,)), ("k.py:6:4",)),
+        ]
+    }
+
+
+def test_5b1f3c34():
+    """Example: retry, a for loop over a tuple of backoffs, its body
+    returning on success, then a raise, split with loops as they are by
+    default, off.
+    With loops off a loop is no fork, so ways has no 0 items way to call
+    possible or impossible: each of its body's ways is possible."""
+    source = (
+        "def retry(send):\n"
+        "    for delay in (1, 2, 4):\n"
+        "        if send(delay):\n"
+        "            return True\n"
+        "    raise TimeoutError\n"
+    )
+    assert method_machine.ways(source, "k.py")["k.py:1:0"] == {
+        "possible": [
+            (("k.py:3:8", (True,)), ("k.py:4:12",)),
+            (("k.py:3:8", (False,)), ("k.py:5:4",)),
+        ],
+        "impossible": [],
+    }
+
+
+def test_5b1f3c35():
+    """Example: paid, returning a list comprehension with a filter,
+    walked with loops as they are by default, off.
+    With loops off a comprehension's generator is no fork and takes no
+    step, as a for statement's loop is not: its filter steps inline."""
+    source = (
+        "def paid(orders):\n"
+        "    return [order for order in orders if order['paid']]\n"
+    )
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:2:4",), ("k.py:2:38", (True,))),
+            (("k.py:2:4",), ("k.py:2:38", (False,))),
+        ]
+    }
+
+
+def test_5b1f3c36():
+    """Example: total's ways, as calls take them, witnessed with loops
+    as they are by default, off: on paid and unpaid orders its for made
+    2+ passes; on none, 0.
+    With loops off a loop takes no step: each way a pass took follows
+    inline, and a loop that made no pass adds nothing."""
+    paid, unpaid = (("k.py:4:8", (True,)),), (("k.py:4:8", (False,)),)
+    two = (("k.py:3:4", ("2+ items",), frozenset({paid, unpaid})), ("k.py:6:4",))
+    none = (("k.py:3:4", ("0 items",), frozenset()), ("k.py:6:4",))
+    assert [method_machine.witnessed(way) for way in (two, none)] == [
+        {(*paid, ("k.py:6:4",)), (*unpaid, ("k.py:6:4",))},
+        {(("k.py:6:4",),)},
+    ]
+
+
+def test_5b1f3c37():
+    """Example: ship, an if on express, then an if on log.verbose between
+    # path: disable and # path: enable, then a return.
+    Lines between # path: disable and # path: enable are not analysed:
+    the if there is no decision and takes no step, so ship's paths are
+    its first if's two, each then its return."""
+    source = (
+        "def ship(order, log):\n"
+        "    if order['express']:\n"
+        "        order['days'] = 1\n"
+        "    # path: disable\n"
+        "    # reason: logging is not under test\n"
+        "    if log.verbose:\n"
+        "        log.write(order)\n"
+        "    # path: enable\n"
+        "    return order\n"
+    )
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:2:4", (True,)), ("k.py:9:4",)),
+            (("k.py:2:4", (False,)), ("k.py:9:4",)),
+        ]
     }

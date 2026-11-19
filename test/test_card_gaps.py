@@ -28,9 +28,9 @@ def test_a3c95e01():
         [{"at": "8:19", "path": [True, False]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [False]}, {"at": "12:04"}],
         [{"at": "8:19", "path": [False, None]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [True]}, {"at": "12:04"}],
     ]
-    cards = {CARD: {"name": "fee", "rows": ROWS, "gaps": gaps, "impossible_taken": []}}
+    cards = {CARD: {"name": "fee", "rows": ROWS, "taken": [], "gaps": gaps, "impossible_taken": []}}
     assert lines(cards, TEXTS, PARENTS) == [
-        "source/fee.py:5 fee has 4 untested paths.",
+        "source/fee.py:5 fee() has 4 untested paths.",
         "Add tests that take each of these paths:",
         "  1. line 8 `user.member` true, `order.paid` true, then line 10 `order.big` false",
         "  2. line 8 `user.member` true, `order.paid` false, then line 10 `order.big` true",
@@ -43,16 +43,17 @@ def test_a3c95e02():
     """Example: fee with every path tested, beside a card with one gap
     A function with no untested path gets no lines at all; one with a
     single untested path says path, not paths."""
-    tested = {"name": "fee", "rows": ROWS, "gaps": [], "impossible_taken": []}
+    tested = {"name": "fee", "rows": ROWS, "taken": [], "gaps": [], "impossible_taken": []}
     untested = {
         "name": "fee",
         "rows": ROWS,
         "gaps": [[{"at": "8:19", "path": [False, None]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [True]}, {"at": "12:04"}]],
+        "taken": [],
         "impossible_taken": [],
     }
     cards = {CARD: tested, "source/fee_copy.py:5:0": untested}
     assert lines(cards, TEXTS, PARENTS) == [
-        "source/fee_copy.py:5 fee has 1 untested path.",
+        "source/fee_copy.py:5 fee() has 1 untested path.",
         "Add tests that take each of these paths:",
         "  1. line 8 `user.member` false, then line 10 `order.big` true",
     ]
@@ -68,11 +69,12 @@ def test_a3c95e03():
             "name": "left_in",
             "rows": rows,
             "gaps": [[{"at": "6:04"}, {"at": "6:14", "path": ["0 items"]}]],
+            "taken": [],
             "impossible_taken": [],
         }
     }
     assert lines(cards, {}, {}) == [
-        "src/nested.py:4 left_in has 1 untested path.",
+        "src/nested.py:4 left_in() has 1 untested path.",
         "Add tests that take each of these paths:",
         "  1. line 6 loop: 0 items",
     ]
@@ -89,11 +91,28 @@ def test_a3c95e10():
             "name": "retry",
             "rows": rows,
             "gaps": [],
+            "taken": [],
             "impossible_taken": [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]],
         }
     }
     assert lines(cards, {}, {}) == [
-        "src/retry.py:2 retry took 1 path declared impossible.",
+        "src/retry.py:2 retry() took 1 path declared impossible.",
         "Remove the # path: impossible comment that declares it:",
         "  1. line 3 loop: 0 items",
+    ]
+
+
+def test_a3c95e11():
+    """Example: price, a function with 6912 paths, more than max paths, so
+    its card has taken ways but no gaps, beside a top card
+    A function with more paths than --max-paths allows fails: it is
+    named, with how many it has, and what to do, never left out as if
+    every path were tested. A top card, which no call runs, still gets
+    no lines."""
+    price = {"name": "price", "rows": ROWS, "ways": 6912, "taken": []}
+    top = {"name": "<module>", "rows": ROWS, "ways": 6}
+    cards = {"source/price.py:5:0": price, "source/price.py:1:0": top}
+    assert lines(cards, TEXTS, PARENTS) == [
+        "source/price.py:5 price() has 6912 paths, more than --max-paths allows.",
+        "Split it into smaller functions.",
     ]

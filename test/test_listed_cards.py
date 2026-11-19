@@ -138,7 +138,7 @@ def test_d3c9a104():
         "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
     }
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
+    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, loops=True)["k.py:1:0"]
     on = {"at": "2:04", "path": [False]}
     none, some = {"at": "4:04", "path": ["0 items"]}, {"at": "4:04", "path": ["1+ items"]}
     assert (card["ways"], card["covered"], card["gaps"], card["impossible"]) == (
@@ -220,5 +220,67 @@ def test_d3c9a120():
     taken = (("k.py:3:4", ("0 items",)), ("k.py:5:4",))
     counted = ({"k.py:2:0": 1}, {"k.py:2:0": {taken: 1}})
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), {}, counted)["k.py:2:0"]
+    card = listed_cards.of(files, result.operands(decisions, {}), {}, counted, loops=True)["k.py:2:0"]
     assert card["impossible_taken"] == [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]]
+
+
+def test_d3c9a121():
+    """Example: save, an if on dry_run whose arm returns, a for loop, an
+    if on not dry_run, a return; called twice, dry_run false, 2+ records,
+    listed with loops as they are by default, off.
+    With loops off the for is no fork: no way, covered, gap or impossible,
+    steps at it, and the card has one way fewer than with it a fork."""
+    source = (
+        "def save(records, dry_run, db):\n"
+        "    if dry_run:\n"
+        "        return 0\n"
+        "    for record in records:\n"
+        "        db.append(record)\n"
+        "    if not dry_run:\n"
+        "        db.append('done')\n"
+        "    return len(db)\n"
+    )
+    decisions = manifest.decisions(source, "k.py")
+    taken = (("k.py:2:4", (False,)), ("k.py:4:4", ("2+ items",), frozenset({()})), ("k.py:6:4", (True,)), ("k.py:8:4",))
+    counted = ({"k.py:1:0": 2}, {"k.py:1:0": {taken: 2}})
+    paths = {
+        "k.py:2:4": [{"path": [True], "count": 0}, {"path": [False], "count": 2}],
+        "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
+    }
+    files = {"k.py": (source, decisions)}
+    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
+    on = {"at": "2:04", "path": [False]}
+    assert (card["ways"], card["covered"], card["gaps"], card["impossible"]) == (
+        2,
+        [{"way": [on, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2}],
+        [[{"at": "2:04", "path": [True]}, {"at": "3:08"}]],
+        [[on, {"at": "6:04", "path": [False]}, {"at": "8:04"}]],
+    )
+
+
+def test_d3c9a122():
+    """Example: save, an if on dry_run whose arm returns, a for loop, an
+    if on not dry_run, a return; called twice, listed with max_paths 1
+    A function with more paths than max_paths is not checked: its card
+    lists no covered and no gaps, so the worklist names it as too many
+    to check."""
+    source = (
+        "def save(records, dry_run, db):\n"
+        "    if dry_run:\n"
+        "        return 0\n"
+        "    for record in records:\n"
+        "        db.append(record)\n"
+        "    if not dry_run:\n"
+        "        db.append('done')\n"
+        "    return len(db)\n"
+    )
+    decisions = manifest.decisions(source, "k.py")
+    taken = (("k.py:2:4", (False,)), ("k.py:4:4", ("2+ items",), frozenset({()})), ("k.py:6:4", (True,)), ("k.py:8:4",))
+    counted = ({"k.py:1:0": 2}, {"k.py:1:0": {taken: 2}})
+    paths = {
+        "k.py:2:4": [{"path": [True], "count": 0}, {"path": [False], "count": 2}],
+        "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
+    }
+    files = {"k.py": (source, decisions)}
+    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, max_paths=1)["k.py:1:0"]
+    assert ("covered" in card, "gaps" in card) == (False, False)

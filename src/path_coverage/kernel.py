@@ -138,15 +138,24 @@ def _check(setting, names, known):
             raise ValueError(f"unknown {setting} {name!r}; the {setting}s are: {', '.join(known)}")
 
 
-def _config(root, cover, coverage_dir, report, collector, skip, groups=None, events="monitoring"):
+def _config(root, cover, coverage_dir, report, collector, skip, groups=None, events="monitoring", limits=(False, listed_cards.MAX_PATHS)):
     """The settings, each checked: unknown reporters and events modes are
-    refused by name, as is the post reporter with no collector."""
+    refused by name, as is the post reporter with no collector; limits
+    (loops, max_paths), whether a loop is a fork in a function card's
+    ways, and the most paths a function may have and still be checked,
+    refused above listed_cards.PATHS_CAP."""
     _check("reporter", report, REPORTERS)
     _check("events mode", [events], EVENTS)
     if "post" in report and not collector:
         raise ValueError("the post reporter needs a collector url")
     config = _Config(root, cover, coverage_dir, report, collector, skip, groups)
     config.events = events
+    config.loops, config.max_paths = limits
+    if config.max_paths > listed_cards.PATHS_CAP:
+        raise ValueError(
+            f"max paths {config.max_paths} is more than {listed_cards.PATHS_CAP}, the cap that keeps analysing"
+            " each function's paths to about 2 seconds and 120 MB of JSON"
+        )
     _check_lists(config)
     config.lines = _lines(config)
     _check_filters(config)
@@ -279,7 +288,7 @@ def stop():
     sys.meta_path.remove(_finder)
 
 
-def render(
+def report(
     *,
     root,
     cover,
@@ -289,6 +298,8 @@ def render(
     report=("gaps",),
     groups=None,
     events="monitoring",
+    loops=False,
+    max_paths=listed_cards.MAX_PATHS,
 ):
     """Runs the reporters from the JSON reports at runs (eg those a collector
     saved), their counts added together, parsing each covered file afresh,
@@ -296,8 +307,12 @@ def render(
     statement's reaches added up. It writes the merged JSON report into
     coverage_dir too. A run that measured other kinds, was measured by
     other tools or versions of them, or in another events mode than
-    events, is refused, as it can list a decision's paths differently."""
-    config = _config(root, cover, coverage_dir, report, None, skip, groups, events)
+    events, is refused, as it can list a decision's paths differently.
+    With loops True each loop is a fork in a function card's ways, 0
+    items or 1+ items, as method_machine.ways has it; by default it is
+    none. A function with more ways than max_paths lists none of them,
+    and the ways reporter names it as failing."""
+    config = _config(root, cover, coverage_dir, report, None, skip, groups, events, (loops, max_paths))
     files = _files(config)
     reports = [_same_measuring(path, events) for path in runs]
     decisions = _decisions(files)
@@ -374,12 +389,13 @@ def _finish(config, files, operands, paths, counted):
     only the decisions and cards inside its scope."""
     reached, ways = counted
     cards = method_statements.cards(files, paths, reached)
-    listed = listed_cards.of(files, operands, paths, counted)
+    listed = listed_cards.of(files, operands, paths, counted, loops=config.loops, max_paths=config.max_paths)
     kept_operands = _kept(operands, config.lines)
     kept_paths = _kept(paths, config.lines)
     kept_cards = _kept(cards, config.lines)
     kept_reached = None if reached is None else _kept(reached, config.lines)
     report = _report_json(kept_operands, kept_paths, files, kept_reached, config.events)
+    report["loops"], report["max_paths"] = config.loops, config.max_paths
     report["totals"] = console_summary.totals(kept_paths, kept_cards)
     if config.groups:
         report["totals"]["groups"] = console_summary.group_totals(kept_paths, kept_cards, config.groups)

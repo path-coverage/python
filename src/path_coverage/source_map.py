@@ -34,7 +34,7 @@ class Source:
         the line numbers measured, eg scopes.whole(source): a decision on
         no kept line has no shape and no leaf, so none is wrapped."""
         self.kept = kept
-        tree, conditions, nodes = manifest.found(source, path)
+        tree, conditions, nodes, _ = manifest.found(source, path)
         conditions = {name: condition for name, condition in conditions.items() if scopes.line(name) in kept}
         columns = Columns(source)
         self.tree = tree

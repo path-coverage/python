@@ -1,6 +1,6 @@
 """Receives the JSON reports the post reporter sends, so the runs that sent
-them, eg failing docker build steps, can be merged and rendered once they
-are all done. Run as path_coverage_collector PORT DIR."""
+them, eg failing docker build steps, can be merged and reported on once
+they are all done. Run as path_coverage_collector PORT DIR."""
 
 import os
 import signal

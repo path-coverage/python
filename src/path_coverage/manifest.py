@@ -417,16 +417,52 @@ def decisions(source, path):
 
 
 def found(source, path):
-    """(tree, decisions, nodes) of source: its parse; {decision: Condition},
-    as decisions gives it; and {decision: the node of tree it is}, a
-    filter's being its test, so what Python compiled from a node can be
-    traced to its decision."""
+    """(tree, decisions, nodes, disabled) of source: its parse; {decision:
+    Condition}, as decisions gives it; {decision: the node of tree it is},
+    a filter's being its test, so what Python compiled from a node can be
+    traced to its decision; and the line numbers not analysed, as
+    disabled_lines gives them, on which neither holds a decision.
+    ValueError naming a statement that starts on such a line and ends on
+    an analysed one."""
     tree = ast.parse(source)
     operators = operator_keywords(source)
     parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
     finder = _DecisionFinder(path, Columns(source), if_keywords(source), builtin_blocks(tree), operators, parents)
     finder.visit(tree)
-    return tree, finder.decisions, finder.nodes
+    disabled = disabled_lines(source, path)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.stmt) and node.lineno in disabled and node.end_lineno not in disabled:
+            raise ValueError(f"{path}:{node.lineno} the statement starting here ends after its {ENABLE}")
+    kept = [name for name in finder.decisions if int(name.split(":")[-2]) not in disabled]
+    return tree, {name: finder.decisions[name] for name in kept}, {name: finder.nodes[name] for name in kept}, disabled
+
+
+# The comments around lines that are not analysed: no decision there counts.
+DISABLE, ENABLE = "# path: disable", "# path: enable"
+# The start of the line straight after a DISABLE, saying why.
+REASON = "# reason:"
+
+
+def disabled_lines(source, path):
+    """The line numbers of source, at path, between a DISABLE comment's
+    line and the next ENABLE comment's line, which are not analysed;
+    ValueError naming a DISABLE with no REASON line straight after it, or
+    with no ENABLE after it."""
+    lines = source.splitlines()
+    disabled, opened = set(), None
+    for number, line in enumerate(lines, 1):
+        if line.strip() == DISABLE:
+            # lines[number] is the next line; the slice is empty after the last.
+            if not "".join(lines[number:number + 1]).strip().startswith(REASON):
+                raise ValueError(f"{path}:{number} {DISABLE} needs a {REASON} line straight after it")
+            opened = number
+        elif line.strip() == ENABLE:
+            opened = None
+        elif opened is not None:
+            disabled.add(number)
+    if opened is not None:
+        raise ValueError(f"{path}:{opened} {DISABLE} has no {ENABLE} after it")
+    return disabled
 
 
 def if_keywords(source):

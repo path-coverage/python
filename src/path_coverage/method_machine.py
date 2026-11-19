@@ -54,19 +54,20 @@ class _Exits:
     continued: object
 
 
-def paths(source, path):
+def paths(source, path, loops=False):
     """{def decision: [path, ...]} of each function in source, at path:
     every path its machine's dry run gives, each its steps as
-    Evaluations.ways has a way's."""
-    return {decision: list(_walked(entry)) for decision, (_, entry) in _machines(source, path)[1].items()}
+    Evaluations.ways has a way's; a loop is no fork, as _Built._loop
+    says, unless loops is True."""
+    return {decision: list(_walked(entry)) for decision, (_, entry) in _machines(source, path, loop_forks=loops)[1].items()}
 
 
-def ways(source, path, skipping=frozenset()):
+def ways(source, path, skipping=frozenset(), loops=False):
     """{def decision: {"possible": paths, "impossible": paths}} of each
     function in source, at path, but those whose decision is in skipping,
-    its paths as paths gives them: impossible those giving a stable name,
-    as stable_names finds it, both outcomes."""
-    conditions, machines = _machines(source, path)
+    its paths as paths gives them, loops as there: impossible those
+    giving a stable name, as stable_names finds it, both outcomes."""
+    conditions, machines = _machines(source, path, loop_forks=loops)
     leaves = {name: _spans(condition) for name, condition in conditions.items()}
     never_empty = _never_empty_lines(source)
     found = {}
@@ -82,34 +83,38 @@ def ways(source, path, skipping=frozenset()):
     return found
 
 
-def witnessed(way):
-    """The static paths, as paths gives them, that way, a call's, as
-    Evaluations.ways has it, witnesses: each made of its choices, after
-    the same earlier choices. A loop that made passes is 1+ items, then
-    the way of one of its passes, for each way they took; one that made
-    none, 0 items."""
+def witnessed(way, loops=False):
+    """The static paths, as paths gives them, loops as there, that way, a
+    call's, as Evaluations.ways has it, witnesses: each made of its
+    choices, after the same earlier choices. A loop takes no step: a
+    pass's way follows inline, and no pass adds nothing. With loops True
+    a loop that made passes is 1+ items, then the way of one of its
+    passes, for each way they took; one that made none, 0 items."""
     found = {()}
     for step in way:
         if len(step) < 3:
             found = {each + (step,) for each in found}
         elif not step[2]:
-            found = {each + ((step[0], ("0 items",)),) for each in found}
+            found = {each + ((step[0], ("0 items",)),) for each in found} if loops else found
         else:
-            entered = ((step[0], ("1+ items",)),)
-            bodies = {body for taken in step[2] for body in witnessed(taken)}
+            entered = ((step[0], ("1+ items",)),) if loops else ()
+            bodies = {body for taken in step[2] for body in witnessed(taken, loops)}
             found = {each + entered + body for each in found for body in bodies}
     return found
 
 
-def _machines(source, path):
+def _machines(source, path, loop_forks=False):
     """(conditions, {def decision: (def node, its machine's entry state)})
     of each function in source, at path, conditions {decision:
-    Condition}."""
-    tree, conditions, nodes = manifest.found(source, path)
+    Condition}, its loops forks only when loop_forks is True."""
+    tree, conditions, nodes, disabled = manifest.found(source, path)
     columns = Columns(source)
     rows = set(method_statements.reaches(source, path))
     loops = {id(node): columns.name(path, *place) for node, place in manifest.loop_places(source, tree).items()}
-    built = _Built((conditions, nodes, loops), tree, rows, lambda node: columns.name(path, node.lineno, node.col_offset))
+    built = _Built(
+        (conditions, nodes, loops), tree, rows, lambda node: columns.name(path, node.lineno, node.col_offset),
+        (loop_forks, disabled),
+    )
     return conditions, {
         columns.name(path, node.lineno, node.col_offset): (node, built.block(node.body, END, _Exits(_uncaught, END, None, None)))
         for node in ast.walk(tree)
@@ -158,12 +163,16 @@ def _contradicts(way, leaves, stable):
 class _Built:
     """The states of a file's methods, built from their statements."""
 
-    def __init__(self, found, tree, rows, named):
+    def __init__(self, found, tree, rows, named, settings):
         """found ({decision: Condition}, {decision: its node}, {id of a
         comprehension's generator: its loop's name}) in tree, the file's
         parse; rows the names of the rows that are no decision, eg a
-        return's, named giving a statement's name, where it starts."""
+        return's, named giving a statement's name, where it starts;
+        settings (loop_forks, disabled): whether a loop statement is a
+        fork, as _loop says, and the line numbers not analysed, as
+        manifest.disabled_lines gives them."""
         self.conditions, self.nodes, self.loops = found
+        self.loop_forks, self.disabled = settings
         # A filter's node is its test, which may be a decision too, so
         # filters are found by their test apart from the other decisions.
         self.filters = {id(node): name for name, node in self.nodes.items() if self.conditions[name].operator == "filter"}
@@ -187,7 +196,10 @@ class _Built:
         steps where it starts, when it is a row, runs its value's
         decisions, then goes on to exits.returned; a raise likewise, then
         goes on to the state exits.raised gives its class; a with runs its
-        items' decisions, then its body."""
+        items' decisions, then its body. A statement on a line not
+        analysed takes no step and goes straight on to then."""
+        if statement.lineno in self.disabled:
+            return then
         if isinstance(statement, ast.If):
             return self._if(statement, then, exits)
         if isinstance(statement, ast.Return):
@@ -217,13 +229,22 @@ class _Built:
         without iterating: no pass, its body in no step, or at least one,
         its body walked once, a continue ending the pass. Either way,
         ending without a break, it runs its else. The loop steps first, by
-        its keyword; its later tests repeat its fork, so take no step."""
+        its keyword; its later tests repeat its fork, so take no step.
+        Without loop_forks there is no fork and no step: its body is
+        walked once, inline."""
         then, exits = onward
-        loop = self.named(statement)
         orelse = self.block(statement.orelse, then, exits)
         body = self.block(statement.body, orelse, replace(exits, broke=then, continued=orelse))
-        passes = Fork((Step((loop, ("0 items",)), orelse), Step((loop, ("1+ items",)), body)))
-        return self.expression(first, passes)
+        return self._passes(first, self.named(statement), orelse, body)
+
+    def _passes(self, first, loop, none, some):
+        """The state running first, a loop's iterable or test, then the
+        fork of the loop named loop: going on to none, its step 0 items,
+        or to some, its step 1+ items. Without loop_forks, no fork and no
+        step: first, then some."""
+        if not self.loop_forks:
+            return self.expression(first, some)
+        return self.expression(first, Fork((Step((loop, ("0 items",)), none), Step((loop, ("1+ items",)), some))))
 
     def _match(self, statement, then, exits):
         """The state running the match statement, then going on to then:
@@ -354,15 +375,15 @@ class _Built:
         statement is, its iterable's decisions, then a fork by its for
         keyword: no pass, or one, its filters stepping in order, a false
         one ending the pass, then the next generator; with none left, the
-        element's decisions."""
+        element's decisions. Without loop_forks no generator is a fork or
+        takes a step: each pass is walked once, inline."""
         if not generators:
             return self._in_order([node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt], then)
         generator = generators[0]
         state = self._comprehension(node, generators[1:], then)
         for test in reversed(generator.ifs):
             state = self._decided(self.filters[id(test)], lambda each, onward=state: onward if each[0] else then)
-        loop = self.loops[id(generator)]
-        return self.expression(generator.iter, Fork((Step((loop, ("0 items",)), then), Step((loop, ("1+ items",)), state))))
+        return self._passes(generator.iter, self.loops[id(generator)], then, state)
 
     def _in_order(self, nodes, then):
         """The state running the decisions of each of nodes, one after

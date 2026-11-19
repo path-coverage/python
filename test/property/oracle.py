@@ -79,7 +79,7 @@ class Oracle:
 
     def __init__(self, source, path):
         """Starts with no call added."""
-        tree, conditions, nodes = manifest.found(source, path)
+        tree, conditions, nodes, _ = manifest.found(source, path)
         columns = Columns(source)
         reaches = set(method_statements.reaches(source, path))
         run = tree.body[1]

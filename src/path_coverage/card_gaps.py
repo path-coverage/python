@@ -10,15 +10,20 @@ def lines(cards, texts, parents):
     them, each choice's leaves named by their text in texts ({decision:
     [text, ...]}); a decision whose parent, in parents ({decision: its
     parent decision}), is stepped on the same path is named there, and the
-    parent left out."""
+    parent left out. A function's card listing no gaps, its ways more
+    than max paths allows, is named with what to do, so it fails and
+    never reads as tested."""
     out = []
     for key, card in cards.items():
-        # A module's top card, run by no call, lists no ways to take.
+        where = f"{_where(key)} {card['name']}()"
+        # A module's top card, run by no call, has no taken ways to check.
+        if "taken" not in card:
+            continue
         if "gaps" not in card:
+            out += [f"{where} has {card['ways']} paths, more than --max-paths allows.", TOO_MANY]
             continue
         decisions = {row["at"]: row["decision"] for row in card["rows"]}
         named = lambda way: _choices(way, decisions, texts, parents)  # noqa: E731
-        where = f"{_where(key)} {card['name']}"
         gaps, taken = card["gaps"], card["impossible_taken"]
         out += _section(f"{where} has {_paths(len(gaps), 'untested ')}.", UNTESTED, gaps, named)
         out += _section(f"{where} took {_paths(len(taken), '')} declared impossible.", DECLARED, taken, named)
@@ -27,6 +32,8 @@ def lines(cards, texts, parents):
 
 # The instruction under a function's untested paths.
 UNTESTED = "Add tests that take each of these paths:"
+# The instruction under a function with more paths than --max-paths allows.
+TOO_MANY = "Split it into smaller functions."
 # The instruction under the impossible paths a function's calls took.
 DECLARED = "Remove the # path: impossible comment that declares it:"
 

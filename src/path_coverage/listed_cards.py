@@ -7,22 +7,27 @@ import ast
 from . import card_tree, card_ways, method_machine, method_statements, ways_report
 from .source_lines import lines_of
 
-# The most ways a function's card lists one by one; listing grows with the
-# ways, and sequential choices multiply them into the billions.
-LIST_LIMIT = 4096
+# The most paths a function may have and still be checked, by default.
+MAX_PATHS = 4096
+# The most max paths may be. Sequential choices multiply a function's paths
+# into the billions; analysing each path costs about 2.2 microseconds and
+# 110 bytes of JSON per step, so this cap keeps analysing each function's
+# paths to about 2 seconds and 120 MB of JSON.
+PATHS_CAP = 65536
 
 
-def of(files, operands, paths, counted):
+def of(files, operands, paths, counted, loops=False, max_paths=MAX_PATHS):
     """{card decision: card} of every card in files, {path relative to root:
     (source, decisions)}: each function's, by its def's decision, then each top
     card's, by its first line, as card gives them; operands and paths as
     result gives them, counted (reached, ways), each statement's runs, None
     when not known, and each function's ways taken, as Evaluations.ways
-    has them. Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3,
-    "ways": 2, "calls": 1, "rows": [...], "taken": [...]}}."""
+    has them, loops and max_paths as function_cards has them. Example: {"k.py:1:0":
+    {"name": "ship", "first": 1, "last": 3, "ways": 2, "calls": 1,
+    "rows": [...], "taken": [...]}}."""
     listed = {}
     for path, (source, decisions) in files.items():
-        listed.update(function_cards(source, (path, decisions), paths, counted))
+        listed.update(function_cards(source, (path, decisions), paths, counted, (loops, max_paths)))
         lines = lines_of(source, decisions, operands)
         listed.update(top_cards(source, (path, decisions), lines, paths))
     return listed
@@ -42,19 +47,23 @@ def tree(files, operands):
     return nested
 
 
-def function_cards(source, at, paths, counted):
+def function_cards(source, at, paths, counted, limits=(False, MAX_PATHS)):
     """The cards of each function in source, at being its (path, decisions), as
     of gives them: each counting its calls, its entry's runs, 0 when never
     called, None when not known, and listing the ways its calls took, as
-    ways_report.taken gives them, none when never called."""
+    ways_report.taken gives them, none when never called. limits is
+    (loop_forks, max_paths): its loops forks in its ways only when
+    loop_forks is True, as method_machine.ways has it; a function with
+    more ways than max_paths lists none of them, covered or gaps."""
+    loop_forks, max_paths = limits
     path, decisions = at
     reached, ways = counted
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
     loops = method_statements.loops(source, path)
     counts = card_ways.of(source, path)
-    over = {decision for decision, count in counts.items() if count > LIST_LIMIT}
-    listed = method_machine.ways(source, path, skipping=over)
+    over = {decision for decision, count in counts.items() if count > max_paths}
+    listed = method_machine.ways(source, path, skipping=over, loops=loop_forks)
     cards = {}
     for decision, rows in method_statements.of(source, path).items():
         calls = None if reached is None else reached.get(decision, 0)
@@ -68,7 +77,7 @@ def function_cards(source, at, paths, counted):
         possible = listed[decision]["possible"]
         seen = {}
         for way, count in ways.get(decision, {}).items():
-            for each in method_machine.witnessed(way):
+            for each in method_machine.witnessed(way, loop_forks):
                 seen[each] = seen.get(each, 0) + count
         cards[decision]["covered"] = [{"way": ways_report.way(way), "count": seen[way]} for way in possible if way in seen]
         cards[decision]["gaps"] = [ways_report.way(way) for way in possible if way not in seen]

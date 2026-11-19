@@ -1,3 +1,5 @@
+import pytest
+
 from path_coverage.manifest import Arm, Condition, Leaf, decisions
 
 
@@ -402,3 +404,63 @@ def test_5c1e9a03():
             operands=(Leaf(2, 15, 2, 21), Leaf(2, 26, 2, 30)),
         ),
     }
+
+
+def test_5c1e9a15():
+    """Example: ship, a # path: disable comment, its reason, then an if on
+    log.verbose, with no # path: enable after it
+    Lines are not analysed only between the two comments, so a disable
+    with no enable after it is refused, naming its line, rather than
+    leave every line after it unanalysed."""
+    source = (
+        "def ship(order, log):\n"
+        "    # path: disable\n"
+        "    # reason: logging is not under test\n"
+        "    if log.verbose:\n"
+        "        log.lines.append(order['id'])\n"
+        "    return order\n"
+    )
+    with pytest.raises(ValueError) as refused:
+        decisions(source, "src/shipping.py")
+    assert str(refused.value) == "src/shipping.py:2 # path: disable has no # path: enable after it"
+
+
+def test_5c1e9a16():
+    """Example: ship, a # path: disable comment straight before an if on
+    log.verbose, then # path: enable
+    Every disabled block says why on a # reason: line straight after its
+    # path: disable, so one without it is refused, naming its line."""
+    source = (
+        "def ship(order, log):\n"
+        "    # path: disable\n"
+        "    if log.verbose:\n"
+        "        log.lines.append(order['id'])\n"
+        "    # path: enable\n"
+        "    return order\n"
+    )
+    with pytest.raises(ValueError) as refused:
+        decisions(source, "src/shipping.py")
+    assert str(refused.value) == "src/shipping.py:2 # path: disable needs a # reason: line straight after it"
+
+
+def test_5c1e9a17():
+    """Example: ship, # path: disable and its reason, then an if on
+    log.verbose whose body holds # path: enable before an if on
+    order['express']
+    A statement is analysed whole or not at all, so one that starts
+    between the comments and ends after the # path: enable is refused,
+    naming its line."""
+    source = (
+        "def ship(order, log):\n"
+        "    # path: disable\n"
+        "    # reason: logging is not under test\n"
+        "    if log.verbose:\n"
+        "        log.lines.append(order['id'])\n"
+        "        # path: enable\n"
+        "        if order['express']:\n"
+        "            order['days'] = 1\n"
+        "    return order\n"
+    )
+    with pytest.raises(ValueError) as refused:
+        decisions(source, "src/shipping.py")
+    assert str(refused.value) == "src/shipping.py:4 the statement starting here ends after its # path: enable"

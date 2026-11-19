@@ -159,7 +159,7 @@ Which source is the default, and whether monitoring stays.
 - `inserted_records.py` inserts every record, by `INSERTS[mode]`;
   `monitor.py` and `rewrite.py` are the two modes; `kernel.INSTRUMENTS`
   picks one by `events=` or `PATH_COVERAGE_EVENTS`. Reports carry
-  `"events"`, and render refuses another mode's.
+  `"events"`, and report refuses another mode's.
 - Parity: e3f1a702 (120 generated functions, paths, reaches and ways)
   and e5a70c38 (a kernel run) hold. Self-coverage in both modes agrees
   on every decision's paths; the counts differ only as

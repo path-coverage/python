@@ -378,8 +378,8 @@ def test_4a8c2e0f():
     assert [namespace["drain"]([1, 2], 5), namespace["drain"]([], 5)] == [2, 0]
     evaluations.flush()
     evaluations.close()
-    possible = method_machine.ways(DRAIN, "k.py")["k.py:1:0"]["possible"]
-    taken = [witnessed for way in evaluations.ways["k.py:1:0"] for witnessed in method_machine.witnessed(way)]
+    possible = method_machine.ways(DRAIN, "k.py", loops=True)["k.py:1:0"]["possible"]
+    taken = [witnessed for way in evaluations.ways["k.py:1:0"] for witnessed in method_machine.witnessed(way, loops=True)]
     assert sorted(taken) == [
         (("k.py:3:16", (False, None)), ("k.py:3:4", ("0 items",)), ("k.py:6:4",)),
         (("k.py:3:16", (True, True)), ("k.py:3:4", ("1+ items",)), ("k.py:4:8", (True,)), ("k.py:6:4",)),

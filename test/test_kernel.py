@@ -1,6 +1,7 @@
 import json
 import platform
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -87,6 +88,8 @@ def test_e5a70c01(tmp_path, capsys):
         },
         "events": "monitoring",
         "reached": {"src/single_and_trails.py:4:0": 2},
+        "loops": False,
+        "max_paths": 4096,
         "totals": {"alone": [4, 5], "combined": [4, 5]},
         "cards": {
             "src/single_and_trails.py:4:0": {
@@ -381,11 +384,11 @@ def test_e5a70c0b(tmp_path):
 
 
 def test_e5a70c0c(tmp_path, capsys):
-    """Example: report=["post"] to a collector, then render of the runs it
+    """Example: report=["post"] to a collector, then report of the runs it
     saved
     At exit the run POSTs its JSON report to the collector, printing
     nothing.
-    render merges every saved run's counts and reaches, then runs the
+    report merges every saved run's counts and reaches, then runs the
     reporters as a run would: here big's gap, and the combined total."""
     import socket
     import threading
@@ -422,7 +425,7 @@ def test_e5a70c0c(tmp_path, capsys):
     assert capsys.readouterr().out == ""
     saved = sorted(runs.glob("*.json"))
     assert [path.name for path in saved] == ["run-0001.json", "run-0002.json"]
-    path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=saved)
+    path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=saved)
     assert capsys.readouterr().out == (
         "src/two_decisions_shop.py:9:4 path never taken: `big` true\n"
     )
@@ -435,10 +438,10 @@ def test_e5a70c0c(tmp_path, capsys):
 
 
 def test_e5a70c12(tmp_path, capsys):
-    """Example: render of a run whose JSON names kinds chain, choice and
+    """Example: report of a run whose JSON names kinds chain, choice and
     contains, as a version measuring contains would write it
     Runs measuring other kinds list a decision's paths differently.
-    So render refuses it, naming the run, and writes no report."""
+    So report refuses it, naming the run, and writes no report."""
     project = PROJECTS / "single_and"
     settings = {"root": project, "cover": ["src/**/*.py"]}
     exits = []
@@ -454,7 +457,7 @@ def test_e5a70c12(tmp_path, capsys):
     report["kinds"] = ["chain", "choice", "contains"]
     run.write_text(json.dumps(report))
     with pytest.raises(ValueError) as refused:
-        path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
+        path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[run])
     assert str(refused.value) == f"{run} measured other kinds"
     assert not (tmp_path / "merged").exists()
 
@@ -483,10 +486,10 @@ def test_e5a70c1a(tmp_path, capsys):
 
 
 def test_e5a70c1b(tmp_path, capsys):
-    """Example: render of a run whose JSON names Python 3.12.0 under
+    """Example: report of a run whose JSON names Python 3.12.0 under
     "measured_by", as another Python would write it
     Another version of a tool can find a file's decisions or paths
-    differently, so render refuses it, naming the run, rather than credit
+    differently, so report refuses it, naming the run, rather than credit
     one path's count to another, and writes no report."""
     project = PROJECTS / "single_and"
     settings = {"root": project, "cover": ["src/**/*.py"]}
@@ -503,7 +506,7 @@ def test_e5a70c1b(tmp_path, capsys):
     report["measured_by"] = {"python": "3.12.0", "path_coverage": "0.0.1"}
     run.write_text(json.dumps(report))
     with pytest.raises(ValueError) as refused:
-        path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
+        path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[run])
     assert str(refused.value) == f"{run} was measured by other tools"
     assert not (tmp_path / "merged").exists()
 
@@ -525,10 +528,10 @@ def test_e5a70c35(tmp_path, capsys):
 
 
 def test_e5a70c36(tmp_path, capsys):
-    """Example: render, in monitoring mode, of a run whose JSON names
+    """Example: report,in monitoring mode, of a run whose JSON names
     "rewrite" under "events"
     Runs measured in different modes can count a decision's paths
-    differently, so render refuses it, naming the run and its mode, and
+    differently, so report refuses it, naming the run and its mode, and
     writes no report."""
     project = PROJECTS / "single_and"
     settings = {"root": project, "cover": ["src/**/*.py"]}
@@ -545,7 +548,7 @@ def test_e5a70c36(tmp_path, capsys):
     report["events"] = "rewrite"
     run.write_text(json.dumps(report))
     with pytest.raises(ValueError) as refused:
-        path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[run])
+        path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[run])
     assert str(refused.value) == f"{run} was measured in rewrite mode, not monitoring"
     assert not (tmp_path / "merged").exists()
 
@@ -594,6 +597,92 @@ def test_e5a70c38(tmp_path, capsys):
     capsys.readouterr()
     assert [rewritten.pop("events"), monitored.pop("events")] == ["rewrite", "monitoring"]
     assert rewritten == monitored
+
+
+def test_e5a70c3e(tmp_path):
+    """Example: report of a saved run with max_paths=65537
+    65536 paths keep analysing each function's paths to about 2 seconds
+    and 120 MB of JSON, so a larger max_paths is refused before any
+    report is written."""
+    with pytest.raises(ValueError) as refused:
+        path_coverage.report(
+            root=PROJECTS / "single_and",
+            cover=["src/**/*.py"],
+            coverage_dir=tmp_path,
+            runs=[],
+            max_paths=65537,
+        )
+    assert str(refused.value) == (
+        "max paths 65537 is more than 65536, the cap that keeps analysing"
+        " each function's paths to about 2 seconds and 120 MB of JSON"
+    )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_e5a70c3f(tmp_path, capsys):
+    """Example: single_and_trails.is_new called once, its run reported
+    on with loops on and max_paths 8
+    The report's JSON names the loops and max_paths it was made with, so
+    a reader of the JSON alone, a person or an AI, knows them."""
+    project = PROJECTS / "single_and"
+    settings = {"root": project, "cover": ["src/**/*.py"], "report": []}
+    exits = []
+    path_coverage.start(**settings, coverage_dir=tmp_path / "run", on_exit=exits.append)
+    try:
+        _imported(project, "single_and_trails").is_new("T2", {})
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    run = tmp_path / "run" / "path_coverage.json"
+    path_coverage.report(**settings, coverage_dir=tmp_path / "reported", runs=[run], loops=True, max_paths=8)
+    capsys.readouterr()
+    reported = json.loads((tmp_path / "reported" / "path_coverage.json").read_text())
+    assert (reported["loops"], reported["max_paths"]) == (True, 8)
+
+
+@pytest.mark.parametrize("events", ["monitoring", "rewrite"])
+def test_e5a70c40(tmp_path, events):
+    """Example: ship, an if on express, then an if on log.verbose between
+    # path: disable and # path: enable, then a return, called once,
+    express and verbose, measured in each events mode
+    Lines between the comments are not analysed, though they run: the
+    report has no decision there, ship's card no row there, and its 2
+    ways are its first if's, the call covering the true one."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "shipping.py").write_text(
+        "def ship(order, log):\n"
+        "    if order['express']:\n"
+        "        order['days'] = 1\n"
+        "    # path: disable\n"
+        "    # reason: logging is not under test\n"
+        "    if log.verbose:\n"
+        "        log.lines.append(order['id'])\n"
+        "    # path: enable\n"
+        "    return order\n"
+    )
+    exits = []
+    path_coverage.start(
+        root=tmp_path, cover=["src/*.py"], coverage_dir=tmp_path, report=[], events=events, on_exit=exits.append
+    )
+    try:
+        log = types.SimpleNamespace(verbose=True, lines=[])
+        order = _imported(tmp_path, "shipping").ship({"id": "A7", "express": True}, log)
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    assert (order["days"], log.lines) == (1, ["A7"])
+    report = json.loads((tmp_path / "path_coverage.json").read_text())
+    card = report["cards"]["src/shipping.py:1:0"]
+    express, returned = {"at": "2:04", "path": [True]}, {"at": "9:04"}
+    assert (list(report["decisions"]), [row["at"] for row in card["rows"]], card["ways"]) == (
+        ["src/shipping.py:2:4"],
+        ["2:04", "9:04"],
+        2,
+    )
+    assert (card["covered"], card["gaps"]) == (
+        [{"way": [express, returned], "count": 1}],
+        [[{"at": "2:04", "path": [False]}, returned]],
+    )
 
 
 def test_e5a70c0d(tmp_path):
@@ -1061,14 +1150,14 @@ def test_e5a70c27(tmp_path):
 
 
 def test_e5a70c26(tmp_path):
-    """Example: render, covering src/orders.py::Order.ship, the JSON
+    """Example: report,covering src/orders.py::Order.ship, the JSON
     report of a run that covered ORDERS whole, calling ship, total and
     refund
     The merged report keeps only the scope: its decisions, totals and
     reached are ship's and carrier's, though the run counted total's and
     refund's too."""
     _ordered(tmp_path, [], cover="src/orders.py")
-    path_coverage.render(
+    path_coverage.report(
         root=tmp_path,
         cover=["src/orders.py::Order.ship"],
         coverage_dir=tmp_path / "merged",
@@ -1314,7 +1403,7 @@ def test_e5a70c2d(tmp_path, capsys):
 
 def test_e5a70c2e(tmp_path, capsys):
     """Example: a module setting MODE by a conditional, then save, called
-    as a dry run and for real; that run's JSON report rendered
+    as a dry run and for real; that run's JSON report reported on
     The merged report lists the same ways save's calls took, read back
     from the report's cards; the top card, which no call runs, lists none."""
     (tmp_path / "src").mkdir()
@@ -1330,7 +1419,7 @@ def test_e5a70c2e(tmp_path, capsys):
         path_coverage.stop()
     exits[0]()
     capsys.readouterr()
-    path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
+    path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
     cards = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["cards"]
     assert [cards["src/saving.py:4:0"]["taken"], "taken" in cards["src/saving.py:1:0"]] == [
         [
@@ -1388,12 +1477,12 @@ def test_e5a70c30(tmp_path):
 
 def test_e5a70c31(tmp_path):
     """Example: total of 3 orders, then of 1, then of none; that run's
-    JSON report rendered
+    JSON report reported on
     The merged report lists the same passes of total's for, read back
     from the report's cards."""
     _totalled(tmp_path, tmp_path / "run")
     settings = {"root": tmp_path, "cover": ["src/*.py"], "report": []}
-    path_coverage.render(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
+    path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
     card = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["cards"]["src/totals.py:1:0"]
     assert [card["taken"], card["passes"]] == TOTALLED
 
@@ -1579,8 +1668,8 @@ def test_e5a70c13(tmp_path):
 def test_e5a70c14(tmp_path):
     """Example: fee called with member and not big, its report's reached
     then dropped, as a run that counted no statement writes it, then
-    render of that report
-    So render cannot say fee's return, a row that is no decision, was reached.
+    report of that report
+    So report cannot say fee's return, a row that is no decision, was reached.
     It counts as not taken: combined [2, 5], never more than ran.
     Its merged report has no reached either."""
     project = PROJECTS / "two_decisions"
@@ -1596,7 +1685,7 @@ def test_e5a70c14(tmp_path):
     unreached = json.loads(saved.read_text())
     del unreached["reached"]
     saved.write_text(json.dumps(unreached))
-    path_coverage.render(
+    path_coverage.report(
         root=project,
         cover=["src/*.py"],
         coverage_dir=tmp_path / "merged",
@@ -1703,7 +1792,7 @@ def test_e5a70c39(tmp_path, capsys):
     [report] = exits
     report()
     assert capsys.readouterr().out == (
-        "src/single_and_trails.py:4 is_new has 2 untested paths.\n"
+        "src/single_and_trails.py:4 is_new() has 2 untested paths.\n"
         "Add tests that take each of these paths:\n"
         f"  1. line 6 `trail_id in trails` true, {NEW} true\n"
         "  2. line 6 `trail_id in trails` false\n"
@@ -1734,8 +1823,47 @@ def test_e5a70c3a(tmp_path, capsys):
     report()
     capsys.readouterr()
     assert (tmp_path / "path_coverage.ways.txt").read_text() == (
-        "src/single_and_trails.py:4 is_new has 2 untested paths.\n"
+        "src/single_and_trails.py:4 is_new() has 2 untested paths.\n"
         "Add tests that take each of these paths:\n"
         f"  1. line 6 `trail_id in trails` true, {NEW} true\n"
         "  2. line 6 `trail_id in trails` false\n"
+    )
+
+
+def test_e5a70c3d(tmp_path):
+    """Example: total, a for loop whose body holds an if, then a return,
+    called on no orders and on one paid order, its run reported on
+    with loops on
+    A run records its loops' passes whatever its own report makes of
+    them, so report with loops on makes the for a fork: 0 items, or 1+
+    items then the if true or false. The calls cover the first two."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "loop_orders.py").write_text(
+        "def total(orders):\n"
+        "    amount = 0\n"
+        "    for order in orders:\n"
+        "        if order['paid']:\n"
+        "            amount += order['amount']\n"
+        "    return amount\n"
+    )
+    settings = {"root": tmp_path, "cover": ["src/*.py"], "report": []}
+    exits = []
+    path_coverage.start(**settings, coverage_dir=tmp_path / "run", on_exit=exits.append)
+    try:
+        loop_orders = _imported(tmp_path, "loop_orders")
+        assert [loop_orders.total([]), loop_orders.total([{"paid": True, "amount": 12}])] == [0, 12]
+    finally:
+        path_coverage.stop()
+    exits[0]()
+    run = tmp_path / "run" / "path_coverage.json"
+    path_coverage.report(**settings, coverage_dir=tmp_path / "reported", runs=[run], loops=True)
+    card = json.loads((tmp_path / "reported" / "path_coverage.json").read_text())["cards"]["src/loop_orders.py:1:0"]
+    none, some, returned = {"at": "3:04", "path": ["0 items"]}, {"at": "3:04", "path": ["1+ items"]}, {"at": "6:04"}
+    assert (card["ways"], card["covered"], card["gaps"]) == (
+        3,
+        [
+            {"way": [none, returned], "count": 1},
+            {"way": [some, {"at": "4:08", "path": [True]}, returned], "count": 1},
+        ],
+        [[some, {"at": "4:08", "path": [False]}, returned]],
     )

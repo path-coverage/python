@@ -174,28 +174,13 @@ export PATH_COVERAGE_COLLECTOR=http://host.docker.internal:4570/runs
 
 With a collector the reporters default to `post`. The package's
 `path_coverage_collector` command (or `python -m path_coverage.collector`)
-is that collector. It saves each report POSTed to it as a numbered file,
-and once every run is done they render as one report, its two JSON files
-written to `coverage_dir` for html-reporter to draw:
+is that collector. It saves each report POSTed to it as a numbered file;
+once every run is done, report them as one with `path_coverage_report`,
+below.
 
 ```sh
 path_coverage_collector 4570 /tmp/paths/runs   # until sent TERM
 ```
-
-```python
-from pathlib import Path
-import path_coverage
-
-path_coverage.render(
-    root="/app", cover=["src/**/*.py"], coverage_dir="/tmp/coverage",
-    report=["gaps"],
-    runs=sorted(Path("/tmp/paths/runs").glob("*.json")),
-)
-```
-
-Each JSON report names the kinds of decision it measured. A version that
-measures other kinds lists a decision's paths differently. So `render` refuses
-a run whose kinds differ from those of the installed version.
 
 - A report is saved before it is answered 200, so a 200 means it is on
   disk. A report cut short, eg by a sender dying mid-send, is answered 400
@@ -205,6 +190,83 @@ a run whose kinds differ from those of the installed version.
   it before starting the runs.
 - On TERM it stops accepting connections, finishes the report in hand, and
   exits 0.
+
+### Reporting saved runs
+
+Once every run is done, report them as one with `path_coverage_report`:
+
+```text
+path_coverage_report [--loops] [--max-paths N] SOURCE_ROOT GLOBS REPORT_DIR RUN_JSON...
+```
+
+- SOURCE_ROOT  the directory holding the covered source
+- GLOBS        comma-separated globs of the covered files, relative to SOURCE_ROOT
+- REPORT_DIR   the directory it writes its report into
+- RUN_JSON...  one or more saved runs' JSON files, space-separated, eg runs/*.json
+- --loops      count each loop as a decision: 0 items or 1+ items
+- --max-paths  fail each function with more than N paths (default 4096, at most 65536)
+
+It exits 0 when every path is taken, and 1 when any is not.
+
+Every path taken:
+
+```text
+$ path_coverage_report /app 'src/**/*.py' report runs/*.json
+Paths: 2 / 2 (100.00%)
+Functions over --max-paths=4096: 0
+```
+
+Some paths untested, and a function over --max-paths:
+
+```text
+$ path_coverage_report --max-paths 8 /app 'src/**/*.py' report runs/*.json
+src/orders.py:1 total() has 1 untested path.
+Add tests that take each of these paths:
+  1. line 4 `order['paid']` false
+src/orders.py:9 fee() has 16 paths, more than --max-paths allows.
+Split it into smaller functions.
+Paths: 1 / 2 (50.00%)
+Functions over --max-paths=8: 1
+```
+
+Each run's JSON names the kinds of decision it measured. A version that
+measures other kinds lists a decision's paths differently, so a run whose
+kinds differ from those of the installed version is refused.
+
+### Not analysing a block
+
+Sometimes a block of code is not worth testing path by path, for example
+logging. Put `# path: disable` before the block and `# path: enable` after
+it. The lines between them still run, but they are not analysed: any
+decision in them is ignored, and they add no paths to the function they
+are in.
+
+The line straight after `# path: disable` must start with `# reason:` and
+say why the block is not analysed:
+
+```python
+def ship(order, log):
+    if order['express']:
+        order['days'] = 1
+    # path: disable
+    # reason: logging is not under test
+    if log.verbose:
+        log.lines.append(order['id'])
+    # path: enable
+    return order
+```
+
+Without the `# path: disable` and `# path: enable` comments, `ship()` has
+4 paths: each `if` can be true or false. With them, the second `if` is
+ignored, so `ship()` has 2 paths: `order['express']` true, and
+`order['express']` false.
+
+Each of these is refused, with the file and line it is on:
+
+- a `# path: disable` without a `# reason:` line straight after it
+- a `# path: disable` without a `# path: enable` after it
+- a statement that starts between the two comments and ends after the
+  `# path: enable`
 
 ## What a run reports
 
@@ -327,7 +389,7 @@ The JSON report's `cards` hold each card's rows, its `ways` and its
   source text; a loop is named by its line and how many items it ran:
 
 ```text
-src/fee.py:5 fee has 2 untested paths.
+src/fee.py:5 fee() has 2 untested paths.
 Add tests that take each of these paths:
   1. line 8 `user.member` true, `order.paid` false, then line 10 `order.big` true
   2. line 8 `user.member` false, then line 10 `order.big` true
