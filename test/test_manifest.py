@@ -425,6 +425,24 @@ def test_5c1e9a15():
     assert str(refused.value) == "src/shipping.py:2 # path: disable has no # path: enable after it"
 
 
+def test_5c1e9a18():
+    """Example: a module whose help string holds the text # path: disable on
+    a line of its own, then fee, an if on member
+    Only a comment is a marker: the same text inside a string is not, so
+    the file is analysed as if the string held any other text."""
+    source = (
+        'HELP = """\n'
+        "# path: disable\n"
+        '"""\n'
+        "def fee(member):\n"
+        "    if member:\n"
+        "        return 0\n"
+        "    return 9\n"
+    )
+    plain = source.replace("# path: disable", "# path: dormant")
+    assert decisions(source, "src/fees.py") == decisions(plain, "src/fees.py")
+
+
 def test_5c1e9a16():
     """Example: ship, a # path: disable comment straight before an if on
     log.verbose, then # path: enable

@@ -447,22 +447,32 @@ def disabled_lines(source, path):
     """The line numbers of source, at path, between a DISABLE comment's
     line and the next ENABLE comment's line, which are not analysed;
     ValueError naming a DISABLE with no REASON line straight after it, or
-    with no ENABLE after it."""
+    with no ENABLE after it. A marker is a comment that is the whole of its
+    line: the same text inside a string is no marker."""
     lines = source.splitlines()
+    commented = _comment_lines(source)
     disabled, opened = set(), None
     for number, line in enumerate(lines, 1):
-        if line.strip() == DISABLE:
+        marker = line.strip() if number in commented else None
+        if marker == DISABLE:
             # lines[number] is the next line; the slice is empty after the last.
             if not "".join(lines[number:number + 1]).strip().startswith(REASON):
                 raise ValueError(f"{path}:{number} {DISABLE} needs a {REASON} line straight after it")
             opened = number
-        elif line.strip() == ENABLE:
+        elif marker == ENABLE:
             opened = None
         elif opened is not None:
             disabled.add(number)
     if opened is not None:
         raise ValueError(f"{path}:{opened} {DISABLE} has no {ENABLE} after it")
     return disabled
+
+
+def _comment_lines(source):
+    """The line numbers of source holding a comment, as the tokenizer finds
+    them, so text inside a string, eg a docstring, holds none."""
+    tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+    return {token.start[0] for token in tokens if token.type == tokenize.COMMENT}
 
 
 def if_keywords(source):

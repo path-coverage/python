@@ -261,6 +261,16 @@ Without the `# path: disable` and `# path: enable` comments, `ship()` has
 ignored, so `ship()` has 2 paths: `order['express']` true, and
 `order['express']` false.
 
+Only a real comment that is the whole of its line is a marker. The same
+text inside a string, eg a docstring or help text, is just text: it
+disables nothing, and is never refused.
+
+```python
+HELP = """
+# path: disable
+"""   # a string, not a comment: fee() below is still analysed
+```
+
 Each of these is refused, with the file and line it is on:
 
 - a `# path: disable` without a `# reason:` line straight after it
