@@ -18,9 +18,7 @@ coverage.
 
 Demo: https://path-coverage.github.io/python/ shows the HTML report for
 the mock source tree in `demo/`. `make demo` builds and opens the same
-report locally. `make demo_local` does too, first building the
-html-reporter image from `../html-reporter` as it is now, so a change to
-the pages shows without a publish.
+report locally.
 
 ## Overview
 
@@ -43,15 +41,6 @@ paths on their own, and combined, through each function's statements.
 As the run exits it writes its report:
 - `path_coverage.json`, for AIs and other tools.
 - `path_coverage.source.json`, what drawing each file's code needs.
-
-The HTML report, for people, is drawn from those two by
-[html-reporter](https://github.com/path-coverage/html-reporter):
-`index.html`, a sortable row per covered file with its paths
-combined taken, and a page per file with its cards.
-
-```sh
-docker run --rm -v "$PWD/coverage:/paths" ghcr.io/path-coverage/html-reporter /paths
-```
 
 ## Reading the HTML
 
