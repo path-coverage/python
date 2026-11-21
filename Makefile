@@ -1,4 +1,4 @@
-.PHONY: test test_core demo demo_local
+.PHONY: test test_core
 
 space := $(subst ,, )
 
@@ -13,16 +13,3 @@ test:
 # result: whether the hand-written tests alone reach full coverage.
 test_core:
 	bash ${PWD}/bin/test.sh --suite core
-
-# Build the demo report into site/, the same site GitHub Pages
-# publishes, and open it in a browser where one can be found.
-demo:
-	${PWD}/bin/build_demo.sh
-	@if command -v open > /dev/null; then open ${PWD}/site/index.html; \
-	elif command -v xdg-open > /dev/null; then xdg-open ${PWD}/site/index.html; fi
-
-# demo, drawn by an html-reporter image built from ../html-reporter as
-# it is now, so a change to the pages shows without a publish.
-demo_local:
-	docker build --tag ghcr.io/path-coverage/html-reporter ${PWD}/../html-reporter
-	$(MAKE) demo

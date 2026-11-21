@@ -184,8 +184,7 @@ def start(
     "post" sends the
     JSON report to collector, a url. groups, {name: [glob, ...]}, names
     groups of covered files: each gets its own summary lines, its own JSON
-    totals, and its list of files in the source report, which
-    html-reporter makes a tab of its index page. A run given
+    totals, and its list of files in the source report. A run given
     a part name (eg an xdist worker's) writes only its part file; the main
     run clears stale parts now and adds every part to its own report at
     exit. events names the mode the events come from, one of EVENTS, and

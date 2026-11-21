@@ -66,9 +66,6 @@ loops; its longest way 493 steps, from a while loop.
   0/1/2+ times its passes, so the card's title can show fewer ways than
   were taken.
 - Each pass logs an event: the suite went from about 40 s to 54 s.
-- The html-reporter's ways tab lists taken ways only: the possible ways
-  never taken need enumerating, and impossible ones (the "special zero")
-  need ruling out first.
 - A for over a literal has no way its literal rules out: no "0 items"
   over a non-empty one, no "1+ items" over an empty one. These ways are
   absent, not impossible (combined-is-path-coverage.md).

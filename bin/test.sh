@@ -11,15 +11,14 @@ Usage: bin/test.sh [--suite NAME] [PYTEST_ARGS...]
 Runs the tests in test/ against src/, using the repo's .venv python
 (override with PYTHON=...), with path_coverage measuring its own src/ and
 test/ (a renamed copy of src/path_coverage, test/self_coverage.py, does the
-measuring), its JSON reports written to reports/paths, checked against
-their schemas by the schemas image, then drawn there as
-reports/paths/index.html by the html-reporter image, each in Docker.
+measuring), its JSON reports written to reports/paths, then checked
+against their schemas by the schemas image, in Docker.
 
 A full run, given no PYTEST_ARGS, also measures line and branch coverage
 of src/ and test/ with coverage.py, as pyproject.toml configures it,
 listing each file with lines or branches missed, and writing
 reports/coverage.json; then it prints each group's path totals (code and
-test) and where the report is. With PYTEST_ARGS, a partial run, the totals
+test). With PYTEST_ARGS, a partial run, the totals
 cover only part of the code, so none of this is done.
 
 With --suite NAME, runs one suite of test/suites.py: all, every test (the
@@ -70,10 +69,6 @@ schema_check="$(docker run --rm \
   --volume "${ROOT}/reports/paths:/paths:ro" \
   ghcr.io/path-coverage/schemas /paths 2>&1)" \
   || { echo "${schema_check}" >&2; exit 1; }
-docker run --rm \
-  --user "$(id -u):$(id -g)" \
-  --volume "${ROOT}/reports/paths:/paths" \
-  ghcr.io/path-coverage/html-reporter /paths
 
 if [ "${checked}" = checked ]; then
   PYTHONPATH="${ROOT}/src" "${PYTHON}" bin/print_path_totals.py

@@ -1,7 +1,6 @@
 # <img src="https://avatars.githubusercontent.com/u/353243247?v=4" alt="" width="32" height="32"> path-coverage/python
 
 - [Overview](#overview)
-- [Reading the HTML](#reading-the-html)
 - [Getting started](#getting-started)
 - [Use when you cannot edit the code!](#use-when-you-cannot-edit-the-code)
 - [What a run reports](#what-a-run-reports)
@@ -15,10 +14,6 @@
 
 Path coverage for Python, to run alongside coverage.py's line and branch
 coverage.
-
-Demo: https://path-coverage.github.io/python/ shows the HTML report for
-the mock source tree in `demo/`. `make demo` builds and opens the same
-report locally.
 
 ## Overview
 
@@ -41,53 +36,6 @@ paths on their own, and combined, through each function's statements.
 As the run exits it writes its report:
 - `path_coverage.json`, for AIs and other tools.
 - `path_coverage.source.json`, what drawing each file's code needs.
-
-## Reading the HTML
-
-Clicking a `def` line's number on a file's HTML page opens that function's
-*card* to its left. One card is always open.
-
-A card has a row for each statement in the function, by `line:col`, with
-its counts of paths not taken and taken. Code outside every function gets
-a card too, titled by the class holding it, or `file`.
-
-Clicking a decision's row opens it:
-- on the left are the decision's parts, one per row: its operator, eg
-  `and`, then each operand it tests, nested operators indented under it.
-- on the right is one column for each possible path through it.
-  - the column's head is `0` for a path never taken, and `*` for one
-    taken (hover for its count). Look for zeros!
-  - the marks in a column line up with those rows, as below.
-
-### Boolean: `T` `F`
-
-Many parts of a decision, such as `len(name) > 2`, are true or false.
-
-- `T` the expression was true.
-- `F` the expression was false.
-
-### Unreachable: blank
-
-Some parts of a decision are not always evaluated.
-
-- blank: the expression is never evaluated on that path.
-
-### Taken: a tick
-
-An `if` takes one of its arms.
-
-- a tick marks the column whose path took that arm.
-
-Below the predicate is one row per arm: `then` and `else` for an `if`,
-`?` and `:` for a conditional expression, `keep` and `drop` for a filter.
-
-### Count: `0` `1` `*`
-
-`any` and `all` can be given any number of items.
-
-- `0` the generator gave no items.
-- `1` it gave one item.
-- `*` it gave two or more.
 
 ## Getting started
 
@@ -117,7 +65,7 @@ in several groups, or in none.
 A cover glob can end in `::` and a qualname, the names of a def or class
 from the module down joined by dots, eg `src/orders.py::Order.ship`. Only
 that scope is measured: code outside it runs as plain Python, with no
-events and nothing wrapped, and the totals, gaps, summary and pages count
+events and nothing wrapped, and the totals, gaps and summary count
 only its decisions and cards. A def nested in the scope is part of it,
 as are both defs of a property's getter and setter, which share a name.
 Every file the glob matches must hold the qualname, or `start` refuses
@@ -323,7 +271,7 @@ is a decision of its own, named at its keyword.
 
 A comprehension's filter is a decision too, named at its `if` keyword. Its test
 nests in it, as an `if` statement's predicate does. True keeps the item and
-false drops it, so the HTML names its arms keep and drop.
+false drops it.
 
 A `match` statement is a decision, named at its keyword. Each case's pattern is
 a leaf, true when it matches. A guard is reached only when its pattern
@@ -479,8 +427,6 @@ Next:
   `next((o for o in orders if o.late), None)`: whether it found an item or
   gave the default.
 - `while` loop conditions, and assert statements.
-- Conditions and arms located in the HTML tree's source highlighting (only
-  leaves are, so far).
 
 ## Constraints
 
@@ -525,9 +471,8 @@ after its own wrapping. Code that runs inside a monitoring callback is
 never itself monitored, by the copy or by coverage.py, so the tests call
 `monitor`'s callbacks directly.
 
-The report is written to `reports/paths/index.html` (gitignored). A full
-run, with no arguments, ends by printing each group's totals and where the
-report is:
+The report is written to `reports/paths/` (gitignored). A full run, with
+no arguments, ends by printing each group's totals:
 
 ```text
 code:
@@ -536,7 +481,6 @@ code:
 test:
   Paths alone: 118 / 118 (100.00%)
   Paths combined: 217 / 217 (100.00%)
-Path coverage report: .../path_coverage/reports/paths/index.html
 ```
 
 `test/suites.py` is the one place that says which test files a suite

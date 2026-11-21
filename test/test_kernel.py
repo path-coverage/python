@@ -299,7 +299,7 @@ def test_e5a70c07(tmp_path, capsys):
 
 def test_e5a70c08(tmp_path):
     """An unknown reporter is refused by name, listing the known ones, eg
-    html, whose report html-reporter draws from the JSON."""
+    html, as the package writes JSON only."""
     with pytest.raises(ValueError) as refused:
         path_coverage.start(
             root=PROJECTS / "single_and",
