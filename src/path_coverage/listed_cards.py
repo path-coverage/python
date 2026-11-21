@@ -4,7 +4,7 @@ without the page."""
 
 import ast
 
-from . import card_tree, card_ways, method_machine, method_statements, ways_report
+from . import card_tree, method_machine, method_statements, ways_report
 from .source_lines import lines_of
 
 # The most paths a function may have and still be checked, by default.
@@ -61,7 +61,7 @@ def function_cards(source, at, paths, counted, limits=(False, MAX_PATHS)):
     names = method_statements.names(source, path)
     lasts = method_statements.lasts(source, path)
     loops = method_statements.loops(source, path)
-    counts = card_ways.of(source, path)
+    counts = method_machine.counts(source, path, loops=loop_forks)
     over = {decision for decision, count in counts.items() if count > max_paths}
     listed = method_machine.ways(source, path, skipping=over, loops=loop_forks)
     cards = {}
@@ -94,10 +94,11 @@ def top_cards(source, at, lines, paths):
     by its scope, its calls None, as no call runs it."""
     path, decisions = at
     scope = scopes(source)
+    ways = method_machine.top_counter(source, path)
     found = {}
     for (first, last), rows in spans(source, path, lines).items():
         decision = f"{path}:{first}:0"
-        title = (scope(first), last, card_ways.card(source, decisions, rows), None)
+        title = (scope(first), last, ways(rows), None)
         found[decision] = card(decision, title, rows, method_statements.taken(rows, paths))
     return found
 
@@ -131,7 +132,7 @@ def scopes(source):
 def card(decision, title, rows, taken):
     """The card at decision, its title (name, last, ways, calls): titled name,
     its first line from decision, ending on line last, ways the ways one call
-    can go through it, as card_ways counts them, calls how many times it
+    can go through it, as method_machine counts them, calls how many times it
     was called, None for a top card or when not known; and a row for each
     of rows, Statements, with its taken, as method_statements.taken gives
     them."""

@@ -5,7 +5,7 @@ from path_coverage import listed_cards, manifest, result
 SHOP = (
     "RATE = 2 if FAST else 1\n"
     "def ship(order):\n"
-    "    assert order.paid and order.packed\n"
+    "    while order.paid and order.packed: break\n"
     "class Shop:\n"
     "    SIZE = 3 if BIG else 1\n"
 )
@@ -18,7 +18,7 @@ def _then_taken(count):
 
 PATHS = {
     "k.py:1:9": _then_taken(1),
-    "k.py:3:22": [
+    "k.py:3:21": [
         {"path": [True, True], "count": 1},
         {"path": [True, False], "count": 0},
         {"path": [False, None], "count": 0},
@@ -51,14 +51,14 @@ def test_d3c9a101():
             "last": 3,
             "ways": 3,
             "calls": 0,
-            "rows": [{"at": "3:22", "top": "and", "paths": 3, "taken": 1, "decision": "k.py:3:22"}],
+            "rows": [{"at": "3:21", "top": "and", "paths": 3, "taken": 1, "decision": "k.py:3:21"}],
             "taken": [],
             "passes": {},
             "covered": [],
             "gaps": [
-                [{"at": "3:22", "path": [True, True]}],
-                [{"at": "3:22", "path": [True, False]}],
-                [{"at": "3:22", "path": [False, None]}],
+                [{"at": "3:21", "path": [True, True]}],
+                [{"at": "3:21", "path": [True, False]}],
+                [{"at": "3:21", "path": [False, None]}],
             ],
             "impossible": [],
             "impossible_taken": [],
@@ -90,7 +90,7 @@ def test_d3c9a103():
     top = {"parent": None, "in": None, "on": None, "leaf": None, "gives": None}
     decisions = manifest.decisions(SHOP, "k.py")
     tree = listed_cards.tree({"k.py": (SHOP, decisions)}, result.operands(decisions, {}))
-    assert tree == {"k.py": {"2:0": {"3:22": top}, "1:0": {"1:9": top}, "5:0": {"5:13": top}}}
+    assert tree == {"k.py": {"2:0": {"3:21": top}, "1:0": {"1:9": top}, "5:0": {"5:13": top}}}
 
 
 def test_d3c9a102():
@@ -284,3 +284,70 @@ def test_d3c9a122():
     files = {"k.py": (source, decisions)}
     card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, max_paths=1)["k.py:1:0"]
     assert ("covered" in card, "gaps" in card) == (False, False)
+
+
+def test_d3c9a123():
+    """Example: restock, a for loop whose body breaks on a sold-out item,
+    else reorders a low one, then a return; never called, listed with
+    max_paths 3.
+    Whether a function has more paths than max_paths is told by counting
+    the very paths it lists: a break ends its pass, so restock has 3, not
+    over 3, and its card lists them, each a gap."""
+    source = (
+        "def restock(items, low):\n"
+        "    for item in items:\n"
+        "        if item.sold_out:\n"
+        "            break\n"
+        "        if item.count < low:\n"
+        "            item.reorder()\n"
+        "    return items\n"
+    )
+    decisions = manifest.decisions(source, "k.py")
+    files = {"k.py": (source, decisions)}
+    counted = ({"k.py:1:0": 0}, {})
+    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    paths = {"k.py:3:8": never, "k.py:5:8": never}
+    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, max_paths=3)["k.py:1:0"]
+    assert (card["ways"], len(card["gaps"])) == (3, 3)
+
+
+def test_d3c9a124():
+    """Example: READY, outside every function, an any over ORDERS whose
+    generator's element is an and; never run.
+    A top card's ways are counted as a function's are: the and runs in
+    the generator's frame, so adds no way; READY's ways are its any's 5,
+    0 items, 1 or 2+ giving true or false."""
+    source = "READY = any(o.paid and o.packed for o in ORDERS)\n"
+    decisions = manifest.decisions(source, "k.py")
+    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    paths = {decision: never for decision in decisions}
+    card = _listed(source, paths, None)["k.py:1:0"]
+    assert card["ways"] == 5
+
+
+def test_d3c9a125():
+    """Example: PAID, outside every function, a list comprehension over
+    ORDERS whose filter is an and; never run.
+    A filter whose test is a decision decides on it: the filter keeps the
+    item on the and's 1 path giving true, drops it on its 2 giving false,
+    so PAID's ways are 3."""
+    source = "PAID = [o for o in ORDERS if o.paid and o.sent]\n"
+    decisions = manifest.decisions(source, "k.py")
+    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    paths = {decision: never for decision in decisions}
+    card = _listed(source, paths, None)["k.py:1:0"]
+    assert card["ways"] == 3
+
+
+def test_d3c9a126():
+    """Example: FEE, outside every function, a conditional expression on
+    PAID or FREE whose then is a conditional expression on VIP; never run.
+    A top card's decisions inside another are decided by it, not after
+    it: the or's 2 true paths each take the inner one's 2, its false path
+    the else, so FEE's ways are 5, not 3 times 2 times 2."""
+    source = "FEE = (5 if VIP else 10) if PAID or FREE else 0\n"
+    decisions = manifest.decisions(source, "k.py")
+    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    paths = {decision: never for decision in decisions}
+    card = _listed(source, paths, None)["k.py:1:0"]
+    assert (card["ways"], len(card["rows"])) == (5, 3)

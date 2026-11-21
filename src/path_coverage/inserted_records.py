@@ -318,8 +318,8 @@ class _Inserter(ast.NodeTransformer):
 
     def _tested(self, node):
         """True when only node's truth is tested, as the test of an if, a
-        while, an assert, a conditional expression, a not, a filter or a
-        guard, through any and/or or conditional expression's arm holding
+        while, a conditional expression, a not, a filter or a guard,
+        through any and/or or conditional expression's arm holding
         it, whose value it may be; False when its value may be used."""
         while True:
             parent = self.parents.get(node)
@@ -332,7 +332,7 @@ class _Inserter(ast.NodeTransformer):
                     node = parent
                 case ast.UnaryOp(op=ast.Not()):
                     return True
-                case ast.If() | ast.While() | ast.Assert():
+                case ast.If() | ast.While():
                     return node is parent.test
                 case ast.comprehension():
                     return node in parent.ifs

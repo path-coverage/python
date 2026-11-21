@@ -32,7 +32,7 @@ def _run(evaluations, *events):
     return evaluations
 
 
-TRAILS = "def is_new(trail_id, trails):\n    assert ok(trail_id) and new(trail_id)\n"
+TRAILS = "def is_new(trail_id, trails):\n    while ok(trail_id) and new(trail_id): break\n"
 
 
 def test_3c9e5101():
@@ -40,17 +40,17 @@ def test_3c9e5101():
     false, then false
     Each evaluation's path is counted once it is complete, and each leaf's
     outcomes are counted as they happen."""
-    shape = _shape(TRAILS, "k.py:2:24")
+    shape = _shape(TRAILS, "k.py:2:23")
     ran = _run(
         Evaluations(),
         (7, (Outcome(shape, 0, True),)),
         (7, (Outcome(shape, 1, False),)),
         (7, (Outcome(shape, 0, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:24": {(True, False): 1, (False, None): 1}}
+    assert ran.decision_paths == {"k.py:2:23": {(True, False): 1, (False, None): 1}}
     assert ran.counts == {
-        ("k.py:2:24", 0): {"truthy": 1, "falsy": 1},
-        ("k.py:2:24", 1): {"truthy": 0, "falsy": 1},
+        ("k.py:2:23", 0): {"truthy": 1, "falsy": 1},
+        ("k.py:2:23", 1): {"truthy": 0, "falsy": 1},
     }
 
 
@@ -58,7 +58,7 @@ def test_3c9e5102():
     """Example: ok(id) and new(id), its new calling is_new again, so a
     second frame evaluates the same decision inside the first's evaluation
     Each frame's evaluation is its own, so the paths do not mix."""
-    shape = _shape(TRAILS, "k.py:2:24")
+    shape = _shape(TRAILS, "k.py:2:23")
     ran = _run(
         Evaluations(),
         (1, (Outcome(shape, 0, True),)),
@@ -66,7 +66,7 @@ def test_3c9e5102():
         (2, (Outcome(shape, 1, True),)),
         (1, (Outcome(shape, 1, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:24": {(True, True): 1, (True, False): 1}}
+    assert ran.decision_paths == {"k.py:2:23": {(True, True): 1, (True, False): 1}}
 
 
 def test_3c9e5103():
@@ -74,14 +74,14 @@ def test_3c9e5103():
     ok(id) false
     The evaluation that raised never completes, so its path is not
     counted, though ok's outcome is."""
-    shape = _shape(TRAILS, "k.py:2:24")
+    shape = _shape(TRAILS, "k.py:2:23")
     ran = _run(
         Evaluations(),
         (3, (Outcome(shape, 0, True),)),
         (3, (Outcome(shape, 0, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:24": {(False, None): 1}}
-    assert ran.counts == {("k.py:2:24", 0): {"truthy": 1, "falsy": 1}}
+    assert ran.decision_paths == {"k.py:2:23": {(False, None): 1}}
+    assert ran.counts == {("k.py:2:23", 0): {"truthy": 1, "falsy": 1}}
 
 
 def test_3c9e5104():
@@ -89,15 +89,15 @@ def test_3c9e5104():
     around it counts it; then member false
     The last operand's outcome, from its call, completes the evaluation
     its branch began."""
-    shape = _shape("def f(member, vip):\n    assert member and vip\n", "k.py:2:18")
+    shape = _shape("def f(member, vip):\n    while member and vip: break\n", "k.py:2:17")
     ran = _run(
         Evaluations(),
         (5, (Outcome(shape, 0, True),)),
         (5, (Outcome(shape, 1, False),)),
         (5, (Outcome(shape, 0, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:18": {(True, False): 1, (False, None): 1}}
-    assert ran.counts[("k.py:2:18", 1)] == {"truthy": 0, "falsy": 1}
+    assert ran.decision_paths == {"k.py:2:17": {(True, False): 1, (False, None): 1}}
+    assert ran.counts[("k.py:2:17", 1)] == {"truthy": 0, "falsy": 1}
 
 
 SIZE = (
@@ -209,23 +209,23 @@ def test_3c9e510c():
     was never seen, as when measuring started inside the evaluation
     No possible path agrees, so the evaluation is dropped, though new's
     outcome is counted."""
-    shape = _shape(TRAILS, "k.py:2:24")
+    shape = _shape(TRAILS, "k.py:2:23")
     ran = _run(Evaluations(), (6, (Outcome(shape, 1, True),)))
     assert ran.decision_paths == {}
-    assert ran.counts == {("k.py:2:24", 1): {"truthy": 1, "falsy": 0}}
+    assert ran.counts == {("k.py:2:23", 1): {"truthy": 1, "falsy": 0}}
 
 
 def test_3c9e510b():
     """Example: Evaluations(limit=2), noting two events
     The log is rebuilt as soon as it holds limit events, so a long run
     never holds every event it saw."""
-    shape = _shape(TRAILS, "k.py:2:24")
+    shape = _shape(TRAILS, "k.py:2:23")
     evaluations = Evaluations(limit=2)
     evaluations.note(1, (Outcome(shape, 0, True),))
     assert evaluations.log == [(1, (Outcome(shape, 0, True),))]
     evaluations.note(1, (Outcome(shape, 1, True),))
     assert evaluations.log == []
-    assert evaluations.decision_paths == {"k.py:2:24": {(True, True): 1}}
+    assert evaluations.decision_paths == {"k.py:2:23": {(True, True): 1}}
 
 
 TOTAL = (
@@ -366,7 +366,7 @@ def test_3c9e5110():
 
 SPANS = (
     "def within(inner, outer):\n"
-    "    assert outer[0] <= inner[0] and inner[1] <= outer[1]\n"
+    "    while outer[0] <= inner[0] and inner[1] <= outer[1]: break\n"
     "\n"
     "def span(parts):\n"
     "    return tuple(-1 if part is None else part for part in parts)\n"
@@ -418,9 +418,9 @@ def test_3c9e5111():
     frame's id, its code another
     Events are kept apart by frame and code together, so the generator
     expression's never join within's way, which holds only its own steps."""
-    within, part = _shape(SPANS, "k.py:2:32"), _shape(SPANS, "k.py:5:20")
+    within, part = _shape(SPANS, "k.py:2:31"), _shape(SPANS, "k.py:5:20")
     evaluations = Evaluations()
-    evaluations.loops.update({"k.py:2:32": (), "k.py:5:20": ()})
+    evaluations.loops.update({"k.py:2:31": (), "k.py:5:20": ()})
     _run(
         evaluations,
         ((6, 1), (Enter("k.py:1:0"),)),
@@ -429,7 +429,7 @@ def test_3c9e5111():
         ((6, 2), (Outcome(part, 0, False),)),
     )
     evaluations.close()
-    assert evaluations.ways == {"k.py:1:0": {(("k.py:2:32", (False, None)),): 1}}
+    assert evaluations.ways == {"k.py:1:0": {(("k.py:2:31", (False, None)),): 1}}
 
 
 def test_3c9e510f():

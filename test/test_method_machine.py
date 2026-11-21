@@ -56,7 +56,8 @@ def test_5b1f3c03():
     return.
     A raise in a try's body goes on to the handler catching it; a raise
     no try in the method catches, as the handler's own is outside the
-    try's body, ends the method."""
+    try's body, ends the method. int's call can raise too, so the handler
+    can run in its place."""
     source = (
         "def parse(text, strict):\n"
         "    try:\n"
@@ -74,6 +75,8 @@ def test_5b1f3c03():
             (("k.py:3:8", (True,)), ("k.py:4:12",), ("k.py:7:8", (True,)), ("k.py:8:12",)),
             (("k.py:3:8", (True,)), ("k.py:4:12",), ("k.py:7:8", (False,)), ("k.py:10:4",)),
             (("k.py:3:8", (False,)), ("k.py:10:4",)),
+            (("k.py:3:8", (False,)), ("k.py:7:8", (True,)), ("k.py:8:12",)),
+            (("k.py:3:8", (False,)), ("k.py:7:8", (False,)), ("k.py:10:4",)),
         ]
     }
 
@@ -85,7 +88,9 @@ def test_5b1f3c04():
     A raise goes on to the first handler naming its class, or a builtin
     class it is a subclass of: KeyError is a LookupError, not a
     ValueError. A class that is no builtin, ShopError, is caught by no
-    handler naming another, so ends the method."""
+    handler naming another, so ends the method. The in test and the
+    subscript can raise too, so either handler can run in their place;
+    the if on strict, a name, cannot."""
     source = (
         "def find(stock, sku, strict):\n"
         "    try:\n"
@@ -104,6 +109,10 @@ def test_5b1f3c04():
             (("k.py:3:8", (True,)), ("k.py:4:12",), ("k.py:11:8",)),
             (("k.py:3:8", (False,)), ("k.py:5:8", (True,)), ("k.py:6:12",)),
             (("k.py:3:8", (False,)), ("k.py:5:8", (False,)), ("k.py:7:8",)),
+            (("k.py:3:8", (False,)), ("k.py:5:8", (False,)), ("k.py:9:8",)),
+            (("k.py:3:8", (False,)), ("k.py:5:8", (False,)), ("k.py:11:8",)),
+            (("k.py:9:8",),),
+            (("k.py:11:8",),),
         ]
     }
 
@@ -155,7 +164,8 @@ def test_5b1f3c07():
     """Example: stock, a try raising KeyError when strict, its handler of
     LookupError returning, its else returning 9 for a count over 9, then
     a return.
-    A try's else runs after its body, only when the body raised nothing."""
+    A try's else runs after its body, only when the body raised nothing;
+    the subscript can raise, so the handler can run in its place."""
     source = (
         "def stock(shelf, sku, strict):\n"
         "    try:\n"
@@ -174,6 +184,7 @@ def test_5b1f3c07():
             (("k.py:3:8", (True,)), ("k.py:4:12",), ("k.py:7:8",)),
             (("k.py:3:8", (False,)), ("k.py:9:8", (True,)), ("k.py:10:12",)),
             (("k.py:3:8", (False,)), ("k.py:9:8", (False,)), ("k.py:11:4",)),
+            (("k.py:3:8", (False,)), ("k.py:7:8",)),
         ]
     }
 
@@ -365,30 +376,30 @@ def test_5b1f3c11():
     its own."""
     source = (
         "def one(truth, a, b):\n"
-        "    assert truth if a or b else None\n"
+        "    while truth if a or b else None: break\n"
         "def two(a, b):\n"
-        "    assert a and (1 if b else 2)\n"
+        "    while a and (1 if b else 2): break\n"
         "def three(x, c, a, b):\n"
-        "    assert x if c else (a and b)\n"
+        "    while x if c else (a and b): break\n"
         "def four(f, x, c, y, z):\n"
-        "    assert f(x if c else y) or z\n"
+        "    while f(x if c else y) or z: break\n"
     )
     either = ((True,), (False,))
     assert method_machine.paths(source, "k.py") == {
         "k.py:1:0": [
-            (("k.py:2:22", (True, None)), ("k.py:2:17", (True,))),
-            (("k.py:2:22", (False, True)), ("k.py:2:17", (True,))),
-            (("k.py:2:22", (False, False)), ("k.py:2:17", (False,))),
+            (("k.py:2:21", (True, None)), ("k.py:2:16", (True,))),
+            (("k.py:2:21", (False, True)), ("k.py:2:16", (True,))),
+            (("k.py:2:21", (False, False)), ("k.py:2:16", (False,))),
         ],
         "k.py:3:0": [
-            *[(("k.py:4:20", arm), ("k.py:4:13", path)) for path in ((True, True), (True, False)) for arm in either],
-            (("k.py:4:13", (False, None)),),
+            *[(("k.py:4:19", arm), ("k.py:4:12", path)) for path in ((True, True), (True, False)) for arm in either],
+            (("k.py:4:12", (False, None)),),
         ],
         "k.py:5:0": [
-            (("k.py:6:13", path),) for path in ((True, None, None), (False, True, True), (False, True, False), (False, False, None))
+            (("k.py:6:12", path),) for path in ((True, None, None), (False, True, True), (False, True, False), (False, False, None))
         ],
         "k.py:7:0": [
-            (("k.py:8:15", arm), ("k.py:8:28", path)) for path in ((True, None), (False, True), (False, False)) for arm in either
+            (("k.py:8:14", arm), ("k.py:8:27", path)) for path in ((True, None), (False, True), (False, False)) for arm in either
         ],
     }
 
@@ -402,14 +413,14 @@ def test_5b1f3c12():
     expression's frame, so its and takes no step here."""
     source = (
         "def led(xs):\n"
-        "    assert any(x % 2 and x > 1 for x in xs) or not xs\n"
+        "    while any(x % 2 and x > 1 for x in xs) or not xs: break\n"
     )
     falsy = (("0 items", None), ("1 item", False), ("2+ items", False))
     assert method_machine.paths(source, "k.py") == {
         "k.py:1:0": [
-            *[(("k.py:2:11", path), ("k.py:2:44", (True, None))) for path in (("1 item", True), ("2+ items", True))],
-            *[(("k.py:2:11", path), ("k.py:2:44", (False, True))) for path in falsy],
-            *[(("k.py:2:11", path), ("k.py:2:44", (False, False))) for path in falsy],
+            *[(("k.py:2:10", path), ("k.py:2:43", (True, None))) for path in (("1 item", True), ("2+ items", True))],
+            *[(("k.py:2:10", path), ("k.py:2:43", (False, True))) for path in falsy],
+            *[(("k.py:2:10", path), ("k.py:2:43", (False, False))) for path in falsy],
         ]
     }
 
@@ -960,3 +971,179 @@ def test_5b1f3c37():
             (("k.py:2:4", (False,)), ("k.py:9:4",)),
         ]
     }
+
+
+def test_5b1f3c38():
+    """Example: ship, an assert whose test is an or and whose message is a
+    conditional expression, then an if on order.rush whose arm returns,
+    then a return.
+    An assert is not measured: neither its test nor its message takes a
+    step, and no path ends at it, so ship's paths are the if's two."""
+    source = (
+        "def ship(order, strict):\n"
+        "    assert order.paid or not strict, 'late' if order.rush else 'unpaid'\n"
+        "    if order.rush:\n"
+        "        return 'courier'\n"
+        "    return 'post'\n"
+    )
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:3:4", (True,)), ("k.py:4:8",)),
+            (("k.py:3:4", (False,)), ("k.py:5:4",)),
+        ]
+    }
+
+
+def test_5b1f3c3b():
+    """Example: first_paid, an async for over orders whose body returns the
+    first paid one, then a return.
+    An async for's body runs in the method, so a return there ends it; no
+    run records an async for's passes, so it is no fork, even with loops,
+    its body walked once, inline, as a for's is without loops."""
+    source = (
+        "async def first_paid(orders):\n"
+        "    async for order in orders:\n"
+        "        if order.paid:\n"
+        "            return order\n"
+        "    return None\n"
+    )
+    assert method_machine.paths(source, "k.py", loops=True) == {
+        "k.py:1:0": [
+            (("k.py:3:8", (True,)), ("k.py:4:12",)),
+            (("k.py:3:8", (False,)), ("k.py:5:4",)),
+        ]
+    }
+
+
+def test_5b1f3c3c():
+    """Example: parse, a try raising ValueError when text is empty, its
+    except* of ValueError logging when strict, then a return.
+    A raise in a try's body goes on to the except* catching its class, as
+    to an except, so the handler's if steps on that path."""
+    source = (
+        "def parse(text, strict, log):\n"
+        "    try:\n"
+        "        if not text:\n"
+        "            raise ValueError(text)\n"
+        "    except* ValueError:\n"
+        "        if strict:\n"
+        "            log.write(text)\n"
+        "    return text\n"
+    )
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:3:8", (True,)), ("k.py:4:12",), ("k.py:6:8", (True,)), ("k.py:8:4",)),
+            (("k.py:3:8", (True,)), ("k.py:4:12",), ("k.py:6:8", (False,)), ("k.py:8:4",)),
+            (("k.py:3:8", (False,)), ("k.py:8:4",)),
+        ]
+    }
+
+
+def test_5b1f3c3d():
+    """Example: load, a try whose body calls read, its handler of OSError
+    returning a default when strict is false, then a return.
+    Any statement of a try's body can raise, a call there raising with no
+    raise written, so each handler can run after any part of the body,
+    taking the paths of what ran before it; here, before read's call
+    completes."""
+    source = (
+        "def load(read, strict):\n"
+        "    try:\n"
+        "        read()\n"
+        "    except OSError:\n"
+        "        if not strict:\n"
+        "            return 'default'\n"
+        "    return 'read'\n"
+    )
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:7:4",),),
+            (("k.py:5:8", (True,)), ("k.py:6:12",)),
+            (("k.py:5:8", (False,)), ("k.py:7:4",)),
+        ]
+    }
+
+
+def test_5b1f3c3e():
+    """Example: restock, a for loop whose body breaks on a sold-out item,
+    else reorders a low one, then a return.
+    A method's ways are counted from its machine, without walking them,
+    so the count agrees with the paths listed: a break ends its pass, so
+    no way runs on from it to the second if."""
+    source = (
+        "def restock(items, low):\n"
+        "    for item in items:\n"
+        "        if item.sold_out:\n"
+        "            break\n"
+        "        if item.count < low:\n"
+        "            item.reorder()\n"
+        "    return items\n"
+    )
+    assert method_machine.counts(source, "k.py") == {"k.py:1:0": 3}
+    assert len(method_machine.paths(source, "k.py")["k.py:1:0"]) == 3
+
+
+def test_5b1f3c3f():
+    """Example: fee, an if holding a conditional expression of an and;
+    two, two conditional expressions one after another; led, a while on
+    an or of an any whose generator's element is an and.
+    Decisions one after another multiply, and a decision adds up its
+    paths, each times the ways of what it runs on that path; one that is
+    the whole of a leaf counts only its paths that give the leaf the
+    outcome the path has.
+    fee: then 3, else 1, so 4. two: 2 times 2, so 4. led: the and runs
+    in the generator's frame, so takes no step; the or's true path takes
+    the 2 any paths giving true; each of its 2 false paths takes the 3
+    giving false, 0 items, 1 or 2+: 2 + 3 + 3."""
+    source = (
+        "def fee(member, paid, big):\n"
+        "    if member:\n"
+        "        cost = 5 if paid and big else 10\n"
+        "    else:\n"
+        "        cost = 0\n"
+        "    return cost\n"
+        "def two(a, b):\n"
+        "    x = 1 if a else 2\n"
+        "    y = 3 if b else 4\n"
+        "    return [x, y]\n"
+        "def led(xs):\n"
+        "    while any(x % 2 and x > 1 for x in xs) or not xs: break\n"
+    )
+    assert method_machine.counts(source, "k.py") == {"k.py:1:0": 4, "k.py:7:0": 4, "k.py:11:0": 8}
+
+
+def test_5b1f3c40():
+    """Example: guard, an if whose arm returns, then a conditional
+    expression; twice, two such ifs on their own lines, then a return;
+    must, an if whose arm raises, then a conditional expression.
+    A way that returns or raises leaves the function there, so it goes on
+    to nothing after it: each is 3 ways, the one that leaves early and
+    the 2 that go on, not 2 times 2."""
+    source = (
+        "def guard(a, b):\n"
+        "    if a:\n"
+        "        return 0\n"
+        "    return 1 if b else 2\n"
+        "def twice(a, b):\n"
+        "    if a: return 0\n"
+        "    if b: return 1\n"
+        "    return 2\n"
+        "def must(a, b):\n"
+        "    if not a:\n"
+        "        raise ValueError(a)\n"
+        "    return 1 if b else 2\n"
+    )
+    assert method_machine.counts(source, "k.py") == {"k.py:1:0": 3, "k.py:5:0": 3, "k.py:9:0": 3}
+
+
+def test_5b1f3c41():
+    """Example: settle, an assert of a list comprehension over orders with
+    a filter on paid, then a return; with loops.
+    Nothing in an assert is measured, its comprehension's loop and filter
+    included, so settle's one path is its return."""
+    source = (
+        "def settle(orders):\n"
+        "    assert [o for o in orders if o.paid]\n"
+        "    return orders\n"
+    )
+    assert method_machine.paths(source, "k.py", loops=True) == {"k.py:1:0": [(("k.py:3:4",),)]}

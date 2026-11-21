@@ -63,15 +63,15 @@ def test_7d61a405():
     """Example: 1 if a else (b or c), its else arm an or
     Each row is placed at its code: the predicate, each arm, and the or's
     operands, under the else arm whose row stands for the or."""
-    source = "def pick(a, b, c):\n    assert 1 if a else (b or c)\n"
-    rows = _fold(source, "k.py:2:13", "ternary")
+    source = "def pick(a, b, c):\n    while 1 if a else (b or c): break\n"
+    rows = _fold(source, "k.py:2:12", "ternary")
     placed = [(row["kind"], row["label"]["text"], row["at"]) for row in rows[1:]]
     assert placed == [
-        ("operand", "a", [2, 16, 2, 17]),
-        ("arm", "? 1", [2, 11, 2, 12]),
-        ("arm", ": or", [2, 24, 2, 30]),
-        ("operand", "b", [2, 24, 2, 25]),
-        ("operand", "c", [2, 29, 2, 30]),
+        ("operand", "a", [2, 15, 2, 16]),
+        ("arm", "? 1", [2, 10, 2, 11]),
+        ("arm", ": or", [2, 23, 2, 29]),
+        ("operand", "b", [2, 23, 2, 24]),
+        ("operand", "c", [2, 28, 2, 29]),
     ]
 
 

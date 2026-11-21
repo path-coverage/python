@@ -78,6 +78,21 @@ class Condition:
 # card is one choice, nested in the arm it runs in.
 FOLDABLE = (ast.BoolOp,)
 
+# The statements nothing inside is measured in: an assert states what its
+# author holds can never be false, so no test can take its false paths.
+UNMEASURED = (ast.Assert,)
+
+
+def measured(tree):
+    """Every node of tree, as ast.walk gives them, but those inside an
+    UNMEASURED statement, and the statement itself."""
+    waiting = [tree]
+    while waiting:
+        node = waiting.pop(0)
+        if not isinstance(node, UNMEASURED):
+            yield node
+            waiting += ast.iter_child_nodes(node)
+
 
 class _DecisionFinder(ast.NodeVisitor):
     """Collects each decision, in source order, and its Condition."""
@@ -172,8 +187,8 @@ class _DecisionFinder(ast.NodeVisitor):
     def _decides(self, node):
         """True when a branch forks on node's truth: it is, or its value
         becomes, through any and/or, conditional expression's arm, walrus
-        or not holding it, the test of an if, a while, an assert or a
-        conditional expression, a filter, a guard, or the element of a
+        or not holding it, the test of an if, a while or a conditional
+        expression, a filter, a guard, or the element of a
         block call, eg any(...). False when its value is only used, eg x =
         a or b, so the truth of its last leaf decides nothing."""
         while True:
@@ -185,7 +200,7 @@ class _DecisionFinder(ast.NodeVisitor):
                     if node is parent.test:
                         return True
                     node = parent
-                case ast.If() | ast.While() | ast.Assert():
+                case ast.If() | ast.While():
                     return node is parent.test
                 case ast.comprehension():
                     return node in parent.ifs
@@ -197,6 +212,12 @@ class _DecisionFinder(ast.NodeVisitor):
                     return block_generator(self.parents.get(parent), self.builtins) is parent
                 case _:
                     return False
+
+    def visit(self, node):
+        """Visits node, as its kind's visit_ method does, but notes nothing
+        in an UNMEASURED statement."""
+        if not isinstance(node, UNMEASURED):
+            super().visit(node)
 
     def visit_If(self, node):
         """Notes an if or elif statement as a decision, named at its keyword: its
@@ -507,10 +528,11 @@ def loop_places(source, tree):
     """{loop node: (line, col) of its for keyword} of every loop in tree,
     source's parse, run in the frame of the code holding it: each for
     statement, and each generator of a list, set or dict comprehension;
-    none of a generator expression, which runs in a frame of its own."""
+    none of a generator expression, which runs in a frame of its own, and
+    none that is not measured."""
     fors = _keywords(source, ("for",))
     places = {}
-    for node in ast.walk(tree):
+    for node in measured(tree):
         if isinstance(node, ast.For):
             places[node] = (node.lineno, node.col_offset)
         if isinstance(node, INLINED):

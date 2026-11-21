@@ -1,6 +1,6 @@
 from path_coverage import decision_paths, manifest, source_report
 
-KATA = "def kata(id):\n    assert ok(id) and new(id)\n"
+KATA = "def kata(id):\n    while ok(id) and new(id): break\n"
 
 PATHS = [
     {"path": [True, True], "count": 1},
@@ -10,13 +10,13 @@ PATHS = [
 
 
 def test_5e2a9110():
-    """Example: def kata(id): assert ok(id) and new(id)
+    """Example: def kata(id): while ok(id) and new(id): break
     Each line of a file's source, as the source report has it: its text and
     its coloured tokens, so a renderer can draw the code without parsing it.
     A line with no decision has its line too."""
     assert source_report.lines(KATA) == [
         {"text": "def kata(id):", "tokens": [[0, 3, "k"]]},
-        {"text": "    assert ok(id) and new(id)", "tokens": [[4, 10, "k"], [18, 21, "k"]]},
+        {"text": "    while ok(id) and new(id): break", "tokens": [[4, 9, "k"], [17, 20, "k"], [30, 35, "k"]]},
     ]
 
 
@@ -26,15 +26,15 @@ def test_5e2a9120():
     rows, headed by its row's top, a column per path in the order the JSON
     report lists them, and no counts, which the JSON report has."""
     decisions = manifest.decisions(KATA, "k.py")
-    assert source_report.decision(KATA, decisions, "k.py:2:18", PATHS, "and") == {
+    assert source_report.decision(KATA, decisions, "k.py:2:17", PATHS, "and") == {
         "span": [2, 2],
         "fold": [
             {"kind": "decision", "branch": "", "label": {"text": "and", "tokens": [[0, 3, "k"]]},
-             "at": [2, 11, 2, 29], "else": None},
+             "at": [2, 10, 2, 28], "else": None},
             {"kind": "operand", "branch": "ths", "label": {"text": "ok(id)", "tokens": []},
-             "at": [2, 11, 2, 17], "cells": [["T", None, None], ["T", None, None], ["F", None, None]]},
+             "at": [2, 10, 2, 16], "cells": [["T", None, None], ["T", None, None], ["F", None, None]]},
             {"kind": "operand", "branch": "lhs", "label": {"text": "new(id)", "tokens": []},
-             "at": [2, 22, 2, 29], "cells": [["T", None, None], ["F", None, None], ["", None, None]]},
+             "at": [2, 21, 2, 28], "cells": [["T", None, None], ["F", None, None], ["", None, None]]},
         ],
     }
 
@@ -48,10 +48,10 @@ def test_5e2a9130():
     decisions = manifest.decisions(KATA, "k.py")
     files = {"k.py": (KATA, decisions)}
     cards = {
-        "k.py:1:0": {"rows": [{"decision": "k.py:2:18", "top": "and"}, {"decision": None, "top": "return"}]}
+        "k.py:1:0": {"rows": [{"decision": "k.py:2:17", "top": "and"}, {"decision": None, "top": "return"}]}
     }
     groups = {"Katas": ["k*.py"], "Other": ["x.py"]}
-    assert source_report.of(files, {"k.py:2:18": PATHS}, cards, groups) == {
+    assert source_report.of(files, {"k.py:2:17": PATHS}, cards, groups) == {
         "$schema": "https://path-coverage.github.io/schemas/v1/path_coverage.source.schema.json",
         "schema": 1,
         "ignored": [],
@@ -63,7 +63,7 @@ def test_5e2a9130():
         "files": {
             "k.py": {
                 "lines": source_report.lines(KATA),
-                "decisions": {"k.py:2:18": source_report.decision(KATA, decisions, "k.py:2:18", PATHS, "and")},
+                "decisions": {"k.py:2:17": source_report.decision(KATA, decisions, "k.py:2:17", PATHS, "and")},
             }
         },
     }

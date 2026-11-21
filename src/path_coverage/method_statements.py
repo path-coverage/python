@@ -10,6 +10,7 @@ from . import totals as path_totals
 from .columns import Columns
 from .manifest import (
     INLINED,
+    UNMEASURED,
     Arm,
     loop_places,
     block_generator,
@@ -91,12 +92,12 @@ def loops(source, path):
 
 def _own_loops(function):
     """The loops in function's body, as loop_places finds them, in source
-    order, but those in a scope of their own inside it."""
+    order, but those in a scope of their own inside it, or not measured."""
     found = []
     waiting = list(reversed(function.body))
     while waiting:
         node = waiting.pop()
-        if isinstance(node, OWN_FRAMES):
+        if isinstance(node, (*OWN_FRAMES, *UNMEASURED)):
             continue
         if isinstance(node, ast.For):
             found.append(node)

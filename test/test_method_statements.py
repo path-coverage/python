@@ -373,7 +373,7 @@ def test_b47e3a26():
 SHOP = (
     "RATE = 2 if FAST else 1\n"
     "def ship(order):\n"
-    "    assert order.paid and order.packed\n"
+    "    while order.paid and order.packed: break\n"
     "class Shop:\n"
     "    SIZE = 3 if BIG else 1\n"
 )
@@ -399,7 +399,7 @@ def _then_taken(count):
 
 SHOP_PATHS = {
     "k.py:1:9": _then_taken(1),
-    "k.py:3:22": [
+    "k.py:3:21": [
         {"path": [True, True], "count": 1},
         {"path": [True, False], "count": 0},
         {"path": [False, None], "count": 0},
@@ -483,3 +483,17 @@ def test_b47e3a32():
         "    return box\n"
     )
     assert method_statements.reaches(source, "k.py") == ["k.py:2:0", "k.py:6:8", "k.py:7:4"]
+
+
+def test_b47e3a34():
+    """Example: settle, an assert of a list comprehension over orders, then
+    a for over orders.
+    Nothing in an assert is measured, so its comprehension is no loop of
+    settle's; the for is its one loop."""
+    source = (
+        "def settle(orders):\n"
+        "    assert [o for o in orders]\n"
+        "    for order in orders:\n"
+        "        order.close()\n"
+    )
+    assert method_statements.loops(source, "k.py") == {"k.py:1:0": ["k.py:3:4"]}

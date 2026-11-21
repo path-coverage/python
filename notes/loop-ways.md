@@ -62,7 +62,7 @@ loops; its longest way 493 steps, from a while loop.
 - while loops: no FOR_ITER; a row in a while's body adds a step per pass.
 - A for whose header holds a decision has no `for` row; its loop step's
   at names no row of the card. A comprehension's for is no row either.
-- `ways` of the card (card_ways) still counts a loop body once, not as
+- `ways` of the card (method_machine.counts) counts a loop body once, not as
   0/1/2+ times its passes, so the card's title can show fewer ways than
   were taken.
 - Each pass logs an event: the suite went from about 40 s to 54 s.

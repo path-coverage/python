@@ -88,19 +88,20 @@ def test_4a8c2e02():
 
 
 def test_4a8c2e03():
-    """Example: if a if b else True, then return (0 and a) or b
+    """Example: if a if b else True, then a while on (0 and a) or b
     A leaf whose form fixes its outcome, 0, and a leaf that is a
     conditional expression, the if's predicate, are wrapped too, as
     Python compiles a literal, or a literal arm, to no test; a literal
     that is no leaf, eg the arm True or the 1 returned, is not."""
-    tree, recorder, found = _rewritten("def f(a, b):\n    if a if b else True:\n        return 1\n    assert (0 and a) or b\n")
+    tree, recorder, found = _rewritten("def f(a, b):\n    if a if b else True:\n        return 1\n    while (0 and a) or b: break\n")
     assert ast.unparse(tree) == (
         "def f(a, b):\n"
         "    if __path_coverage__(0, a if b else True):\n"
         "        return 1\n"
-        "    assert __path_coverage__(1, 0) and __path_coverage__(2, a) or __path_coverage__(3, b)"
+        "    while __path_coverage__(1, 0) and __path_coverage__(2, a) or __path_coverage__(3, b):\n"
+        "        break"
     )
-    predicate, values = found.shapes["k.py:2:4"], found.shapes["k.py:4:21"]
+    predicate, values = found.shapes["k.py:2:4"], found.shapes["k.py:4:20"]
     assert [record.truthy for record in recorder.records] == [
         (Outcome(predicate, 0, True),),
         (Outcome(values, 0, True),),
@@ -396,10 +397,10 @@ def test_4a8c2e07():
 
 
 def test_4a8c2e10():
-    """Example: assert (a or b) if c else d, in rewrite mode
+    """Example: while (a or b) if c else d, in rewrite mode
     A leaf in a conditional expression's arm is tested as that expression
-    is: the assert tests only its truth, so a's and b's calls give back
+    is: the while tests only its truth, so a's and b's calls give back
     their truth, as c's does, c being the expression's own test."""
-    _, recorder, _ = _rewritten("def f(a, b, c, d):\n    assert (a or b) if c else d\n", "rewrite")
-    leaves = [record for record in recorder.records if isinstance(record, Leaf)]
+    _, recorder, _ = _rewritten("def f(a, b, c, d):\n    while (a or b) if c else d: break\n", "rewrite")
+    leaves = [record for record in recorder.records if isinstance(record, Leaf) and isinstance(record.truthy[0], Outcome)]
     assert [leaf.tested for leaf in leaves] == [True, True, True]

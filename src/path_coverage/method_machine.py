@@ -46,12 +46,17 @@ class _Exits:
     on to, each the end of the method unless a try in the method holds the
     block; broke the state a break goes on to, after the innermost loop
     holding the block, and continued the state a continue goes on to, the
-    loop's end, each None in no loop, where Python allows neither."""
+    loop's end, each None in no loop, where Python allows neither;
+    implicit the state a raise no statement writes, eg a call's, goes on
+    to: a fork into each handler of the innermost try with handlers whose
+    body holds the block, through the finally of any try between, None in
+    no such try's body."""
 
     raised: object
     returned: object
     broke: object
     continued: object
+    implicit: object
 
 
 def paths(source, path, loops=False):
@@ -59,7 +64,14 @@ def paths(source, path, loops=False):
     every path its machine's dry run gives, each its steps as
     Evaluations.ways has a way's; a loop is no fork, as _Built._loop
     says, unless loops is True."""
-    return {decision: list(_walked(entry)) for decision, (_, entry) in _machines(source, path, loop_forks=loops)[1].items()}
+    return {decision: _distinct(entry) for decision, (_, entry) in _machines(source, path, loop_forks=loops)[1].items()}
+
+
+def counts(source, path, loops=False):
+    """{def decision: how many paths} of each function in source, at path,
+    loops as paths has them: counted over its machine's states, each once,
+    so a function of billions of paths is counted without walking them."""
+    return {decision: _count(entry, {}) for decision, (_, entry) in _machines(source, path, loop_forks=loops)[1].items()}
 
 
 def ways(source, path, skipping=frozenset(), loops=False):
@@ -76,7 +88,7 @@ def ways(source, path, skipping=frozenset(), loops=False):
             continue
         stable = stable_names.of(function, [span for spans in leaves.values() for span in spans])
         split = {"possible": [], "impossible": []}
-        for way in _walked(entry):
+        for way in _distinct(entry):
             impossible = _contradicts(way, leaves, stable) or _empties(way, never_empty)
             split["impossible" if impossible else "possible"].append(way)
         found[decision] = split
@@ -107,6 +119,38 @@ def _machines(source, path, loop_forks=False):
     """(conditions, {def decision: (def node, its machine's entry state)})
     of each function in source, at path, conditions {decision:
     Condition}, its loops forks only when loop_forks is True."""
+    tree, conditions, built = _build(source, path, loop_forks)
+    columns = Columns(source)
+    return conditions, {
+        columns.name(path, node.lineno, node.col_offset): (node, built.block(node.body, END, _Exits(_uncaught, END, None, None, None)))
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def top_counter(source, path):
+    """A function giving how many ways one run can go through rows, a top
+    card's decision rows in source, at path, counted as a function's are:
+    its outermost decisions one after another, each deciding those inside
+    it. source is built once, for all its top cards."""
+    _, _, built = _build(source, path, False)
+
+    def count(rows):
+        """How many ways one run can go through rows, as top_counter says."""
+        names = [row.decision for row in rows]
+        outermost = [name for name in names if not any(built.holds(other, name) for other in names if other != name)]
+        state = END
+        for name in reversed(outermost):
+            state = built.decision(name, state)
+        return _count(state, {})
+
+    return count
+
+
+def _build(source, path, loop_forks):
+    """(tree, conditions, built) of source, at path: its parse, {decision:
+    Condition}, and the _Built of its states, its loops forks only when
+    loop_forks is True."""
     tree, conditions, nodes, disabled = manifest.found(source, path)
     columns = Columns(source)
     rows = set(method_statements.reaches(source, path))
@@ -115,11 +159,7 @@ def _machines(source, path, loop_forks=False):
         (conditions, nodes, loops), tree, rows, lambda node: columns.name(path, node.lineno, node.col_offset),
         (loop_forks, disabled),
     )
-    return conditions, {
-        columns.name(path, node.lineno, node.col_offset): (node, built.block(node.body, END, _Exits(_uncaught, END, None, None)))
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return tree, conditions, built
 
 
 def _spans(condition):
@@ -135,6 +175,12 @@ def _span(node):
 
 # The comment on a loop's line declaring it is never given no items.
 NEVER_EMPTY = "# path: impossible 0 items"
+
+
+def _holds(outer, inner):
+    """Whether the span outer, (line, col, end_line, end_col), holds the
+    span inner."""
+    return outer[:2] <= inner[:2] and inner[2:] <= outer[2:]
 
 
 def _never_empty_lines(source):
@@ -182,12 +228,34 @@ class _Built:
         self.rows = rows
         self.named = named
 
+    def decision(self, name, then):
+        """The state of the decision named name taking one of its paths,
+        then going on to then: an expression's as expression runs it, the
+        decisions in its arms too; a statement's, eg an if's or a match's,
+        or a filter's, as _decided does, its body not run."""
+        node = self.nodes[name]
+        if isinstance(node, ast.expr) and self.names.get(id(node)) == name:
+            return self.expression(node, then)
+        return self._decided(name, lambda _each: then)
+
+    def holds(self, outer, inner):
+        """Whether the decision named outer holds the one named inner: its
+        node's span holds inner's, or, the two the same node, outer is the
+        filter whose test inner is."""
+        if self.nodes[outer] is self.nodes[inner]:
+            return self.filters.get(id(self.nodes[outer])) == outer
+        return _holds(_span(self.nodes[outer]), _span(self.nodes[inner]))
+
     def block(self, statements, then, exits):
         """The state running statements, one after another, then going on
-        to then, a raise or return among them going out as exits says."""
+        to then, a raise or return among them going out as exits says,
+        and, in a try's body, a raise no statement writes going out before
+        any of them that may raise, as _may_raise says."""
         state = then
         for statement in reversed(statements):
             state = self.statement(statement, state, exits)
+            if exits.implicit is not None and _may_raise(statement):
+                state = Fork((state, exits.implicit))
         return state
 
     def statement(self, statement, then, exits):
@@ -198,7 +266,7 @@ class _Built:
         goes on to the state exits.raised gives its class; a with runs its
         items' decisions, then its body. A statement on a line not
         analysed takes no step and goes straight on to then."""
-        if statement.lineno in self.disabled:
+        if statement.lineno in self.disabled or isinstance(statement, manifest.UNMEASURED):
             return then
         if isinstance(statement, ast.If):
             return self._if(statement, then, exits)
@@ -206,43 +274,46 @@ class _Built:
             return self._reached(statement, self.expression(statement, exits.returned))
         if isinstance(statement, ast.Raise):
             return self._reached(statement, self.expression(statement, exits.raised(_raised_class(statement))))
-        if isinstance(statement, ast.Try):
+        if isinstance(statement, (ast.Try, ast.TryStar)):
             return self._try(statement, then, exits)
         if isinstance(statement, ast.Match):
             return self._match(statement, then, exits)
         if isinstance(statement, (ast.With, ast.AsyncWith)):
             return self._in_order(statement.items, self.block(statement.body, then, exits))
         if isinstance(statement, ast.For):
-            return self._loop(statement, statement.iter, (then, exits))
+            return self._loop(statement, statement.iter, (then, exits), self.loop_forks)
+        if isinstance(statement, ast.AsyncFor):
+            return self._loop(statement, statement.iter, (then, exits), False)
         if isinstance(statement, ast.While):
-            return self._loop(statement, statement.test, (then, exits))
+            return self._loop(statement, statement.test, (then, exits), self.loop_forks)
         if isinstance(statement, ast.Break):
             return exits.broke
         if isinstance(statement, ast.Continue):
             return exits.continued
         return self.expression(statement, then)
 
-    def _loop(self, statement, first, onward):
-        """The state running the for or while statement, then going on as
-        onward, (then, exits), says: the decisions of first, a for's
-        iterable or a while's test, as first run, then a fork, walked
-        without iterating: no pass, its body in no step, or at least one,
-        its body walked once, a continue ending the pass. Either way,
-        ending without a break, it runs its else. The loop steps first, by
-        its keyword; its later tests repeat its fork, so take no step.
-        Without loop_forks there is no fork and no step: its body is
-        walked once, inline."""
+    def _loop(self, statement, first, onward, forks):
+        """The state running the for, async for or while statement, then
+        going on as onward, (then, exits), says: the decisions of first, a
+        for's iterable or a while's test, as first run, then, when forks,
+        a fork, walked without iterating: no pass, its body in no step, or
+        at least one, its body walked once, a continue ending the pass.
+        Either way, ending without a break, it runs its else. The loop
+        steps first, by its keyword; its later tests repeat its fork, so
+        take no step. Without forks there is no fork and no step: its body
+        is walked once, inline."""
         then, exits = onward
         orelse = self.block(statement.orelse, then, exits)
         body = self.block(statement.body, orelse, replace(exits, broke=then, continued=orelse))
-        return self._passes(first, self.named(statement), orelse, body)
+        return self._passes(first, self.named(statement), (orelse, body), forks)
 
-    def _passes(self, first, loop, none, some):
+    def _passes(self, first, loop, onward, forks):
         """The state running first, a loop's iterable or test, then the
-        fork of the loop named loop: going on to none, its step 0 items,
-        or to some, its step 1+ items. Without loop_forks, no fork and no
-        step: first, then some."""
-        if not self.loop_forks:
+        fork of the loop named loop, onward being (none, some): going on
+        to none, its step 0 items, or to some, its step 1+ items. Without
+        forks, no fork and no step: first, then some."""
+        none, some = onward
+        if not forks:
             return self.expression(first, some)
         return self.expression(first, Fork((Step((loop, ("0 items",)), none), Step((loop, ("1+ items",)), some))))
 
@@ -259,8 +330,9 @@ class _Built:
 
     def _try(self, statement, then, exits):
         """The state running the try statement, then going on to then: its
-        body raises to the first handler catching the raise, and, raising
-        nothing, goes on to its else, which its handlers do not guard. Its
+        body raises to the first handler catching the raise, a raise no
+        statement writes to any handler, and, raising nothing, goes on to
+        its else, which its handlers do not guard. Its
         finally runs on each way out of the rest, then goes on out that
         way; a raise or return in the finally itself goes out by exits."""
 
@@ -270,7 +342,8 @@ class _Built:
 
         def through(onward):
             """The state running the finally, then going on to onward, a
-            loop's way out; None when onward is, in no loop."""
+            loop's way out or an outer try's handlers; None when onward is,
+            in no loop or no try's body."""
             return None if onward is None else finally_then(onward)
 
         guarded = _Exits(
@@ -278,8 +351,10 @@ class _Built:
             finally_then(exits.returned),
             through(exits.broke),
             through(exits.continued),
+            through(exits.implicit),
         )
         handlers = [(handler.type, self.block(handler.body, finally_then(then), guarded)) for handler in statement.handlers]
+        implicit = Fork(tuple(state for _, state in handlers)) if handlers else guarded.implicit
 
         def caught(raised_class):
             """The state a raise in the body of the class named raised_class
@@ -290,7 +365,7 @@ class _Built:
             return guarded.raised(raised_class)
 
         orelse = self.block(statement.orelse, finally_then(then), guarded)
-        return self.block(statement.body, orelse, replace(guarded, raised=caught))
+        return self.block(statement.body, orelse, replace(guarded, raised=caught, implicit=implicit))
 
     def _reached(self, statement, then):
         """The state of reaching statement, then going on to then: a step
@@ -383,7 +458,7 @@ class _Built:
         state = self._comprehension(node, generators[1:], then)
         for test in reversed(generator.ifs):
             state = self._decided(self.filters[id(test)], lambda each, onward=state: onward if each[0] else then)
-        return self._passes(generator.iter, self.loops[id(generator)], then, state)
+        return self._passes(generator.iter, self.loops[id(generator)], (then, state), self.loop_forks)
 
     def _in_order(self, nodes, then):
         """The state running the decisions of each of nodes, one after
@@ -392,6 +467,34 @@ class _Built:
         for node in reversed(nodes):
             state = self.expression(node, state)
         return state
+
+
+# The statements whose own code runs before the first step of their body,
+# by the field holding it: only that code can raise before their body's.
+_HEADS = {ast.If: "test", ast.While: "test", ast.For: "iter", ast.AsyncFor: "iter", ast.Match: "subject"}
+
+# The nodes whose running raises nothing: reading or binding a name, a
+# constant, a not, and the statements made only of them.
+_QUIET = (ast.Name, ast.Constant, ast.Load, ast.Store, ast.Assign, ast.Return, ast.Not)
+
+
+def _may_raise(statement):
+    """Whether statement can raise with no raise written, before its first
+    step: false for a raise, its own way out, and a try, whose body's
+    statements are asked in turn; else whether its head, or the whole
+    statement when it has none, eg a call's, is loud, as _loud says."""
+    if isinstance(statement, (ast.Raise, ast.Try, ast.TryStar)):
+        return False
+    head = _HEADS.get(type(statement))
+    return _loud(statement if head is None else getattr(statement, head))
+
+
+def _loud(node):
+    """Whether running node can raise: it is not quiet, or one of its
+    children is loud. A not's operator is quiet; any other operator, eg -,
+    can call a method."""
+    quiet = isinstance(node, _QUIET) or (isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not))
+    return not quiet or any(_loud(child) for child in ast.iter_child_nodes(node))
 
 
 def _uncaught(_raised_class):
@@ -421,6 +524,26 @@ def _catches(named, raised_class):
     if isinstance(handled, type) and isinstance(raised, type):
         return issubclass(raised, handled)
     return named.id == raised_class
+
+
+def _count(state, known):
+    """How many paths go from state, as _walked gives them, known holding
+    the count of each state already counted, by its id, as forks share
+    the states they go on to."""
+    if state is END:
+        return 1
+    if id(state) not in known:
+        onward = (state.then,) if isinstance(state, Step) else state.states
+        known[id(state)] = sum(_count(each, known) for each in onward)
+    return known[id(state)]
+
+
+def _distinct(entry):
+    """Every path from entry, as _walked gives them, each once, in the
+    order first walked: two forks that send nothing, eg a raise no
+    statement writes going to a handler before either of two statements
+    with no step between them, can end in the same steps."""
+    return list(dict.fromkeys(_walked(entry)))
 
 
 def _walked(state):

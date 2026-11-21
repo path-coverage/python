@@ -8,7 +8,7 @@ objects onto these facts, and a rewrite wraps the nodes they name."""
 
 import ast
 
-from . import decision_paths, manifest, method_statements, scopes
+from . import decision_paths, leaving, manifest, method_statements, scopes
 from .columns import Columns
 from .evaluations import Shape
 
@@ -65,7 +65,7 @@ class Source:
         self.statements = [
             (node, name)
             for node in ast.walk(tree)
-            if isinstance(node, (ast.Return, ast.Raise))
+            if leaving.word(node)
             if (name := columns.name(path, node.lineno, node.col_offset)) in reaches
         ]
 

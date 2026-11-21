@@ -85,3 +85,29 @@ test/test_method_statements.py unless stated.
 
 15. The index's percent rounds a half up, 62.5% to 63%, not to the even
     62% Python's round gives. (test/test_html_report.py 4f08d205)
+
+## Ways out
+
+16. An assert is not measured. Its author holds it can never be false,
+    so no test can drive its false paths. Neither its test nor its
+    message holds a decision, and it forks nothing, as with python -O.
+    (test/test_manifest.py 5c1e9a19, test/test_method_machine.py
+    5b1f3c38)
+
+17. In a try's body, a raise that no statement writes can reach any
+    handler before each statement that may raise. That is a statement
+    whose code (an if's test, a for's iterable, a match's subject, or
+    the whole of a simple statement) holds anything but names,
+    constants and not. There is no fork before a written raise, which
+    is its own way out. There is none mid-statement or at the body's
+    end. Only a handler catches such a raise. A try with only a
+    finally passes it on to an outer try's handlers. As in Ruby, the
+    raise is never modelled as leaving the method uncaught.
+    (test/test_method_machine.py 5b1f3c03, 5b1f3c04, 5b1f3c07,
+    5b1f3c3d)
+
+18. An async for is a loop its break and continue end, but it is never
+    a fork, even with loops. Its body is walked once, inline. No run
+    records its passes, as neither mode sees them: monitoring keys on
+    FOR_ITER, and the rewrite wraps a plain iterable.
+    (test/test_method_machine.py 5b1f3c3b)

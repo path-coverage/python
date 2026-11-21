@@ -101,5 +101,5 @@ smarter to chase a perfect answer.
 ## Python now
 
 Nothing is ruled out. `method_statements.size` adds every row's
-paths; `card_ways` drops only rows that are a whole leaf. Ruby rules
+paths; `method_machine.counts` drops only rows that are a whole leaf. Ruby rules
 out correlated stable leaves: ruby/notes/impossible-combined-paths.md.
