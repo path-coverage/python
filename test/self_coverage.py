@@ -21,6 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
 import suites
 from _pytest.assertion.rewrite import rewrite_asserts
 
@@ -74,7 +75,8 @@ def start():
     unconfigures, in the events mode PATH_COVERAGE_SELF_EVENTS names,
     monitoring when it is not set. This file and suites.py, loaded before it starts, run
     outside the measured run, so are skipped; so are the files the suite
-    leaves out, which never run."""
+    leaves out, which never run. Returns the copy's kernel, which counts
+    each test under its node id as the test runs."""
     into = Path(tempfile.mkdtemp(prefix="path_coverage_self."))
     copy(into)
     sys.path.insert(0, str(into))
@@ -93,6 +95,16 @@ def start():
         on_exit=_reports.append,
     )
     _reports.append(lambda: shutil.rmtree(into))
+    return kernel
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Counts item's setup, call and teardown under its node id in the
+    self-coverage report, then what follows under no test."""
+    KERNEL.testing(item.nodeid)
+    yield
+    KERNEL.testing(KERNEL.tally.NO_TEST)
 
 
 def pytest_unconfigure(config):
@@ -102,4 +114,4 @@ def pytest_unconfigure(config):
         _reports.pop(0)()
 
 
-start()
+KERNEL = start()

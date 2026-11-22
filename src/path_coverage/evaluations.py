@@ -9,6 +9,8 @@ its frame."""
 from dataclasses import dataclass
 
 from .kinds.block import ITEMS
+from . import tally
+from .tally import NO_TEST, Tally
 from .walk import Walk
 
 # How many events the log holds before they are rebuilt.
@@ -42,12 +44,14 @@ def _following(possible):
 
 
 class Evaluations:
-    """The counts the reports carry: counts, {(decision, leaf index):
-    {"truthy": n, "falsy": n}} of every leaf reached; decision_paths,
-    {decision: {path: n}} of every evaluation completed; reached,
-    {name: runs} of every statement reached, eg {"k.py:3:4": 2}; and
-    ways, {function's entry: {way: calls}}, each way the steps one call
-    took, in order, a decision's (name, path) or a statement's (name,).
+    """The counts the reports carry, each a Tally by the test that made
+    it, test being the one under way, NO_TEST outside every test: counts,
+    {(decision, leaf index): {"truthy": Tally, "falsy": Tally}} of every
+    leaf reached; decision_paths, {decision: {path: Tally}} of every
+    evaluation completed; reached, {name: Tally} of every statement
+    reached; and ways, {function's entry: {way: Tally}}, each way the
+    steps one call took, in order, a decision's (name, path) or a
+    statement's (name,).
     Events are logged as they happen, as (frame, actions), and rebuilt
     into these counts by flush: a frame is the key of the code running,
     the ids of its frame and of its code, so two runs share one only when
@@ -56,7 +60,8 @@ class Evaluations:
 
     def __init__(self, limit=LIMIT):
         """Starts with nothing counted; the log is rebuilt once it holds
-        limit events."""
+        limit events, outside every test."""
+        self.test = NO_TEST
         self.counts = {}
         self.decision_paths = {}
         self.reached = {}
@@ -75,6 +80,14 @@ class Evaluations:
         self.log.append((frame, actions))
         if len(self.log) >= self.limit:
             self.flush()
+
+    def switch(self, test):
+        """Counts from now on under test, a test's id, or NO_TEST: first
+        rebuilds the log and ends every way under way, so everything the
+        test before made counts under it."""
+        self.flush()
+        self.close()
+        self.test = test
 
     def flush(self):
         """Applies every logged action, in the order logged, emptying the
@@ -138,7 +151,7 @@ class Evaluations:
 
     def reach(self, name):
         """Counts a run of the statement named name."""
-        self.reached[name] = self.reached.get(name, 0) + 1
+        tally.add(self.reached, name, self.test)
 
     def enter(self, frame, name):
         """Starts the way of a call of the function whose entry is named
@@ -147,7 +160,7 @@ class Evaluations:
         the id of one that has finished, and a new call always enters
         before anything else happens in it."""
         self._walked(frame)
-        self._walking[frame] = Walk(name, self.ways, self.loops, self.repeats)
+        self._walking[frame] = Walk(name, self.ways, self.loops, self.repeats, self.test)
         self.reach(name)
 
     def ran(self, frame, name):
@@ -226,14 +239,15 @@ class Evaluations:
 
     def _count(self, shape, index, outcome):
         """Counts outcome of shape's leaf index."""
-        counts = self.counts.setdefault((shape.name, index), {"truthy": 0, "falsy": 0})
-        counts["truthy" if outcome else "falsy"] += 1
+        counts = self.counts.get((shape.name, index))
+        if counts is None:
+            counts = self.counts[(shape.name, index)] = {"truthy": Tally(), "falsy": Tally()}
+        counts["truthy" if outcome else "falsy"].add(self.test)
 
     def _taken(self, frame, shape, path):
         """Counts one more evaluation of shape taking path, a step of the
         way under way in frame."""
-        paths = self.decision_paths.setdefault(shape.name, {})
-        paths[path] = paths.get(path, 0) + 1
+        tally.add(self.decision_paths.setdefault(shape.name, {}), path, self.test)
         self._step(frame, (shape.name, path))
 
 

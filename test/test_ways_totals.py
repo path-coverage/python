@@ -1,4 +1,5 @@
 from path_coverage.ways_totals import failed, lines
+from tallies import untested
 
 WAY = [{"at": "4:08", "path": [True]}, {"at": "6:04"}]
 
@@ -12,7 +13,7 @@ def test_b81f4a01():
     more paths than max_paths, naming its value. A top flow, which no
     call runs, counts in neither."""
     total = {
-        "name": "total", "ways": 3, "taken": [], "covered": [{"way": WAY, "count": 1}] * 2, "gaps": [WAY], "impossible_taken": [],
+        "name": "total", "ways": 3, "taken": [], "covered": [{"way": WAY, "tests": untested(1)}] * 2, "gaps": [WAY], "impossible_taken": [],
     }
     price = {"name": "price", "ways": 27, "taken": []}
     top = {"name": "<module>", "ways": 2}
@@ -30,11 +31,11 @@ def test_b81f4a02():
     A report with a path no test took fails, as one with a function over
     max_paths does; one with every path taken does not, nor one with no
     function."""
-    untested = {
-        "name": "total", "ways": 3, "taken": [], "covered": [{"way": WAY, "count": 1}] * 2, "gaps": [WAY], "impossible_taken": [],
+    gapped = {
+        "name": "total", "ways": 3, "taken": [], "covered": [{"way": WAY, "tests": untested(1)}] * 2, "gaps": [WAY], "impossible_taken": [],
     }
-    tested = {**untested, "covered": [{"way": WAY, "count": 1}] * 3, "gaps": []}
-    listings = [[untested], [tested], [], [tested, tested], [tested, untested]]
+    tested = {**gapped, "covered": [{"way": WAY, "tests": untested(1)}] * 3, "gaps": []}
+    listings = [[gapped], [tested], [], [tested, tested], [tested, gapped]]
     reports = [{"max_paths": 8, "flows": {f"src/a.py:{line}:0": flow for line, flow in enumerate(flows, 1)}} for flows in listings]
     assert [failed(report) for report in reports] == [True, False, False, False, True]
 
@@ -44,5 +45,5 @@ def test_b81f4a03():
     took a path its # path: impossible comment declared impossible
     A report where a call took a path declared impossible fails: the
     declaration is wrong, and the worklist says to remove it."""
-    retry = {"name": "retry", "ways": 1, "taken": [], "covered": [{"way": WAY, "count": 1}], "gaps": [], "impossible_taken": [WAY]}
+    retry = {"name": "retry", "ways": 1, "taken": [], "covered": [{"way": WAY, "tests": untested(1)}], "gaps": [], "impossible_taken": [WAY]}
     assert failed({"max_paths": 8, "flows": {"src/retry.py:2:0": retry}}) is True

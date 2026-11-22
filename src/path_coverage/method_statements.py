@@ -206,8 +206,8 @@ def taken(rows, paths, reached=None):
 
 
 def _taken_decision(row, paths):
-    """How many of a decision row's paths have a count in paths."""
-    return sum(1 for each in paths[row.decision] if each["count"] > 0)
+    """How many of a decision row's paths some test took, in paths."""
+    return sum(1 for each in paths[row.decision] if each["tests"].total > 0)
 
 
 def collected(source, path):

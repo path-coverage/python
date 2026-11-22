@@ -1,4 +1,5 @@
 from path_coverage import manifest, decision_paths, source_report
+from tallies import untested
 
 
 def test_7d61a401():
@@ -96,5 +97,5 @@ def _fold(source, decision, top):
     source report has them, headed by top, a column for each of its
     possible paths."""
     decisions = manifest.decisions(source, "k.py")
-    paths = [{"path": path, "count": 0} for path in decision_paths.possible(decisions[decision])]
+    paths = [{"path": path, "tests": untested(0)} for path in decision_paths.possible(decisions[decision])]
     return source_report.decision(source, decisions, decision, paths, top)["fold"]

@@ -8,7 +8,7 @@ from . import code_tokens, fold_rows, decision_locations, decision_tree, summary
 SCHEMA = 1
 
 # The URL of the schema the source report follows.
-SCHEMA_URL = "https://path-coverage.github.io/schemas/v2/path_coverage.source.schema.json"
+SCHEMA_URL = "https://path-coverage.github.io/schemas/v3/path_coverage.source.schema.json"
 
 
 def of(files, paths, flows, groups):
@@ -48,7 +48,7 @@ def decision(source, decisions, name, paths, top):
     The decision named name, of decisions, {name: Condition}, in source: the
     [first, last] lines it spans, from the line its code starts on, and its
     fold's rows, headed by top, its row's top, a column for each of paths,
-    [{"path", "count"}], in their order, with no counts."""
+    [{"path", "tests"}], in their order, with no counts."""
     condition = decisions[name]
     span = [condition.extent[0], condition.leaves()[-1].end_line]
     return {"span": span, "fold": _fold(source, condition, paths, top)}

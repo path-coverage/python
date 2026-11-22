@@ -2,6 +2,7 @@ from path_coverage import fold_rows
 from path_coverage.decision_paths import possible
 from path_coverage.decision_tree import tree_of
 from path_coverage.manifest import decisions
+from tallies import untested
 
 
 def _shown(row):
@@ -120,7 +121,7 @@ def test_a91f2b08():
         "    return total\n"
     )
     [condition] = decisions(source, "k.py").values()
-    paths = [{"path": path, "count": 1} for path in possible(condition)]
+    paths = [{"path": path, "tests": untested(1)} for path in possible(condition)]
     rows = fold_rows.rows(tree_of(source, condition, paths))
     assert [_shown(row) for row in _of_kind(rows, "leaves")] == [["return", "leaves", ""]]
 

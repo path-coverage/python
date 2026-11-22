@@ -1,5 +1,6 @@
 from path_coverage.manifest import decisions
 from path_coverage.source_lines import lines_of
+from tallies import untested
 
 SOURCE = (
     "def can_attest(user, flow):\n"
@@ -18,9 +19,9 @@ def test_0d9b5501():
     the line its last operand ends on, so a multi-line condition is one
     span, even an or named at its keyword on its second line."""
     operands = {
-        "src/model/flow.py:2:4": [{"truthy": 1, "falsy": 1}],
-        "src/model/flow.py:2:19": [{"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
-        "src/model/flow.py:6:8": [{"truthy": 2, "falsy": 0}, {"truthy": 0, "falsy": 0}],
+        "src/model/flow.py:2:4": [{"truthy": untested(1), "falsy": untested(1)}],
+        "src/model/flow.py:2:19": [{"truthy": untested(1), "falsy": untested(1)}, {"truthy": untested(1), "falsy": untested(1)}],
+        "src/model/flow.py:6:8": [{"truthy": untested(2), "falsy": untested(0)}, {"truthy": untested(0), "falsy": untested(0)}],
     }
     found = decisions(SOURCE, "src/model/flow.py")
     assert lines_of(SOURCE, found, operands) == [
@@ -44,9 +45,9 @@ def test_0d9b5502():
         "    )\n"
     )
     operands = {
-        "src/model/flow.py:2:61": [{"truthy": 3, "falsy": 1}, {"truthy": 1, "falsy": 1}, {"truthy": 1, "falsy": 1}],
-        "src/model/flow.py:2:29": [{"truthy": 4, "falsy": 2}],
-        "src/model/flow.py:2:41": [{"truthy": 4, "falsy": 2}, {"truthy": 0, "falsy": 2}],
+        "src/model/flow.py:2:61": [{"truthy": untested(3), "falsy": untested(1)}, {"truthy": untested(1), "falsy": untested(1)}, {"truthy": untested(1), "falsy": untested(1)}],
+        "src/model/flow.py:2:29": [{"truthy": untested(4), "falsy": untested(2)}],
+        "src/model/flow.py:2:41": [{"truthy": untested(4), "falsy": untested(2)}, {"truthy": untested(0), "falsy": untested(2)}],
     }
     found = decisions(source, "src/model/flow.py")
     assert [(line["status"], line["span"]) for line in lines_of(source, found, operands)] == [

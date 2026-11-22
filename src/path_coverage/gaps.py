@@ -19,12 +19,12 @@ def lines(operands, paths, texts):
 def _decision_gaps(decision, operands, paths, texts):
     """One line for a decision none of whose leaves ever ran, else one per path
     it never took."""
-    if sum(counts["truthy"] + counts["falsy"] for counts in operands) == 0:
+    if sum(_runs(counts) for counts in operands) == 0:
         return [f"{decision} never reached"]
     return [
         f"{decision} path never taken: {steps(each['path'], texts)}"
         for each in paths
-        if each["count"] == 0
+        if each["tests"].total == 0
     ]
 
 
@@ -56,13 +56,18 @@ def operand_gap(counts):
         return ["never evaluated"]
     if counts.get("only"):
         return []
-    if counts["truthy"] == 0:
+    if counts["truthy"].total == 0:
         return ["never true"]
-    if counts["falsy"] == 0:
+    if counts["falsy"].total == 0:
         return ["never false"]
     return []
 
 
 def _never_ran(counts):
     """True when the operand was never recorded either way."""
-    return counts["truthy"] == 0 and counts["falsy"] == 0
+    return _runs(counts) == 0
+
+
+def _runs(counts):
+    """How often the operand was recorded, either way, over every test."""
+    return (counts["truthy"] + counts["falsy"]).total

@@ -1,4 +1,5 @@
 from path_coverage.console_summary import group_totals, grouped_lines, lines
+from tallies import untested
 
 GROUPS = {"code": ["src/**/*.py"], "test": ["test/**/*.py"]}
 
@@ -9,9 +10,9 @@ def test_7c3d9101():
     Methods are not measured, so there is no combined line."""
     paths = {
         "src/kata.py:3:11": [
-            {"path": [True, True], "count": 2},
-            {"path": [True, False], "count": 1},
-            {"path": [False, None], "count": 0},
+            {"path": [True, True], "tests": untested(2)},
+            {"path": [True, False], "tests": untested(1)},
+            {"path": [False, None], "tests": untested(0)},
         ]
     }
     assert lines(paths) == ["Paths alone: 2 / 3 (66.67%)"]
@@ -24,13 +25,13 @@ def test_7c3d9102():
     There is no total over every group."""
     paths = {
         "src/kata.py:3:11": [
-            {"path": [True, True], "count": 2},
-            {"path": [True, False], "count": 1},
-            {"path": [False, None], "count": 0},
+            {"path": [True, True], "tests": untested(2)},
+            {"path": [True, False], "tests": untested(1)},
+            {"path": [False, None], "tests": untested(0)},
         ],
         "test/test_kata.py:9:11": [
-            {"path": [True], "count": 4},
-            {"path": [False], "count": 0},
+            {"path": [True], "tests": untested(4)},
+            {"path": [False], "tests": untested(0)},
         ],
     }
     assert lines(paths, groups=GROUPS) == [
@@ -60,7 +61,7 @@ def test_7c3d9103():
 def test_7c3d9104():
     """Example: two decisions, both in src/, with groups code and test
     code totals both decisions' paths; test totals none."""
-    taken_once = {"path": [True], "count": 1}
+    taken_once = {"path": [True], "tests": untested(1)}
     paths = {"src/a.py:1:0": [taken_once], "src/b.py:1:0": [taken_once]}
     assert group_totals(paths, None, GROUPS) == {
         "code": {"alone": [2, 2]},

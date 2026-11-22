@@ -102,6 +102,22 @@ part, `path_coverage.gw0.json` and so on, and the controller adds every
 part's counts to its own report, so the gaps are those that every worker
 left.
 
+The plugin counts each test's setup, call and teardown under the test's
+node id. In `path_coverage.json` every count of what the run did is a
+tally by test, eg a path's:
+
+```json
+{ "path": [true, false], "tests": { "ebded4bbf7ae": 2, "9a8e6a205ed4": 1 } }
+```
+
+Each key is the first 12 hex digits of the sha256 of a test's node id,
+and the report's `tests` names each key's test, `(no test)` being what
+ran between tests, eg a module's import. So a reader can tell which
+tests take which paths, eg to find the fewest tests that keep each of a
+function's paths taken. Another test runner marks its tests itself:
+`path_coverage.testing(test_id)` as each test starts, and
+`path_coverage.testing(path_coverage.tally.NO_TEST)` as it ends.
+
 ## Use when you cannot edit the code!
 
 A run whose own files are thrown away, such as one in a `docker build`

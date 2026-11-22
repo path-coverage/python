@@ -9,7 +9,7 @@ from .paths_report import segment
 
 def tree_of(source, condition, paths):
     """{"operator", "counts", "cells", "operands"} for one decision, from its
-    paths, [{"path", "count"}, ...]. counts are the columns' counts. Every
+    paths, [{"path", "tests"}, ...]. counts are the columns' totals. Every
     node has cells, one per column: a leaf {"text", "cells"} its outcome,
     None where unreached; a condition {"operator", "cells", "operands"} its
     value; an arm {"arm", "text", "cells", "body"} whether the column took
@@ -17,12 +17,12 @@ def tree_of(source, condition, paths):
     columns = [
         taken
         for _, taken in sorted(
-            enumerate(paths), key=lambda item: (0 if item[1]["count"] == 0 else 1, item[0])
+            enumerate(paths), key=lambda item: (0 if item[1]["tests"].total == 0 else 1, item[0])
         )
     ]
     outcomes = [taken["path"] for taken in columns]
     tree = _node(source, condition, outcomes, iter(range(len(condition.leaves()))))
-    return {**tree, "counts": [taken["count"] for taken in columns]}
+    return {**tree, "counts": [taken["tests"].total for taken in columns]}
 
 
 def node(source, condition, outcomes):

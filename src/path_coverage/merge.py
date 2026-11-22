@@ -1,11 +1,13 @@
 """Adds several runs' results together, so a report shows only the gaps
-that every run left. Counts are summed: a union that de-duplicates, as
-coverage.py's combine does for lines, would lose them."""
+that every run left. Counts are Tallies, summed test by test: a union that
+de-duplicates, as coverage.py's combine does for lines, would lose them."""
+
+from .tally import Tally
 
 
 def merge(runs):
     """The operands of runs (each as result.operands gives them) with each
-    operand's truthy and falsy counts added across them, keeping only."""
+    operand's truthy and falsy Tallies added across them, keeping only."""
     merged = {}
     for run in runs:
         for decision, operands in run.items():
@@ -20,27 +22,28 @@ def merge(runs):
 
 def merge_paths(runs):
     """The paths of runs (each as result.paths gives them) with each path's
-    count added across them, in the order the paths first appear."""
+    Tally added across them, in the order the paths first appear."""
     merged = {}
     for run in runs:
         for decision, paths in run.items():
             totals = merged.setdefault(decision, {})
             for each in paths:
                 key = tuple(each["path"])
-                totals[key] = totals.get(key, 0) + each["count"]
+                totals[key] = totals.get(key, Tally()) + each["tests"]
     return {
-        decision: [{"path": list(path), "count": count} for path, count in totals.items()]
+        decision: [{"path": list(path), "tests": counted} for path, counted in totals.items()]
         for decision, totals in merged.items()
     }
 
 
 def merge_ways(runs):
     """The ways of runs (each as Evaluations.ways has them) with each way's
-    calls added across them, in the order the ways first appear."""
+    Tally of calls added across them, in the order the ways first
+    appear."""
     merged = {}
     for run in runs:
         for entry, walked in run.items():
             totals = merged.setdefault(entry, {})
-            for way, count in walked.items():
-                totals[way] = totals.get(way, 0) + count
+            for way, counted in walked.items():
+                totals[way] = totals.get(way, Tally()) + counted
     return merged

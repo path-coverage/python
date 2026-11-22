@@ -6,6 +6,7 @@ import ast
 
 from . import paths_tree, method_machine, method_statements, ways_report
 from .source_lines import lines_of
+from .tally import Tally
 
 # The most paths a function may have and still be checked, by default.
 MAX_PATHS = 4096
@@ -20,10 +21,11 @@ def of(files, operands, paths, counted, loops=False, max_paths=MAX_PATHS):
     """{flow decision: flow} of every flow in files, {path relative to root:
     (source, decisions)}: each function's, by its def's decision, then each top
     flow's, by its first line, as flow gives them; operands and paths as
-    result gives them, counted (reached, ways), each statement's runs, None
-    when not known, and each function's ways taken, as Evaluations.ways
-    has them, loops and max_paths as function_flows has them. Example: {"k.py:1:0":
-    {"name": "ship", "first": 1, "last": 3, "ways": 2, "calls": 1,
+    result gives them, counted (reached, ways), each statement's Tally of
+    runs, None when not known, and each function's ways taken, as
+    Evaluations.ways has them, loops and max_paths as function_flows has
+    them. Example: {"k.py:1:0": {"name": "ship", "first": 1, "last": 3,
+    "ways": 2, "calls": Tally({"(no test)": 1}),
     "rows": [...], "taken": [...]}}."""
     listed = {}
     for path, (source, decisions) in files.items():
@@ -49,8 +51,8 @@ def tree(files, operands):
 
 def function_flows(source, at, paths, counted, limits=(False, MAX_PATHS)):
     """The flows of each function in source, at being its (path, decisions), as
-    of gives them: each counting its calls, its entry's runs, 0 when never
-    called, None when not known, and listing the ways its calls took, as
+    of gives them: each counting its calls, its entry's Tally of runs,
+    empty when never called, None when not known, and listing the ways its calls took, as
     ways_report.taken gives them, none when never called. limits is
     (loop_forks, max_paths): its loops forks in its ways only when
     loop_forks is True, as method_machine.ways has it; a function with
@@ -66,7 +68,7 @@ def function_flows(source, at, paths, counted, limits=(False, MAX_PATHS)):
     listed = method_machine.ways(source, path, skipping=over, loops=loop_forks)
     flows = {}
     for decision, rows in method_statements.of(source, path).items():
-        calls = None if reached is None else reached.get(decision, 0)
+        calls = None if reached is None else reached.get(decision, Tally())
         count = counts[decision] if decision in over else len(listed[decision]["possible"])
         title = (names[decision], lasts[decision], count, calls)
         flows[decision] = flow(decision, title, rows, method_statements.taken(rows, paths, reached))
@@ -76,10 +78,10 @@ def function_flows(source, at, paths, counted, limits=(False, MAX_PATHS)):
             continue
         possible = listed[decision]["possible"]
         seen = {}
-        for way, count in ways.get(decision, {}).items():
+        for way, counted in ways.get(decision, {}).items():
             for each in method_machine.witnessed(way, loop_forks):
-                seen[each] = seen.get(each, 0) + count
-        flows[decision]["covered"] = [{"way": ways_report.way(way), "count": seen[way]} for way in possible if way in seen]
+                seen[each] = seen.get(each, Tally()) + counted
+        flows[decision]["covered"] = [{"way": ways_report.way(way), "tests": seen[way]} for way in possible if way in seen]
         flows[decision]["gaps"] = [ways_report.way(way) for way in possible if way not in seen]
         impossible = listed[decision]["impossible"]
         flows[decision]["impossible"] = [ways_report.way(way) for way in impossible]
@@ -132,8 +134,8 @@ def scopes(source):
 def flow(decision, title, rows, taken):
     """The flow at decision, its title (name, last, ways, calls): titled name,
     its first line from decision, ending on line last, ways the ways one call
-    can go through it, as method_machine counts them, calls how many times it
-    was called, None for a top flow or when not known; and a row for each
+    can go through it, as method_machine counts them, calls the Tally of its
+    calls, None for a top flow or when not known; and a row for each
     of rows, Statements, with its taken, as method_statements.taken gives
     them."""
     name, last, ways, calls = title

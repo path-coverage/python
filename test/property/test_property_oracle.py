@@ -106,7 +106,11 @@ def _assert_counted_exactly(generated, tmp_path):
             oracles[-1].add(values, trace)
     write()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    taken = {decision: {tuple(path["path"]): path["count"] for path in each["taken"] if path["count"]} for decision, each in report["paths"].items()}
+    taken = {
+        decision: {tuple(path["path"]): sum(path["tests"].values()) for path in each["taken"] if path["tests"]}
+        for decision, each in report["paths"].items()
+    }
+    counted = {name: sum(tallied.values()) for name, tallied in report["reached"].items()}
     derived = {name: dict(counts) for each in oracles for name, counts in each.counts.items()}
     reached = sum((each.reached for each in oracles), Counter())
-    assert ({decision: paths for decision, paths in taken.items() if paths}, report["reached"]) == (derived, dict(reached))
+    assert ({decision: paths for decision, paths in taken.items() if paths}, counted) == (derived, dict(reached))
