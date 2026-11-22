@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from path_coverage import card_tree, manifest, decision_paths
+from path_coverage import paths_tree, manifest, decision_paths
 
 TOP = (None, None, None, None, None)
 
 
 def _places(source):
-    """(parent, in, on, leaf, gives) of each row of source's one card, its
+    """(parent, in, on, leaf, gives) of each row of source's one flow, its
     def on line 1, as if source were k.py."""
-    rows = card_tree.of(source, "k.py")["k.py:1:0"]
+    rows = paths_tree.of(source, "k.py")["k.py:1:0"]
     keys = ("parent", "in", "on", "leaf", "gives")
     return {key: tuple(place[name] for name in keys) for key, place in rows.items()}
 
@@ -156,7 +156,7 @@ def test_5be7c009():
 
 def test_5be7c005():
     """Example: every Python file of the package's src and test.
-    Every row placed in a parent is placed in a row of its own card, on
+    Every row placed in a parent is placed in a row of its own flow, on
     some of that parent's possible paths and on none it does not have: no
     row hangs from nothing, or runs on no path. And no row is its own
     ancestor: following parents from any row reaches the top."""
@@ -167,12 +167,12 @@ def test_5be7c005():
 
 
 def _misplaced(source):
-    """Each misfit of every card of source, as if it were k.py: a parent
-    that is no row of its card, a row on no path, a path its parent does
+    """Each misfit of every flow of source, as if it were k.py: a parent
+    that is no row of its flow, a row on no path, a path its parent does
     not have, and a row that is its own ancestor."""
     decisions = manifest.decisions(source, "k.py")
     found = []
-    for rows in card_tree.of(source, "k.py").values():
+    for rows in paths_tree.of(source, "k.py").values():
         inner = [place for place in rows.values() if place["parent"]]
         for place in inner:
             parent = place["parent"]
@@ -185,7 +185,7 @@ def _misplaced(source):
 
 
 def _looped(rows):
-    """The key each row of rows, a card's places, reaches after as many
+    """The key each row of rows, a flow's places, reaches after as many
     steps up its parents as rows has rows: none, unless a row is its own
     ancestor, as every other walk reaches the top."""
     reached = []

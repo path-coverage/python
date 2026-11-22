@@ -1,4 +1,4 @@
-"""A function card's taken ways, and its for loops' passes, as the JSON
+"""A function flow's taken ways, and its for loops' passes, as the JSON
 report lists them, and read back from a report: each way the steps one
 call, or one pass, took, in order, a decision row's {"at", "path"}, a for
 loop's {"at", "path"}, its path how many passes it made, or a statement
@@ -24,14 +24,14 @@ def way(steps):
 
 def ways(report):
     """{function's entry, or for loop's name: {way: count}} of a JSON
-    report's cards, as Evaluations.ways has them, from each card listing
-    its taken ways and its loops' passes; a top card lists neither, as no
+    report's flows, as Evaluations.ways has them, from each flow listing
+    its taken ways and its loops' passes; a top flow lists neither, as no
     call runs it."""
     found = {}
-    for entry, card in report["cards"].items():
-        if "taken" in card:
-            found[entry] = _read(entry, card["taken"])
-            for loop, passes in card["passes"].items():
+    for entry, flow in report["flows"].items():
+        if "taken" in flow:
+            found[entry] = _read(entry, flow["taken"])
+            for loop, passes in flow["passes"].items():
                 name = _name(_file(entry), loop)
                 found[name] = _read(name, passes)
     return found
@@ -52,7 +52,7 @@ def unlisted(listed_ways):
 
 def at(name):
     """The line:column of the row or loop named name, the column two
-    digits, as the card's rows have it. Example: "k.py:4:8" gives "4:08"."""
+    digits, as the flow's rows have it. Example: "k.py:4:8" gives "4:08"."""
     _, line, column = name.rsplit(":", 2)
     return f"{line}:{int(column):02d}"
 

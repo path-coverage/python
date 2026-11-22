@@ -5,18 +5,18 @@ WAY = [{"at": "4:08", "path": [True]}, {"at": "6:04"}]
 
 def test_b81f4a01():
     """Example: a report of total, 3 ways, 2 covered, and price, more
-    paths than max_paths 8 allows, beside a top card, reported with
+    paths than max_paths 8 allows, beside a top flow, reported with
     max_paths 8
     The totals are read from the report's JSON alone: the ways covered
     out of every listed function's ways, then how many functions have
-    more paths than max_paths, naming its value. A top card, which no
+    more paths than max_paths, naming its value. A top flow, which no
     call runs, counts in neither."""
     total = {
         "name": "total", "ways": 3, "taken": [], "covered": [{"way": WAY, "count": 1}] * 2, "gaps": [WAY], "impossible_taken": [],
     }
     price = {"name": "price", "ways": 27, "taken": []}
     top = {"name": "<module>", "ways": 2}
-    report = {"max_paths": 8, "cards": {"src/a.py:1:0": total, "src/b.py:3:0": price, "src/b.py:1:0": top}}
+    report = {"max_paths": 8, "flows": {"src/a.py:1:0": total, "src/b.py:3:0": price, "src/b.py:1:0": top}}
     assert lines(report) == [
         "Paths: 2 / 3 (66.67%)",
         "Functions over --max-paths=8: 1",
@@ -35,7 +35,7 @@ def test_b81f4a02():
     }
     tested = {**untested, "covered": [{"way": WAY, "count": 1}] * 3, "gaps": []}
     listings = [[untested], [tested], [], [tested, tested], [tested, untested]]
-    reports = [{"max_paths": 8, "cards": {f"src/a.py:{line}:0": card for line, card in enumerate(cards, 1)}} for cards in listings]
+    reports = [{"max_paths": 8, "flows": {f"src/a.py:{line}:0": flow for line, flow in enumerate(flows, 1)}} for flows in listings]
     assert [failed(report) for report in reports] == [True, False, False, False, True]
 
 
@@ -45,4 +45,4 @@ def test_b81f4a03():
     A report where a call took a path declared impossible fails: the
     declaration is wrong, and the worklist says to remove it."""
     retry = {"name": "retry", "ways": 1, "taken": [], "covered": [{"way": WAY, "count": 1}], "gaps": [], "impossible_taken": [WAY]}
-    assert failed({"max_paths": 8, "cards": {"src/retry.py:2:0": retry}}) is True
+    assert failed({"max_paths": 8, "flows": {"src/retry.py:2:0": retry}}) is True

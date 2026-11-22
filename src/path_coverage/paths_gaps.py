@@ -5,26 +5,26 @@ make to take it."""
 from .gaps import steps
 
 
-def lines(cards, texts, parents):
-    """The lines of cards, {function's key: card}, as report["cards"] has
+def lines(flows, texts, parents):
+    """The lines of flows, {function's key: flow}, as report["flows"] has
     them, each choice's leaves named by their text in texts ({decision:
     [text, ...]}); a decision whose parent, in parents ({decision: its
     parent decision}), is stepped on the same path is named there, and the
-    parent left out. A function's card listing no gaps, its ways more
+    parent left out. A function's flow listing no gaps, its ways more
     than max paths allows, is named with what to do, so it fails and
     never reads as tested."""
     out = []
-    for key, card in cards.items():
-        where = f"{_where(key)} {card['name']}()"
-        # A module's top card, run by no call, has no taken ways to check.
-        if "taken" not in card:
+    for key, flow in flows.items():
+        where = f"{_where(key)} {flow['name']}()"
+        # A module's top flow, run by no call, has no taken ways to check.
+        if "taken" not in flow:
             continue
-        if "gaps" not in card:
-            out += [f"{where} has {card['ways']} paths, more than --max-paths allows.", TOO_MANY]
+        if "gaps" not in flow:
+            out += [f"{where} has {flow['ways']} paths, more than --max-paths allows.", TOO_MANY]
             continue
-        decisions = {row["at"]: row["decision"] for row in card["rows"]}
+        decisions = {row["at"]: row["decision"] for row in flow["rows"]}
         named = lambda way: _choices(way, decisions, texts, parents)  # noqa: E731
-        gaps, taken = card["gaps"], card["impossible_taken"]
+        gaps, taken = flow["gaps"], flow["impossible_taken"]
         out += _section(f"{where} has {_paths(len(gaps), 'untested ')}.", UNTESTED, gaps, named)
         out += _section(f"{where} took {_paths(len(taken), '')} declared impossible.", DECLARED, taken, named)
     return out

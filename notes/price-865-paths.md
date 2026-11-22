@@ -6,7 +6,7 @@ yet beyond what the machine already does.
 
 ## The count
 
-The demo's card for `price` gives `ways` 865: 862 missed, 3 taken,
+The demo's flow for `price` gives `ways` 865: 862 missed, 3 taken,
 0 impossible. 865 is the plain static product:
 
     raise (L36)                          1
@@ -21,7 +21,7 @@ The demo's card for `price` gives `ways` 865: 862 missed, 3 taken,
 
 Counted three ways:
 
-    each and/or operand outcome           865   (the card)
+    each and/or operand outcome           865   (the flow)
       minus the gift/pickup repeats     <=385
     only each if/elif/ternary arm         145   = 1 + 2*3*2*2*3*2
 

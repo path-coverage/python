@@ -10,8 +10,8 @@ def alone(paths):
     return [sum(1 for each in every if each["count"] > 0), len(every)]
 
 
-def combined(cards):
-    """Paths combined through each function: cards is {def decision: [taken,
-    size]}, each function's card's paths taken of its size, its rows' paths
-    added up. Example: cards [4, 6] and [17, 21] give [21, 27]."""
-    return [sum(taken for taken, _ in cards.values()), sum(size for _, size in cards.values())]
+def combined(flows):
+    """Paths combined through each function: flows is {def decision: [taken,
+    size]}, each function's flow's paths taken of its size, its rows' paths
+    added up. Example: flows [4, 6] and [17, 21] give [21, 27]."""
+    return [sum(taken for taken, _ in flows.values()), sum(size for _, size in flows.values())]

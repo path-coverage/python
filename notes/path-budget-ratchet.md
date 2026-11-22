@@ -12,11 +12,11 @@ use it to force smaller, simpler methods.
 
 ## Extracting a method turns a product into a sum
 
-Each method's paths are counted on its own card, and paths from
+Each method's paths are counted on its own flow, and paths from
 different calls never mix (notes/witness-principle.md). So moving a
 run of decisions into a method of its own, even one called from only
 one place, replaces their product in the caller by their sum across
-cards. A rough split of price:
+flows. A rough split of price:
 
     _discount  L38..L43   3*4      12
     _shipping  L44..L46   3*2       6

@@ -97,7 +97,7 @@ def _claim():
 def _key(code):
     """The key an event in code is logged by, from a callback called by
     sys.monitoring: the ids of the frame running code and of code itself,
-    so code with no card, eg a generator expression, never logs into the
+    so code with no flow, eg a generator expression, never logs into the
     way of a finished call whose frame id CPython has reused."""
     return (id(sys._getframe(2)), id(code))
 
@@ -149,7 +149,7 @@ def _kept(code, offset):
 def _started(code, _offset):
     """Logs the start of a measured function, its entry, which starts its
     call's way in its frame. Disables the start of any other code, eg a
-    generator expression's, which has no card, and of code never
+    generator expression's, which has no flow, and of code never
     measured."""
     found = _entries.get(id(code))
     if found is None:

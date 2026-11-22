@@ -8,17 +8,17 @@ from . import code_tokens, fold_rows, decision_locations, decision_tree, summary
 SCHEMA = 1
 
 # The URL of the schema the source report follows.
-SCHEMA_URL = "https://path-coverage.github.io/schemas/v1/path_coverage.source.schema.json"
+SCHEMA_URL = "https://path-coverage.github.io/schemas/v2/path_coverage.source.schema.json"
 
 
-def of(files, paths, cards, groups):
+def of(files, paths, flows, groups):
     """The source report of a run, headed by its schema's URL and version:
     no operators ignored, the covered files of each of groups, {name: [glob,
-    ...]} or None, each top of the rows of cards, {card decision: card},
+    ...]} or None, each top of the rows of flows, {flow decision: flow},
     coloured, and each of files', {path: (source, decisions)}, lines and
     decisions, each decision's paths as paths has them, its fold headed by
     its row's top."""
-    rows = [row for card in cards.values() for row in card["rows"]]
+    rows = [row for flow in flows.values() for row in flow["rows"]]
     tops = {row["decision"]: row["top"] for row in rows}
     shown = {path: _file(source, decisions, paths, tops) for path, (source, decisions) in files.items()}
     return {

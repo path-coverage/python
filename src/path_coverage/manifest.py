@@ -37,7 +37,7 @@ class Arm:
     # end_line, end_col) as ast counts them, for its text; None for an if
     # statement's arms, named by their kind instead.
     at: tuple | None = field(default=None, compare=False)
-    # Where the arm's code is, as at counts it, so a card's row can be
+    # Where the arm's code is, as at counts it, so a flow's row can be
     # placed in the arm holding it: a conditional expression's arm's, as
     # at; an if statement's arm's statements, first to last; None for an
     # arm of no code, eg a filter's.
@@ -59,11 +59,11 @@ class Condition:
     operator: str
     operands: tuple
     # Where the whole of the condition is written, (line, col, end_line,
-    # end_col) as ast counts them, so a card can tell which rows run
+    # end_col) as ast counts them, so a flow can tell which rows run
     # inside it.
     extent: tuple | None = field(default=None, compare=False)
     # Where each case's body of a match is written, first statement to
-    # last, as extent counts them, case by case, so a card can place a
+    # last, as extent counts them, case by case, so a flow can place a
     # row in the case holding it; none for any other decision.
     cases: tuple = field(default=(), compare=False)
 
@@ -79,7 +79,7 @@ class Condition:
 
 # The nodes a choice's arm may hold as part of the choice's own decision. A
 # conditional expression in an arm is a decision of its own, so each row of a
-# card is one choice, nested in the arm it runs in.
+# flow is one choice, nested in the arm it runs in.
 FOLDABLE = (ast.BoolOp,)
 
 # The statements nothing inside is measured in: an assert states what its
@@ -286,7 +286,7 @@ class _DecisionFinder(ast.NodeVisitor):
     def _leaf(self, node):
         """node as one Leaf, once any decision in it is noted, node itself
         included: a choice's predicate, so an `and`/`or` that is the whole of
-        it is a decision of its own, each row of a card one decision."""
+        it is a decision of its own, each row of a flow one decision."""
         self.visit(node)
         return Leaf(
             node.lineno, node.col_offset, node.end_lineno, node.end_col_offset, _only(node)

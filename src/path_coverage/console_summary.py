@@ -7,13 +7,13 @@ from . import totals as path_totals
 from .summary import matches, path_of
 
 
-def lines(paths, cards=None, groups=None):
+def lines(paths, flows=None, groups=None):
     """The summary lines of paths (as result.paths gives them) and, when
-    cards, {def decision: [taken, size]}, are given, as they are when methods
-    are measured, of cards; groups is {name: [glob, ...]}."""
+    flows, {def decision: [taken, size]}, are given, as they are when methods
+    are measured, of flows; groups is {name: [glob, ...]}."""
     if not groups:
-        return _totals_lines(totals(paths, cards))
-    return grouped_lines(group_totals(paths, cards, groups))
+        return _totals_lines(totals(paths, flows))
+    return grouped_lines(group_totals(paths, flows, groups))
 
 
 def grouped_lines(named):
@@ -27,19 +27,19 @@ def grouped_lines(named):
     return out
 
 
-def totals(paths, cards):
+def totals(paths, flows):
     """{"alone": [taken, possible]} of paths, with "combined": [taken,
-    possible] of cards when cards are given."""
+    possible] of flows when flows are given."""
     result = {"alone": path_totals.alone(paths)}
-    if cards is not None:
-        result["combined"] = path_totals.combined(cards)
+    if flows is not None:
+        result["combined"] = path_totals.combined(flows)
     return result
 
 
-def group_totals(paths, cards, groups):
-    """{group name: totals} of each group's own decisions and cards alone."""
+def group_totals(paths, flows, groups):
+    """{group name: totals} of each group's own decisions and flows alone."""
     return {
-        name: totals(_own(paths, globs), None if cards is None else _own(cards, globs))
+        name: totals(_own(paths, globs), None if flows is None else _own(flows, globs))
         for name, globs in groups.items()
     }
 

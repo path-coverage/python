@@ -474,7 +474,7 @@ def test_d86a1f13():
     """Example: the start callback, for member's code, for the module's,
     and for code never measured
     member's start logs its entry, counted once the log is rebuilt; the
-    module's, no function's, has no card, so it is disabled, as is the
+    module's, no function's, has no flow, so it is disabled, as is the
     start of code never measured: never seen again."""
     module, functions, evaluations = _codes(MEMBER)
     unmeasured = compile("RATE = 3\n", "k.py", "exec")
@@ -489,7 +489,7 @@ def test_d86a1f13():
 
 def test_d86a1f17():
     """Example: the start callback for span's generator expression
-    A generator expression has no card, so its start is disabled. Its
+    A generator expression has no flow, so its start is disabled. Its
     events are logged by its own code's id as well as its frame's, so,
     though CPython gives its frame a finished call's frame id, they never
     join a way left under way there."""
