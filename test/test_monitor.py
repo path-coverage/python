@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from path_coverage import code_map, inserted_records, monitor, scopes, source_map
 from path_coverage.evaluations import Enter, Evaluations
+from tallies import untested
 
 DISABLE = sys.monitoring.DISABLE
 
@@ -35,7 +36,7 @@ def test_d86a1f01():
     leaf. The value is unchanged."""
     can_attest, evaluations = _measured(CAN_ATTEST, "can_attest", "src/model/flow.py")
     assert can_attest(SimpleNamespace(active=True, admin=False), SimpleNamespace(public="yes")) == "yes"
-    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(True, False): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(True, False): untested(1)}}
 
 
 def test_d86a1f02():
@@ -44,7 +45,7 @@ def test_d86a1f02():
     skips are never counted, and stay None on its path."""
     can_attest, evaluations = _measured(CAN_ATTEST, "can_attest", "src/model/flow.py")
     assert can_attest(SimpleNamespace(active=False, admin=True), None) is False
-    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(False, None): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"src/model/flow.py:2:23": {(False, None): untested(1)}}
     assert list(evaluations.counts) == [("src/model/flow.py:2:23", 0)]
 
 
@@ -60,7 +61,7 @@ def test_d86a1f03():
     assert can_see(SimpleNamespace(active=True, admin=False), flow) == "yes"
     assert can_see(SimpleNamespace(active=False, admin=True), flow) is False
     assert _rebuilt(evaluations).decision_paths == {
-        "src/model/flow.py:2:37": {(True, False): 1, (False, None): 1},
+        "src/model/flow.py:2:37": {(True, False): untested(1), (False, None): untested(1)},
     }
 
 
@@ -82,9 +83,9 @@ def test_d86a1f04():
     orders = [(True, True, False), (False, False, True), (True, False, False)]
     assert [fee(SimpleNamespace(big=b, new=n, vip=v)) for b, n, v in orders] == [5, 6, 7]
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:4": {(True,): 1, (False,): 2},
-        "k.py:2:17": {(True, True): 1, (False, None): 1, (True, False): 1},
-        "k.py:4:4": {(True,): 1, (False,): 1},
+        "k.py:2:4": {(True,): untested(1), (False,): untested(2)},
+        "k.py:2:17": {(True, True): untested(1), (False, None): untested(1), (True, False): untested(1)},
+        "k.py:4:4": {(True,): untested(1), (False,): untested(1)},
     }
 
 
@@ -103,8 +104,8 @@ def test_d86a1f05():
     ]
     assert admins(users) == ["ann"]
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:34": {(True,): 1, (False,): 2},
-        "k.py:2:46": {(True, True): 1, (False, None): 1, (True, False): 1},
+        "k.py:2:34": {(True,): untested(1), (False,): untested(2)},
+        "k.py:2:46": {(True, True): untested(1), (False, None): untested(1), (True, False): untested(1)},
     }
 
 
@@ -129,10 +130,10 @@ def test_d86a1f06():
     assert [fee(SimpleNamespace(kind=kind, big=big)) for kind, big in orders] == [1, None, 2, None]
     assert _rebuilt(evaluations).decision_paths == {
         "k.py:2:4": {
-            (True, True, None): 1,
-            (True, False, False): 1,
-            (False, None, True): 1,
-            (False, None, False): 1,
+            (True, True, None): untested(1),
+            (True, False, False): untested(1),
+            (False, None, True): untested(1),
+            (False, None, False): untested(1),
         }
     }
 
@@ -143,7 +144,7 @@ def test_d86a1f07():
     It is taken, so the path ends with its pattern matched."""
     fee, evaluations = _measured(MATCH.replace('case "silver"', "case _"), "fee")
     assert fee(SimpleNamespace(kind="gold", big=False)) == 2
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True, False, True): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True, False, True): untested(1)}}
 
 
 def test_d86a1f08():
@@ -153,7 +154,7 @@ def test_d86a1f08():
     bronze order's path, no case taken, is counted."""
     fee, evaluations = _measured(MATCH.replace('case "silver"', 'case "silver" as kind'), "fee")
     assert fee(SimpleNamespace(kind="bronze", big=True)) is None
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(False, None, False): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(False, None, False): untested(1)}}
 
 
 def test_d86a1f09():
@@ -171,7 +172,7 @@ def test_d86a1f09():
     thread.start()
     thread.join(5)
     assert answers == ["yes"]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): 1}, "k.py:2:9": {(True, True): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): untested(1)}, "k.py:2:9": {(True, True): untested(1)}}
 
 
 FIRST_SMALL = (
@@ -192,7 +193,7 @@ def test_d86a1f18():
     first_small, evaluations = _measured(FIRST_SMALL, "first_small")
     orders = [SimpleNamespace(size=2), SimpleNamespace(size=1)]
     assert first_small(orders) is orders[1]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:3:8": {(False,): 1, (True,): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:3:8": {(False,): untested(1), (True,): untested(1)}}
 
 
 SMALL = (
@@ -211,7 +212,7 @@ def test_d86a1f19():
     failing both, takes no case. Each path is counted."""
     small, evaluations = _measured(SMALL, "small")
     assert [small(SimpleNamespace(size=size)) for size in (1, 2, 3)] == [True, True, False]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): 2, (False,): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): untested(2), (False,): untested(1)}}
 
 
 LABEL = (
@@ -235,10 +236,10 @@ def test_d86a1f1a():
     assert [label(SimpleNamespace(kind=kind, big=big)) for kind, big in orders] == [1, 2, 3, 3]
     assert _rebuilt(evaluations).decision_paths == {
         "k.py:2:4": {
-            (True, None, None): 1,
-            (False, True, True): 1,
-            (False, True, False): 1,
-            (False, False, None): 1,
+            (True, None, None): untested(1),
+            (False, True, True): untested(1),
+            (False, True, False): untested(1),
+            (False, False, None): untested(1),
         }
     }
 
@@ -255,7 +256,7 @@ def test_d86a1f0a():
     on_time, overdue = SimpleNamespace(late=False), SimpleNamespace(late=True)
     assert [late([]), late([on_time, on_time]), late([overdue])] == [False, False, True]
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:11": {("0 items", None): 1, ("2+ items", False): 1, ("1 item", True): 1},
+        "k.py:2:11": {("0 items", None): untested(1), ("2+ items", False): untested(1), ("1 item", True): untested(1)},
     }
 
 
@@ -294,8 +295,8 @@ def test_d86a1f0c():
     )
     fee, evaluations = _measured(source, "fee")
     assert [fee([], True), fee([1], True), fee([1], False)] == [0, 95, 100]
-    assert _rebuilt(evaluations).reached == {"k.py:1:0": 3, "k.py:4:8": 1, "k.py:8:4": 2}
-    assert evaluations.decision_paths["k.py:6:4"] == {(True,): 1, (False,): 1}
+    assert _rebuilt(evaluations).reached == {"k.py:1:0": untested(3), "k.py:4:8": untested(1), "k.py:8:4": untested(2)}
+    assert evaluations.decision_paths["k.py:6:4"] == {(True,): untested(1), (False,): untested(1)}
 
 
 def test_d86a1f0d():
@@ -321,9 +322,9 @@ def test_d86a1f0d():
     depth, evaluations = _measured(source, "depth")
     assert depth(1) is False
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:4": {(False,): 1, (True,): 1},
-        "k.py:11:28": {(True, False): 1},
-        "k.py:11:16": {(False,): 1},
+        "k.py:2:4": {(False,): untested(1), (True,): untested(1)},
+        "k.py:11:28": {(True, False): untested(1)},
+        "k.py:11:16": {(False,): untested(1)},
     }
 
 
@@ -335,7 +336,7 @@ def test_d86a1f0e():
     describe, evaluations = _measured(source, "describe")
     describe()
     describe.__globals__["stub"]()
-    assert _rebuilt(evaluations).reached == {"k.py:1:0": 1, "k.py:3:0": 1}
+    assert _rebuilt(evaluations).reached == {"k.py:1:0": untested(1), "k.py:3:0": untested(1)}
 
 
 def test_d86a1f0f():
@@ -348,9 +349,9 @@ def test_d86a1f0f():
     pick, evaluations = _measured(source, "pick")
     assert [pick(True, True, False), pick(False, True, True)] == [1, 2]
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:13": {(True,): 1, (False,): 1},
-        "k.py:2:18": {(True, True): 1, (False, None): 1},
-        "k.py:2:32": {(True,): 1},
+        "k.py:2:13": {(True,): untested(1), (False,): untested(1)},
+        "k.py:2:18": {(True, True): untested(1), (False, None): untested(1)},
+        "k.py:2:32": {(True,): untested(1)},
     }
 
 
@@ -362,7 +363,7 @@ def test_d86a1f10():
     source = "FLAG = None\n\ndef flag(a, b):\n    global FLAG\n    FLAG = a and b\n"
     flag, evaluations = _measured(source, "flag")
     flag(True, "yes")
-    assert _rebuilt(evaluations).decision_paths == {"k.py:5:13": {(True,): 1}}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:5:13": {(True,): untested(1)}}
 
 
 def test_d86a1f15():
@@ -375,10 +376,10 @@ def test_d86a1f15():
     run, evaluations = _measured(source, "run")
     assert [run(False, True, 0), run(True, False, 1)] == [5, 5]
     assert _rebuilt(evaluations).decision_paths == {
-        "k.py:2:18": {(False,): 1, (True,): 1},
-        "k.py:3:21": {(False,): 2},
+        "k.py:2:18": {(False,): untested(1), (True,): untested(1)},
+        "k.py:3:21": {(False,): untested(2)},
     }
-    assert evaluations.reached == {"k.py:1:0": 2, "k.py:4:4": 2}
+    assert evaluations.reached == {"k.py:1:0": untested(2), "k.py:4:4": untested(2)}
 
 
 def test_d86a1f16():
@@ -405,8 +406,8 @@ def test_d86a1f16():
         except ValueError:
             returned.append("raised")
     assert returned == [1, "raised", "raised"]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True, None): 1, (False, True): 2}, "k.py:4:12": {(False,): 1}}
-    assert evaluations.reached == {"k.py:1:0": 3, "k.py:6:12": 2, "k.py:7:4": 1}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True, None): untested(1), (False, True): untested(2)}, "k.py:4:12": {(False,): untested(1)}}
+    assert evaluations.reached == {"k.py:1:0": untested(3), "k.py:6:12": untested(2), "k.py:7:4": untested(1)}
 
 
 MEMBER = (
@@ -452,8 +453,8 @@ def test_d86a1f11():
     ] == [None] * 4 + [DISABLE] * 3
     here = id(sys._getframe())
     assert [frame for frame, _ in evaluations.log] == [(here, id(member)), (here, id(member)), (here, id(fee))]
-    assert _rebuilt(evaluations).decision_paths == {"k.py:2:16": {(False,): 1, (True,): 1}}
-    assert evaluations.reached == {"k.py:6:4": 1}
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:16": {(False,): untested(1), (True,): untested(1)}}
+    assert evaluations.reached == {"k.py:6:4": untested(1)}
 
 
 def test_d86a1f14():
@@ -484,7 +485,7 @@ def test_d86a1f13():
         [(Enter("k.py:1:0"),)],
     ]
     evaluations.flush()
-    assert evaluations.reached == {"k.py:1:0": 1}
+    assert evaluations.reached == {"k.py:1:0": untested(1)}
 
 
 def test_d86a1f17():

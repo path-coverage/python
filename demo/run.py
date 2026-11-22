@@ -25,8 +25,11 @@ import shop  # noqa: E402
 import team  # noqa: E402
 
 # Fares: 20 of their 25 possible ways, staff and all but a senior's
-# off-peak trips and a senior's peak weekend return.
+# off-peak trips and a senior's peak weekend return. Counted as two
+# tests, staff and passengers, as a test runner marks each test.
+path_coverage.testing("demo/run.py::staff_fare")
 fare.fare(40, True, False, False, True)
+path_coverage.testing("demo/run.py::passenger_fares")
 for age in (40, 9, 70):
     for peak in (True, False):
         for weekend in (True, False):
@@ -34,10 +37,13 @@ for age in (40, 9, 70):
                 if age != 70 or (peak and not (weekend and return_trip)):
                     fare.fare(age, peak, weekend, return_trip, False)
 
-# Every outcome of both operands: covered.
+# Every outcome of both operands: covered. The rest of the demo is
+# counted outside every test.
+path_coverage.testing("demo/run.py::kata_ids")
 kata.is_id("Kp9sA2")
 kata.is_id(42)
 kata.is_id("Kp9")
+path_coverage.testing(path_coverage.tally.NO_TEST)
 
 # Over two lines; the kata is never finished: never false.
 kata.is_runnable(SimpleNamespace(started=True, finished=False))

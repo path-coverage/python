@@ -2,17 +2,19 @@
 report lists them, and read back from a report: each way the steps one
 call, or one pass, took, in order, a decision row's {"at", "path"}, a for
 loop's {"at", "path"}, its path how many passes it made, or a statement
-row's {"at"}, with how many took it."""
+row's {"at"}, with the Tally of the tests that took it."""
 
 import json
 
+from . import tally
+
 
 def taken(walked):
-    """[{"way": [step, ...], "count": n}] of walked, {way: n}, one unit's
-    ways as Evaluations.ways has them, in the order first taken. Example:
-    {(("k.py:2:4", (True,)), ("k.py:4:8",)): 1} gives
-    [{"way": [{"at": "2:04", "path": [True]}, {"at": "4:08"}], "count": 1}]."""
-    return [{"way": way(each), "count": count} for each, count in walked.items()]
+    """[{"way": [step, ...], "tests": Tally}] of walked, {way: Tally}, one
+    unit's ways as Evaluations.ways has them, in the order first taken.
+    Example: {(("k.py:2:4", (True,)), ("k.py:4:8",)): t} gives
+    [{"way": [{"at": "2:04", "path": [True]}, {"at": "4:08"}], "tests": t}]."""
+    return [{"way": way(each), "tests": counted} for each, counted in walked.items()]
 
 
 def way(steps):
@@ -23,17 +25,17 @@ def way(steps):
 
 
 def ways(report):
-    """{function's entry, or for loop's name: {way: count}} of a JSON
+    """{function's entry, or for loop's name: {way: Tally}} of a JSON
     report's flows, as Evaluations.ways has them, from each flow listing
-    its taken ways and its loops' passes; a top flow lists neither, as no
-    call runs it."""
+    its taken ways and its loops' passes, by the report's tests; a top
+    flow lists neither, as no call runs it."""
     found = {}
     for entry, flow in report["flows"].items():
         if "taken" in flow:
-            found[entry] = _read(entry, flow["taken"])
+            found[entry] = _read(entry, flow["taken"], report["tests"])
             for loop, passes in flow["passes"].items():
                 name = _name(_file(entry), loop)
-                found[name] = _read(name, passes)
+                found[name] = _read(name, passes, report["tests"])
     return found
 
 
@@ -44,10 +46,10 @@ def listed(ways):
     return {unit: taken(walked) for unit, walked in ways.items()}
 
 
-def unlisted(listed_ways):
+def unlisted(listed_ways, tests):
     """ways as Evaluations.ways has them, from listed_ways, as listed
-    gives them."""
-    return {unit: _read(unit, each) for unit, each in listed_ways.items()}
+    gives them in a JSON file whose tests are tests, {key: test id}."""
+    return {unit: _read(unit, each, tests) for unit, each in listed_ways.items()}
 
 
 def at(name):
@@ -57,11 +59,11 @@ def at(name):
     return f"{line}:{int(column):02d}"
 
 
-def _read(unit, listed_ways):
-    """{way: count} of listed_ways, the unit named unit's, as the JSON
-    report lists them."""
+def _read(unit, listed_ways, tests):
+    """{way: Tally} of listed_ways, the unit named unit's, as the JSON
+    report lists them, tests being its {key: test id}."""
     file = _file(unit)
-    return {tuple(_named(file, step) for step in each["way"]): each["count"] for each in listed_ways}
+    return {tuple(_named(file, step) for step in each["way"]): tally.read(each["tests"], tests) for each in listed_ways}
 
 
 def _step(step):

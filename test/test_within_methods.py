@@ -1,6 +1,7 @@
 import signal
 
 from path_coverage import within_methods, manifest, result
+from tallies import untested
 
 SHOP = (
     "RATE = 2 if FAST else 1\n"
@@ -13,15 +14,15 @@ SHOP = (
 
 def _then_taken(count):
     """A ternary's paths, its then taken count times, its else never."""
-    return [{"path": [True], "count": count}, {"path": [False], "count": 0}]
+    return [{"path": [True], "tests": untested(count)}, {"path": [False], "tests": untested(0)}]
 
 
 PATHS = {
     "k.py:1:9": _then_taken(1),
     "k.py:3:21": [
-        {"path": [True, True], "count": 1},
-        {"path": [True, False], "count": 0},
-        {"path": [False, None], "count": 0},
+        {"path": [True, True], "tests": untested(1)},
+        {"path": [True, False], "tests": untested(0)},
+        {"path": [False, None], "tests": untested(0)},
     ],
     "k.py:5:13": _then_taken(0),
 }
@@ -50,7 +51,7 @@ def test_d3c9a101():
             "first": 2,
             "last": 3,
             "ways": 3,
-            "calls": 0,
+            "calls": untested(0),
             "rows": [{"at": "3:21", "top": "and", "paths": 3, "taken": 1, "decision": "k.py:3:21"}],
             "taken": [],
             "passes": {},
@@ -105,7 +106,7 @@ def test_d3c9a102():
     )
     rows = [
         [row["taken"] for row in _listed(source, {}, reached)["k.py:1:0"]["rows"]]
-        for reached in ({"k.py:3:4": 1}, None)
+        for reached in ({"k.py:3:4": untested(1)}, None)
     ]
     assert rows == [[1], [None]]
     assert [row["decision"] for row in _listed(source, {}, {})["k.py:1:0"]["rows"]] == [None]
@@ -132,10 +133,10 @@ def test_d3c9a104():
     )
     decisions = manifest.decisions(source, "k.py")
     taken = (("k.py:2:4", (False,)), ("k.py:4:4", ("2+ items",), frozenset({()})), ("k.py:6:4", (True,)), ("k.py:8:4",))
-    counted = ({"k.py:1:0": 2}, {"k.py:1:0": {taken: 2}})
+    counted = ({"k.py:1:0": untested(2)}, {"k.py:1:0": {taken: untested(2)}})
     paths = {
-        "k.py:2:4": [{"path": [True], "count": 0}, {"path": [False], "count": 2}],
-        "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
+        "k.py:2:4": [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(2)}],
+        "k.py:6:4": [{"path": [True], "tests": untested(2)}, {"path": [False], "tests": untested(0)}],
     }
     files = {"k.py": (source, decisions)}
     flow = within_methods.of(files, result.operands(decisions, {}), paths, counted, loops=True)["k.py:1:0"]
@@ -143,7 +144,7 @@ def test_d3c9a104():
     none, some = {"at": "4:04", "path": ["0 items"]}, {"at": "4:04", "path": ["1+ items"]}
     assert (flow["ways"], flow["covered"], flow["gaps"], flow["impossible"]) == (
         3,
-        [{"way": [on, some, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2}],
+        [{"way": [on, some, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "tests": untested(2)}],
         [[{"at": "2:04", "path": [True]}, {"at": "3:08"}], [on, none, {"at": "6:04", "path": [True]}, {"at": "8:04"}]],
         [[on, loop, {"at": "6:04", "path": [False]}, {"at": "8:04"}] for loop in (none, some)],
     )
@@ -164,13 +165,13 @@ def test_d3c9a105():
     )
     decisions = manifest.decisions(source, "k.py")
     taken = (("k.py:2:16", (True, None)), ("k.py:2:4", (True,)), ("k.py:4:4",))
-    counted = ({"k.py:1:0": 1}, {"k.py:1:0": {taken: 1}})
+    counted = ({"k.py:1:0": untested(1)}, {"k.py:1:0": {taken: untested(1)}})
     paths = {
-        "k.py:2:4": [{"path": [True], "count": 1}, {"path": [False], "count": 0}],
+        "k.py:2:4": [{"path": [True], "tests": untested(1)}, {"path": [False], "tests": untested(0)}],
         "k.py:2:16": [
-            {"path": [True, None], "count": 1},
-            {"path": [False, True], "count": 0},
-            {"path": [False, False], "count": 0},
+            {"path": [True, None], "tests": untested(1)},
+            {"path": [False, True], "tests": untested(0)},
+            {"path": [False, False], "tests": untested(0)},
         ],
     }
     files = {"k.py": (source, decisions)}
@@ -218,7 +219,7 @@ def test_d3c9a120():
     )
     decisions = manifest.decisions(source, "k.py")
     taken = (("k.py:3:4", ("0 items",)), ("k.py:5:4",))
-    counted = ({"k.py:2:0": 1}, {"k.py:2:0": {taken: 1}})
+    counted = ({"k.py:2:0": untested(1)}, {"k.py:2:0": {taken: untested(1)}})
     files = {"k.py": (source, decisions)}
     flow = within_methods.of(files, result.operands(decisions, {}), {}, counted, loops=True)["k.py:2:0"]
     assert flow["impossible_taken"] == [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]]
@@ -242,17 +243,17 @@ def test_d3c9a121():
     )
     decisions = manifest.decisions(source, "k.py")
     taken = (("k.py:2:4", (False,)), ("k.py:4:4", ("2+ items",), frozenset({()})), ("k.py:6:4", (True,)), ("k.py:8:4",))
-    counted = ({"k.py:1:0": 2}, {"k.py:1:0": {taken: 2}})
+    counted = ({"k.py:1:0": untested(2)}, {"k.py:1:0": {taken: untested(2)}})
     paths = {
-        "k.py:2:4": [{"path": [True], "count": 0}, {"path": [False], "count": 2}],
-        "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
+        "k.py:2:4": [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(2)}],
+        "k.py:6:4": [{"path": [True], "tests": untested(2)}, {"path": [False], "tests": untested(0)}],
     }
     files = {"k.py": (source, decisions)}
     flow = within_methods.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
     on = {"at": "2:04", "path": [False]}
     assert (flow["ways"], flow["covered"], flow["gaps"], flow["impossible"]) == (
         2,
-        [{"way": [on, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2}],
+        [{"way": [on, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "tests": untested(2)}],
         [[{"at": "2:04", "path": [True]}, {"at": "3:08"}]],
         [[on, {"at": "6:04", "path": [False]}, {"at": "8:04"}]],
     )
@@ -276,10 +277,10 @@ def test_d3c9a122():
     )
     decisions = manifest.decisions(source, "k.py")
     taken = (("k.py:2:4", (False,)), ("k.py:4:4", ("2+ items",), frozenset({()})), ("k.py:6:4", (True,)), ("k.py:8:4",))
-    counted = ({"k.py:1:0": 2}, {"k.py:1:0": {taken: 2}})
+    counted = ({"k.py:1:0": untested(2)}, {"k.py:1:0": {taken: untested(2)}})
     paths = {
-        "k.py:2:4": [{"path": [True], "count": 0}, {"path": [False], "count": 2}],
-        "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
+        "k.py:2:4": [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(2)}],
+        "k.py:6:4": [{"path": [True], "tests": untested(2)}, {"path": [False], "tests": untested(0)}],
     }
     files = {"k.py": (source, decisions)}
     flow = within_methods.of(files, result.operands(decisions, {}), paths, counted, max_paths=1)["k.py:1:0"]
@@ -304,8 +305,8 @@ def test_d3c9a123():
     )
     decisions = manifest.decisions(source, "k.py")
     files = {"k.py": (source, decisions)}
-    counted = ({"k.py:1:0": 0}, {})
-    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    counted = ({}, {})
+    never = [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(0)}]
     paths = {"k.py:3:8": never, "k.py:5:8": never}
     flow = within_methods.of(files, result.operands(decisions, {}), paths, counted, max_paths=3)["k.py:1:0"]
     assert (flow["ways"], len(flow["gaps"])) == (3, 3)
@@ -319,7 +320,7 @@ def test_d3c9a124():
     0 items, 1 or 2+ giving true or false."""
     source = "READY = any(o.paid and o.packed for o in ORDERS)\n"
     decisions = manifest.decisions(source, "k.py")
-    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    never = [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(0)}]
     paths = {decision: never for decision in decisions}
     flow = _listed(source, paths, None)["k.py:1:0"]
     assert flow["ways"] == 5
@@ -333,7 +334,7 @@ def test_d3c9a125():
     so PAID's ways are 3."""
     source = "PAID = [o for o in ORDERS if o.paid and o.sent]\n"
     decisions = manifest.decisions(source, "k.py")
-    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    never = [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(0)}]
     paths = {decision: never for decision in decisions}
     flow = _listed(source, paths, None)["k.py:1:0"]
     assert flow["ways"] == 3
@@ -347,7 +348,7 @@ def test_d3c9a126():
     the else, so FEE's ways are 5, not 3 times 2 times 2."""
     source = "FEE = (5 if VIP else 10) if PAID or FREE else 0\n"
     decisions = manifest.decisions(source, "k.py")
-    never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
+    never = [{"path": [True], "tests": untested(0)}, {"path": [False], "tests": untested(0)}]
     paths = {decision: never for decision in decisions}
     flow = _listed(source, paths, None)["k.py:1:0"]
     assert (flow["ways"], len(flow["rows"])) == (5, 3)

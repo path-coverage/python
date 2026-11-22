@@ -15,6 +15,8 @@ from path_coverage.evaluations import (
     Shape,
     Unmatched,
 )
+from path_coverage.tally import NO_TEST, Tally
+from tallies import untested
 
 
 def _shape(source, decision):
@@ -47,10 +49,10 @@ def test_3c9e5101():
         (7, (Outcome(shape, 1, False),)),
         (7, (Outcome(shape, 0, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:23": {(True, False): 1, (False, None): 1}}
+    assert ran.decision_paths == {"k.py:2:23": {(True, False): untested(1), (False, None): untested(1)}}
     assert ran.counts == {
-        ("k.py:2:23", 0): {"truthy": 1, "falsy": 1},
-        ("k.py:2:23", 1): {"truthy": 0, "falsy": 1},
+        ("k.py:2:23", 0): {"truthy": untested(1), "falsy": untested(1)},
+        ("k.py:2:23", 1): {"truthy": untested(0), "falsy": untested(1)},
     }
 
 
@@ -66,7 +68,7 @@ def test_3c9e5102():
         (2, (Outcome(shape, 1, True),)),
         (1, (Outcome(shape, 1, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:23": {(True, True): 1, (True, False): 1}}
+    assert ran.decision_paths == {"k.py:2:23": {(True, True): untested(1), (True, False): untested(1)}}
 
 
 def test_3c9e5103():
@@ -80,8 +82,8 @@ def test_3c9e5103():
         (3, (Outcome(shape, 0, True),)),
         (3, (Outcome(shape, 0, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:23": {(False, None): 1}}
-    assert ran.counts == {("k.py:2:23", 0): {"truthy": 1, "falsy": 1}}
+    assert ran.decision_paths == {"k.py:2:23": {(False, None): untested(1)}}
+    assert ran.counts == {("k.py:2:23", 0): {"truthy": untested(1), "falsy": untested(1)}}
 
 
 def test_3c9e5104():
@@ -96,8 +98,8 @@ def test_3c9e5104():
         (5, (Outcome(shape, 1, False),)),
         (5, (Outcome(shape, 0, False),)),
     )
-    assert ran.decision_paths == {"k.py:2:17": {(True, False): 1, (False, None): 1}}
-    assert ran.counts[("k.py:2:17", 1)] == {"truthy": 0, "falsy": 1}
+    assert ran.decision_paths == {"k.py:2:17": {(True, False): untested(1), (False, None): untested(1)}}
+    assert ran.counts[("k.py:2:17", 1)] == {"truthy": untested(0), "falsy": untested(1)}
 
 
 SIZE = (
@@ -128,10 +130,10 @@ def test_3c9e5107():
         (8, (Matched(shape, 0, ()),)),
     )
     assert ran.decision_paths == {
-        "k.py:2:4": {(False, False, True, False, True): 1, (True, None, None, None, None): 1}
+        "k.py:2:4": {(False, False, True, False, True): untested(1), (True, None, None, None, None): untested(1)}
     }
-    assert ran.counts[("k.py:2:4", 2)] == {"truthy": 1, "falsy": 0}
-    assert ran.counts[("k.py:2:4", 1)] == {"truthy": 0, "falsy": 1}
+    assert ran.counts[("k.py:2:4", 2)] == {"truthy": untested(1), "falsy": untested(0)}
+    assert ran.counts[("k.py:2:4", 1)] == {"truthy": untested(0), "falsy": untested(1)}
 
 
 KIND = (
@@ -167,7 +169,7 @@ def test_3c9e5108():
         (9, (Unmatched(shape, (0, 2)),)),
     )
     assert ran.decision_paths == {
-        "k.py:2:4": {(False, None, False): 1, (True, False, False): 1, (False, None, True): 1}
+        "k.py:2:4": {(False, None, False): untested(1), (True, False, False): untested(1), (False, None, True): untested(1)}
     }
 
 
@@ -190,10 +192,10 @@ def test_3c9e5109():
         (4, (Begin(shape),)),
         (4, (End(shape),)),
     )
-    assert ran.decision_paths == {"k.py:2:11": {("2+ items", True): 1, ("0 items", None): 1}}
+    assert ran.decision_paths == {"k.py:2:11": {("2+ items", True): untested(1), ("0 items", None): untested(1)}}
     assert ran.counts == {
-        ("k.py:2:11", 0): {"truthy": 1, "falsy": 1},
-        ("k.py:2:11", 1): {"truthy": 1, "falsy": 1},
+        ("k.py:2:11", 0): {"truthy": untested(1), "falsy": untested(1)},
+        ("k.py:2:11", 1): {"truthy": untested(1), "falsy": untested(1)},
     }
 
 
@@ -201,7 +203,28 @@ def test_3c9e510a():
     """Example: ship's return reached twice
     reached holds each statement's runs; one never reached has none."""
     ran = _run(Evaluations(), (2, (Reach("k.py:3:4"),)), (2, (Reach("k.py:3:4"),)))
-    assert ran.reached == {"k.py:3:4": 2}
+    assert ran.reached == {"k.py:3:4": untested(2)}
+
+
+def test_3c9e5113():
+    """Example: ship called once in test_ships_rush, then twice in
+    test_ships_post, each test's events still logged, not rebuilt, as it
+    ends
+    Switching tests rebuilds the log and ends every way under way first,
+    so each reach and each way counts under the test that made it."""
+    rush = "test/test_ship.py::test_ships_rush"
+    post = "test/test_ship.py::test_ships_post"
+    evaluations = Evaluations()
+    evaluations.loops.update({"k.py:3:4": ()})
+    evaluations.switch(rush)
+    evaluations.note(2, (Enter("k.py:1:0"), Reach("k.py:3:4")))
+    evaluations.switch(post)
+    evaluations.note(5, (Enter("k.py:1:0"), Reach("k.py:3:4")))
+    evaluations.note(6, (Enter("k.py:1:0"), Reach("k.py:3:4")))
+    evaluations.switch(NO_TEST)
+    assert evaluations.log == []
+    assert evaluations.reached == {"k.py:1:0": Tally({rush: 1, post: 2}), "k.py:3:4": Tally({rush: 1, post: 2})}
+    assert evaluations.ways == {"k.py:1:0": {(("k.py:3:4",),): Tally({rush: 1, post: 2})}}
 
 
 def test_3c9e510c():
@@ -212,7 +235,7 @@ def test_3c9e510c():
     shape = _shape(TRAILS, "k.py:2:23")
     ran = _run(Evaluations(), (6, (Outcome(shape, 1, True),)))
     assert ran.decision_paths == {}
-    assert ran.counts == {("k.py:2:23", 1): {"truthy": 1, "falsy": 0}}
+    assert ran.counts == {("k.py:2:23", 1): {"truthy": untested(1), "falsy": untested(0)}}
 
 
 def test_3c9e510b():
@@ -225,7 +248,7 @@ def test_3c9e510b():
     assert evaluations.log == [(1, (Outcome(shape, 0, True),))]
     evaluations.note(1, (Outcome(shape, 1, True),))
     assert evaluations.log == []
-    assert evaluations.decision_paths == {"k.py:2:23": {(True, True): 1}}
+    assert evaluations.decision_paths == {"k.py:2:23": {(True, True): untested(1)}}
 
 
 TOTAL = (
@@ -266,11 +289,11 @@ def test_3c9e510d():
     paid, unpaid = (("k.py:4:8", (True,)),), (("k.py:4:8", (False,)),)
     assert evaluations.ways == {
         "k.py:1:0": {
-            (("k.py:3:4", ("2+ items",), frozenset({paid, unpaid})), ("k.py:6:4",)): 1,
-            (("k.py:3:4", ("1 item",), frozenset({paid})), ("k.py:6:4",)): 1,
-            (("k.py:3:4", ("0 items",), frozenset()), ("k.py:6:4",)): 1,
+            (("k.py:3:4", ("2+ items",), frozenset({paid, unpaid})), ("k.py:6:4",)): untested(1),
+            (("k.py:3:4", ("1 item",), frozenset({paid})), ("k.py:6:4",)): untested(1),
+            (("k.py:3:4", ("0 items",), frozenset()), ("k.py:6:4",)): untested(1),
         },
-        "k.py:3:4": {(("k.py:4:8", (True,)),): 3, (("k.py:4:8", (False,)),): 1},
+        "k.py:3:4": {(("k.py:4:8", (True,)),): untested(3), (("k.py:4:8", (False,)),): untested(1)},
     }
 
 
@@ -313,12 +336,12 @@ def test_3c9e510e():
     prompt, late = (("k.py:3:8", (False,)),), (("k.py:3:8", (True,)), ("k.py:4:12",))
     assert evaluations.ways == {
         "k.py:1:0": {
-            (("k.py:2:4", ("2+ items",), frozenset({prompt, late})),): 1,
-            (("k.py:2:4", ("1 item",), frozenset({prompt})), ("k.py:5:4",)): 1,
+            (("k.py:2:4", ("2+ items",), frozenset({prompt, late})),): untested(1),
+            (("k.py:2:4", ("1 item",), frozenset({prompt})), ("k.py:5:4",)): untested(1),
         },
         "k.py:2:4": {
-            (("k.py:3:8", (False,)),): 2,
-            (("k.py:3:8", (True,)), ("k.py:4:12",)): 1,
+            (("k.py:3:8", (False,)),): untested(2),
+            (("k.py:3:8", (True,)), ("k.py:4:12",)): untested(1),
         },
     }
 
@@ -357,10 +380,10 @@ def test_3c9e5110():
             (
                 ("k.py:2:4", ("1 item",), frozenset({(("k.py:3:8", (True,)),)})),
                 ("k.py:5:4", ("1 item",), frozenset({(("k.py:6:8", (False,)),)})),
-            ): 1
+            ): untested(1)
         },
-        "k.py:2:4": {(("k.py:3:8", (True,)),): 1},
-        "k.py:5:4": {(("k.py:6:8", (False,)),): 1},
+        "k.py:2:4": {(("k.py:3:8", (True,)),): untested(1)},
+        "k.py:5:4": {(("k.py:6:8", (False,)),): untested(1)},
     }
 
 
@@ -406,10 +429,10 @@ def test_3c9e5112():
     evaluations.close()
     pass_way = (("k.py:4:8", (True,)),)
     assert evaluations.ways == {
-        "k.py:1:0": {(("k.py:3:16", (True, True)), ("k.py:3:4", ("1 item",), frozenset({pass_way})), ("k.py:6:4",)): 1},
-        "k.py:3:4": {pass_way: 1},
+        "k.py:1:0": {(("k.py:3:16", (True, True)), ("k.py:3:4", ("1 item",), frozenset({pass_way})), ("k.py:6:4",)): untested(1)},
+        "k.py:3:4": {pass_way: untested(1)},
     }
-    assert evaluations.decision_paths["k.py:3:16"] == {(True, True): 1, (False, None): 1}
+    assert evaluations.decision_paths["k.py:3:16"] == {(True, True): untested(1), (False, None): untested(1)}
 
 
 def test_3c9e5111():
@@ -429,7 +452,7 @@ def test_3c9e5111():
         ((6, 2), (Outcome(part, 0, False),)),
     )
     evaluations.close()
-    assert evaluations.ways == {"k.py:1:0": {(("k.py:2:31", (False, None)),): 1}}
+    assert evaluations.ways == {"k.py:1:0": {(("k.py:2:31", (False, None)),): untested(1)}}
 
 
 def test_3c9e510f():
@@ -449,6 +472,6 @@ def test_3c9e510f():
     )
     evaluations.close()
     assert evaluations.ways == {
-        "k.py:1:0": {(("k.py:2:4", ("1 item",), frozenset({(("k.py:3:8", (True,)),)})), ("k.py:5:4",)): 1},
-        "k.py:2:4": {(("k.py:3:8", (True,)),): 1},
+        "k.py:1:0": {(("k.py:2:4", ("1 item",), frozenset({(("k.py:3:8", (True,)),)})), ("k.py:5:4",)): untested(1)},
+        "k.py:2:4": {(("k.py:3:8", (True,)),): untested(1)},
     }

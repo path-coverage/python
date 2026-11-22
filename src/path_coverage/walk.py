@@ -10,6 +10,7 @@ once, however many passes a loop makes."""
 from dataclasses import dataclass, field
 
 from .kinds.block import ITEMS
+from . import tally
 
 
 @dataclass
@@ -26,13 +27,15 @@ class _Unit:
 
 class Walk:
     """The way under way of one call of the function whose entry is
-    named entry, counting each way it ends on ways, {unit's name: {way:
-    count}}, loops being {row's name: the names of the loops holding it,
-    outermost first}, and repeats {decision's name: the name of the while
-    whose test holds it}."""
+    named entry, made by the test named test, counting each way it ends
+    on ways, {unit's name: {way: Tally}}, under that test, loops being
+    {row's name: the names of the loops holding it, outermost first}, and
+    repeats {decision's name: the name of the while whose test holds
+    it}."""
 
-    def __init__(self, entry, ways, loops, repeats):
+    def __init__(self, entry, ways, loops, repeats, test):
         """A call just entered, no step taken yet."""
+        self.test = test
         self.ways = ways
         self.loops = loops
         self.repeats = repeats
@@ -96,9 +99,8 @@ class Walk:
         self.units[-1].steps.append((unit.name, (ITEMS[min(unit.passes, 2)],), frozenset(unit.seen)))
 
     def _count(self, unit):
-        """Counts unit's steps as one more taking of its way, noting it
-        among the ways seen."""
-        ways = self.ways.setdefault(unit.name, {})
+        """Counts unit's steps as one more taking of its way, by the
+        call's test, noting it among the ways seen."""
         way = tuple(unit.steps)
-        ways[way] = ways.get(way, 0) + 1
+        tally.add(self.ways.setdefault(unit.name, {}), way, self.test)
         unit.seen.add(way)

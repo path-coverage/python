@@ -26,9 +26,11 @@ from . import (
     scopes,
     source_report,
     summary,
+    tally,
     ways_report,
 )
 from .evaluations import Evaluations
+from .tally import Tally
 from .merge import merge, merge_paths, merge_ways
 
 REPORTERS = ("gaps", "post", "summary", "ways")
@@ -40,7 +42,7 @@ INSTRUMENTS = {"monitoring": monitor.instrument, "rewrite": rewrite.instrument}
 EVENTS = tuple(INSTRUMENTS)
 
 # The URL of the schema the JSON report follows.
-SCHEMA_URL = "https://path-coverage.github.io/schemas/v2/path_coverage.schema.json"
+SCHEMA_URL = "https://path-coverage.github.io/schemas/v3/path_coverage.schema.json"
 
 
 class _Config:
@@ -281,6 +283,13 @@ def _env_groups(entries):
     return groups
 
 
+def testing(test):
+    """Counts everything the run start began measures from now on under
+    test, a test's id, or tally.NO_TEST as a test ends; only once start
+    has begun a run."""
+    _finder.evaluations.switch(test)
+
+
 def stop():
     """Stops measuring modules imported from now on; those already
     imported are still measured."""
@@ -315,24 +324,55 @@ def report(
     files = _files(config)
     reports = [_same_measuring(path, events) for path in runs]
     decisions = _decisions(files)
-    operands = merge([result.operands(decisions, {}), *(each["decisions"] for each in reports)])
-    paths = merge_paths([result.paths(decisions, {}), *(_taken(each) for each in reports)])
+    none = (result.operands(decisions, {}), result.paths(decisions, {}), None)
+    operands, paths, reached = _added(none, [_tallied(each) for each in reports])
     ways = merge_ways([ways_report.ways(each) for each in reports])
-    _finish(config, files, operands, paths, (_reached([each.get("reached") for each in reports]), ways))
+    _finish(config, files, operands, paths, (reached, ways))
+
+
+def _added(counted, tallied):
+    """(operands, paths, reached) of counted, as _tallied gives them, with
+    each of tallied's added, test by test."""
+    operands, paths, reached = counted
+    return (
+        merge([operands, *(each[0] for each in tallied)]),
+        merge_paths([paths, *(each[1] for each in tallied)]),
+        _reached([reached, *(each[2] for each in tallied)]),
+    )
+
+
+def _tallied(report):
+    """(operands, paths, reached) of a JSON report, or a part's, as
+    result.operands, result.paths and Evaluations.reached give them, each
+    count read back as a Tally by the report's tests; reached None when
+    the report counted none."""
+    tests = report["tests"]
+    operands = {
+        decision: [{**counts, "truthy": tally.read(counts["truthy"], tests), "falsy": tally.read(counts["falsy"], tests)} for counts in each]
+        for decision, each in report["decisions"].items()
+    }
+    paths = {
+        decision: [{"path": taken["path"], "tests": tally.read(taken["tests"], tests)} for taken in each["taken"]]
+        for decision, each in report.get("paths", {}).items()
+    }
+    reached = report.get("reached")
+    if reached is not None:
+        reached = {name: tally.read(counts, tests) for name, counts in reached.items()}
+    return operands, paths, reached
 
 
 def _reached(runs):
-    """runs' reaches, each {name: runs} or None for a run that counted
+    """runs' reaches, each {name: Tally} or None for a run that counted
     none, with each statement's added up; None when no run counted any, so
-    a report cannot say what was reached. Example: {"k.py:2:4": 2} and
-    {"k.py:2:4": 1} give {"k.py:2:4": 3}."""
+    a report cannot say what was reached. Example: {"k.py:2:4": t} and
+    {"k.py:2:4": u} give {"k.py:2:4": t + u}."""
     counted = [run for run in runs if run is not None]
     if not counted:
         return None
     total = {}
     for run in counted:
-        for name, count in run.items():
-            total[name] = total.get(name, 0) + count
+        for name, runs_of in run.items():
+            total[name] = total.get(name, Tally()) + runs_of
     return total
 
 
@@ -369,13 +409,11 @@ def _report(config, evaluations, part):
         part_report = _report_json(operands, paths, files, reached, config.events)
         part_report["ways"] = ways_report.listed(ways)
         part_file = config.coverage_dir / f"path_coverage.{part}.json"
-        part_file.write_text(json.dumps(part_report, indent=2))
+        part_file.write_text(json.dumps(tally.jsonable(part_report), indent=2))
         return
     parts = [json.loads(path.read_text()) for path in _parts(config)]
-    operands = merge([operands, *(each["decisions"] for each in parts)])
-    paths = merge_paths([paths, *(_taken(each) for each in parts)])
-    reached = _reached([reached, *(each.get("reached") for each in parts)])
-    ways = merge_ways([ways, *(ways_report.unlisted(each["ways"]) for each in parts)])
+    operands, paths, reached = _added((operands, paths, reached), [_tallied(each) for each in parts])
+    ways = merge_ways([ways, *(ways_report.unlisted(each["ways"], each["tests"]) for each in parts)])
     _finish(config, files, operands, paths, (reached, ways))
 
 
@@ -400,7 +438,7 @@ def _finish(config, files, operands, paths, counted):
         report["totals"]["groups"] = console_summary.group_totals(kept_paths, kept_flows, config.groups)
     report["flows"] = _kept(listed, config.lines)
     report["tree"] = _in_flows(within_methods.tree(files, operands), report["flows"])
-    text = json.dumps(report, indent=2)
+    text = json.dumps(tally.jsonable(report), indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)
     kept_files = {path: (source, _kept(decisions, config.lines)) for path, (source, decisions) in files.items()}
@@ -526,11 +564,6 @@ def _decisions(files):
 def _parts(config):
     """The part files in coverage_dir, in name order."""
     return sorted(config.coverage_dir.glob("path_coverage.*.json"))
-
-
-def _taken(report):
-    """The paths of a JSON report, as result.paths gives them."""
-    return {decision: each["taken"] for decision, each in report.get("paths", {}).items()}
 
 
 def _report_json(operands, paths, files, reached, events):

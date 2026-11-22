@@ -8,6 +8,7 @@ import pytest
 
 import path_coverage
 from path_coverage import inserted_records
+from tallies import UNTESTED_TESTS, listed_untested
 
 PROJECTS = Path(__file__).parent / "projects"
 
@@ -31,9 +32,9 @@ LEAVES = [["6:19", "6:37"], ["6:42", "6:65"]]
 def _taken(tt, tf, f):
     """single_and_trails' decision's paths, taken tt, tf and f times."""
     return [
-        {"path": [True, True], "count": tt},
-        {"path": [True, False], "count": tf},
-        {"path": [False, None], "count": f},
+        {"path": [True, True], "tests": listed_untested(tt)},
+        {"path": [True, False], "tests": listed_untested(tf)},
+        {"path": [False, None], "tests": listed_untested(f)},
     ]
 
 
@@ -69,16 +70,16 @@ def test_e5a70c01(tmp_path, capsys):
     ternary = "src/single_and_trails.py:6:16"
     then, otherwise = {"at": "6:16", "path": [True]}, {"at": "6:16", "path": [False]}
     assert json.loads((tmp_path / "path_coverage.json").read_text()) == {
-        "$schema": "https://path-coverage.github.io/schemas/v2/path_coverage.schema.json",
+        "$schema": "https://path-coverage.github.io/schemas/v3/path_coverage.schema.json",
         "decisions": {
-            ternary: [{"truthy": 1, "falsy": 1}],
+            ternary: [{"truthy": listed_untested(1), "falsy": listed_untested(1)}],
             decision: [
-                {"truthy": 1, "falsy": 1},
-                {"truthy": 1, "falsy": 0},
+                {"truthy": listed_untested(1), "falsy": listed_untested(1)},
+                {"truthy": listed_untested(1), "falsy": listed_untested(0)},
             ],
         },
         "paths": {
-            ternary: {"leaves": [["6:19", "6:65"]], "taken": [{"path": [True], "count": 1}, {"path": [False], "count": 1}]},
+            ternary: {"leaves": [["6:19", "6:65"]], "taken": [{"path": [True], "tests": listed_untested(1)}, {"path": [False], "tests": listed_untested(1)}]},
             decision: {"leaves": LEAVES, "taken": _taken(1, 0, 1)},
         },
         "kinds": ["block", "case", "chain", "choice"],
@@ -87,7 +88,7 @@ def test_e5a70c01(tmp_path, capsys):
             "path_coverage": path_coverage.__version__,
         },
         "events": "monitoring",
-        "reached": {"src/single_and_trails.py:4:0": 2},
+        "reached": {"src/single_and_trails.py:4:0": listed_untested(2)},
         "loops": False,
         "max_paths": 4096,
         "totals": {"alone": [4, 5], "combined": [4, 5]},
@@ -97,19 +98,19 @@ def test_e5a70c01(tmp_path, capsys):
                 "first": 4,
                 "last": 6,
                 "ways": 3,
-                "calls": 2,
+                "calls": listed_untested(2),
                 "rows": [
                     {"at": "6:16", "top": "ternary", "paths": 2, "taken": 2, "decision": ternary},
                     {"at": "6:38", "top": "and", "paths": 3, "taken": 2, "decision": decision},
                 ],
                 "taken": [
-                    {"way": [{"at": "6:38", "path": [True, True]}, then], "count": 1},
-                    {"way": [{"at": "6:38", "path": [False, None]}, otherwise], "count": 1},
+                    {"way": [{"at": "6:38", "path": [True, True]}, then], "tests": listed_untested(1)},
+                    {"way": [{"at": "6:38", "path": [False, None]}, otherwise], "tests": listed_untested(1)},
                 ],
                 "passes": {},
                 "covered": [
-                    {"way": [{"at": "6:38", "path": [True, True]}, then], "count": 1},
-                    {"way": [{"at": "6:38", "path": [False, None]}, otherwise], "count": 1},
+                    {"way": [{"at": "6:38", "path": [True, True]}, then], "tests": listed_untested(1)},
+                    {"way": [{"at": "6:38", "path": [False, None]}, otherwise], "tests": listed_untested(1)},
                 ],
                 "gaps": [[{"at": "6:38", "path": [True, False]}, otherwise]],
                 "impossible": [],
@@ -124,6 +125,7 @@ def test_e5a70c01(tmp_path, capsys):
                 }
             }
         },
+        "tests": UNTESTED_TESTS,
     }
     assert capsys.readouterr().out == (
         f"{decision} path never taken: `trail_id in trails` true, {NEW} false\n"
@@ -218,16 +220,16 @@ def test_e5a70c04(tmp_path, capsys):
     decision = "src/single_and_trails.py:6:38"
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["decisions"] == {
-        "src/single_and_trails.py:6:16": [{"truthy": 1, "falsy": 1}],
+        "src/single_and_trails.py:6:16": [{"truthy": listed_untested(1), "falsy": listed_untested(1)}],
         decision: [
-            {"truthy": 2, "falsy": 0},
-            {"truthy": 1, "falsy": 1},
+            {"truthy": listed_untested(2), "falsy": listed_untested(0)},
+            {"truthy": listed_untested(1), "falsy": listed_untested(1)},
         ],
     }
     assert report["paths"][decision]["taken"] == _taken(1, 1, 0)
     assert report["flows"]["src/single_and_trails.py:4:0"]["taken"] == [
-        {"way": [{"at": "6:38", "path": [True, True]}, {"at": "6:16", "path": [True]}], "count": 1},
-        {"way": [{"at": "6:38", "path": [True, False]}, {"at": "6:16", "path": [False]}], "count": 1},
+        {"way": [{"at": "6:38", "path": [True, True]}, {"at": "6:16", "path": [True]}], "tests": listed_untested(1)},
+        {"way": [{"at": "6:38", "path": [True, False]}, {"at": "6:16", "path": [False]}], "tests": listed_untested(1)},
     ]
     assert capsys.readouterr().out == (
         f"{decision} path never taken: `trail_id in trails` false\n"
@@ -362,8 +364,8 @@ def test_e5a70c0a(tmp_path, capsys):
     )
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert report["reached"] == {
-        "src/two_decisions_shop.py:4:0": 1,
-        "src/two_decisions_shop.py:11:4": 1,
+        "src/two_decisions_shop.py:4:0": listed_untested(1),
+        "src/two_decisions_shop.py:11:4": listed_untested(1),
     }
     assert report["totals"] == {"alone": [2, 4], "combined": [3, 5]}
 
@@ -431,8 +433,8 @@ def test_e5a70c0c(tmp_path, capsys):
     )
     report = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())
     assert report["reached"] == {
-        "src/two_decisions_shop.py:4:0": 2,
-        "src/two_decisions_shop.py:11:4": 2,
+        "src/two_decisions_shop.py:4:0": listed_untested(2),
+        "src/two_decisions_shop.py:11:4": listed_untested(2),
     }
     assert report["totals"] == {"alone": [3, 4], "combined": [4, 5]}
 
@@ -680,7 +682,7 @@ def test_e5a70c40(tmp_path, events):
         2,
     )
     assert (flow["covered"], flow["gaps"]) == (
-        [{"way": [express, returned], "count": 1}],
+        [{"way": [express, returned], "tests": listed_untested(1)}],
         [[{"at": "2:04", "path": [False]}, returned]],
     )
 
@@ -899,7 +901,7 @@ def test_e5a70c19(tmp_path):
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert [states, report["paths"]["src/guarded_gate.py:2:4"]["taken"]] == [
         ["ready", "waiting"],
-        [{"path": [True, True], "count": 1}, {"path": [True, False], "count": 1}],
+        [{"path": [True, True], "tests": listed_untested(1)}, {"path": [True, False], "tests": listed_untested(1)}],
     ]
 
 
@@ -972,7 +974,7 @@ def test_e5a70c1c(tmp_path):
         kept,
         ["src/orders.py:2:4", "src/orders.py:3:8"],
         {"alone": [3, 7], "combined": [4, 9]},
-        {"src/orders.py:2:4": 1, "src/orders.py:3:8": 1, "src/orders.py:6:12": 1},
+        {"src/orders.py:2:4": listed_untested(1), "src/orders.py:3:8": listed_untested(1), "src/orders.py:6:12": listed_untested(1)},
         ["2:4", "3:8"],
     ]
 
@@ -1168,7 +1170,7 @@ def test_e5a70c26(tmp_path):
     assert [sorted(merged["decisions"]), merged["totals"], merged["reached"]] == [
         ["src/orders.py:4:27", "src/orders.py:5:19", "src/orders.py:5:8"],
         {"alone": [3, 7], "combined": [4, 9]},
-        {"src/orders.py:2:4": 1, "src/orders.py:3:8": 1, "src/orders.py:6:12": 1},
+        {"src/orders.py:2:4": listed_untested(1), "src/orders.py:3:8": listed_untested(1), "src/orders.py:6:12": listed_untested(1)},
     ]
 
 
@@ -1395,8 +1397,8 @@ def test_e5a70c2d(tmp_path, capsys):
         "would save R1\n",
         [None, 1, 1],
         [
-            {"way": [{"at": "2:04", "path": [True]}, {"at": "4:08"}], "count": 1},
-            {"way": [{"at": "2:04", "path": [False]}, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2},
+            {"way": [{"at": "2:04", "path": [True]}, {"at": "4:08"}], "tests": listed_untested(1)},
+            {"way": [{"at": "2:04", "path": [False]}, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "tests": listed_untested(2)},
         ],
     ]
 
@@ -1423,8 +1425,8 @@ def test_e5a70c2e(tmp_path, capsys):
     flows = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["flows"]
     assert [flows["src/saving.py:4:0"]["taken"], "taken" in flows["src/saving.py:1:0"]] == [
         [
-            {"way": [{"at": "5:04", "path": [True]}, {"at": "7:08"}], "count": 1},
-            {"way": [{"at": "5:04", "path": [False]}, {"at": "9:04", "path": [True]}, {"at": "11:04"}], "count": 1},
+            {"way": [{"at": "5:04", "path": [True]}, {"at": "7:08"}], "tests": listed_untested(1)},
+            {"way": [{"at": "5:04", "path": [False]}, {"at": "9:04", "path": [True]}, {"at": "11:04"}], "tests": listed_untested(1)},
         ],
         False,
     ]
@@ -1458,8 +1460,8 @@ def test_e5a70c2f(tmp_path):
         ["start", "start"],
         [["done"], ["skip", "done"]],
         [
-            {"way": [{"at": "3:04", "path": [True]}], "count": 1},
-            {"way": [{"at": "3:04", "path": [False]}], "count": 1},
+            {"way": [{"at": "3:04", "path": [True]}], "tests": listed_untested(1)},
+            {"way": [{"at": "3:04", "path": [False]}], "tests": listed_untested(1)},
         ],
     ]
 
@@ -1514,13 +1516,13 @@ def test_e5a70c32(tmp_path):
     assert [found, flow["taken"], flow["passes"]] == [
         ["O2", None],
         [
-            {"way": [{"at": "2:04", "path": ["2+ items"], "passes": [prompt, late]}], "count": 1},
-            {"way": [{"at": "2:04", "path": ["1 item"], "passes": [prompt]}, {"at": "5:04"}], "count": 1},
+            {"way": [{"at": "2:04", "path": ["2+ items"], "passes": [prompt, late]}], "tests": listed_untested(1)},
+            {"way": [{"at": "2:04", "path": ["1 item"], "passes": [prompt]}, {"at": "5:04"}], "tests": listed_untested(1)},
         ],
         {
             "2:04": [
-                {"way": [{"at": "3:08", "path": [False]}], "count": 2},
-                {"way": [{"at": "3:08", "path": [True]}, {"at": "4:12"}], "count": 1},
+                {"way": [{"at": "3:08", "path": [False]}], "tests": listed_untested(2)},
+                {"way": [{"at": "3:08", "path": [True]}, {"at": "4:12"}], "tests": listed_untested(1)},
             ]
         },
     ]
@@ -1554,10 +1556,10 @@ def test_e5a70c33(tmp_path):
     assert [found, flows["src/spans.py:1:0"]["taken"], flows["src/spans.py:4:0"]["taken"]] == [
         [True, False, False],
         [
-            {"way": [{"at": "2:32", "path": [True]}], "count": 2},
-            {"way": [{"at": "2:32", "path": [False]}], "count": 1},
+            {"way": [{"at": "2:32", "path": [True]}], "tests": listed_untested(2)},
+            {"way": [{"at": "2:32", "path": [False]}], "tests": listed_untested(1)},
         ],
-        [{"way": [{"at": "5:04"}], "count": 3}],
+        [{"way": [{"at": "5:04"}], "tests": listed_untested(3)}],
     ]
 
 
@@ -1586,14 +1588,14 @@ def test_e5a70c34(tmp_path):
     assert [found, flow["taken"], flow["passes"]] == [
         [[30, 30], [30], []],
         [
-            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["2+ items"], "passes": [unpaid, paid]}], "count": 1},
-            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["1 item"], "passes": [paid]}], "count": 1},
-            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["0 items"], "passes": []}], "count": 1},
+            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["2+ items"], "passes": [unpaid, paid]}], "tests": listed_untested(1)},
+            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["1 item"], "passes": [paid]}], "tests": listed_untested(1)},
+            {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["0 items"], "passes": []}], "tests": listed_untested(1)},
         ],
         {
             "2:28": [
-                {"way": [{"at": "2:48", "path": [True]}], "count": 3},
-                {"way": [{"at": "2:48", "path": [False]}], "count": 1},
+                {"way": [{"at": "2:48", "path": [True]}], "tests": listed_untested(3)},
+                {"way": [{"at": "2:48", "path": [False]}], "tests": listed_untested(1)},
             ]
         },
     ]
@@ -1614,14 +1616,14 @@ PAID_PASS, UNPAID_PASS = [{"at": "4:08", "path": [True]}], [{"at": "4:08", "path
 
 TOTALLED = [
     [
-        {"way": [{"at": "3:04", "path": ["2+ items"], "passes": [UNPAID_PASS, PAID_PASS]}, {"at": "6:04"}], "count": 1},
-        {"way": [{"at": "3:04", "path": ["1 item"], "passes": [PAID_PASS]}, {"at": "6:04"}], "count": 1},
-        {"way": [{"at": "3:04", "path": ["0 items"], "passes": []}, {"at": "6:04"}], "count": 1},
+        {"way": [{"at": "3:04", "path": ["2+ items"], "passes": [UNPAID_PASS, PAID_PASS]}, {"at": "6:04"}], "tests": listed_untested(1)},
+        {"way": [{"at": "3:04", "path": ["1 item"], "passes": [PAID_PASS]}, {"at": "6:04"}], "tests": listed_untested(1)},
+        {"way": [{"at": "3:04", "path": ["0 items"], "passes": []}, {"at": "6:04"}], "tests": listed_untested(1)},
     ],
     {
         "3:04": [
-            {"way": [{"at": "4:08", "path": [True]}], "count": 3},
-            {"way": [{"at": "4:08", "path": [False]}], "count": 1},
+            {"way": [{"at": "4:08", "path": [True]}], "tests": listed_untested(3)},
+            {"way": [{"at": "4:08", "path": [False]}], "tests": listed_untested(1)},
         ]
     },
 ]
@@ -1862,8 +1864,8 @@ def test_e5a70c3d(tmp_path):
     assert (flow["ways"], flow["covered"], flow["gaps"]) == (
         3,
         [
-            {"way": [none, returned], "count": 1},
-            {"way": [some, {"at": "4:08", "path": [True]}, returned], "count": 1},
+            {"way": [none, returned], "tests": listed_untested(1)},
+            {"way": [some, {"at": "4:08", "path": [True]}, returned], "tests": listed_untested(1)},
         ],
         [[some, {"at": "4:08", "path": [False]}, returned]],
     )

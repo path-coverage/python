@@ -1,11 +1,12 @@
 from path_coverage import decision_paths, manifest, source_report
+from tallies import untested
 
 KATA = "def kata(id):\n    while ok(id) and new(id): break\n"
 
 PATHS = [
-    {"path": [True, True], "count": 1},
-    {"path": [True, False], "count": 0},
-    {"path": [False, None], "count": 2},
+    {"path": [True, True], "tests": untested(1)},
+    {"path": [True, False], "tests": untested(0)},
+    {"path": [False, None], "tests": untested(2)},
 ]
 
 
@@ -52,7 +53,7 @@ def test_5e2a9130():
     }
     groups = {"Katas": ["k*.py"], "Other": ["x.py"]}
     assert source_report.of(files, {"k.py:2:17": PATHS}, flows, groups) == {
-        "$schema": "https://path-coverage.github.io/schemas/v2/path_coverage.source.schema.json",
+        "$schema": "https://path-coverage.github.io/schemas/v3/path_coverage.source.schema.json",
         "schema": 1,
         "ignored": [],
         "groups": {"Katas": ["k.py"], "Other": []},
@@ -80,7 +81,7 @@ def _labels(source, kind):
     in source, the file k.py, as the source report gives them."""
     decisions = manifest.decisions(source, "k.py")
     [name] = decisions
-    paths = [{"path": path, "count": 0} for path in decision_paths.possible(decisions[name])]
+    paths = [{"path": path, "tests": untested(0)} for path in decision_paths.possible(decisions[name])]
     fold = source_report.decision(source, decisions, name, paths, "return")["fold"]
     return [row["label"] for row in fold if row["kind"] == kind]
 

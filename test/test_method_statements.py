@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from path_coverage import manifest, method_statements
+from tallies import untested
 
 
 def _statements(source):
@@ -151,7 +152,7 @@ def test_b47e3a10():
         "    return order\n"
     )
     rows = _statements(source)["k.py:1:0"]
-    paths = {"k.py:2:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
+    paths = {"k.py:2:4": [{"path": [True], "tests": untested(2)}, {"path": [False], "tests": untested(0)}]}
     assert [row.decision for row in rows] == ["k.py:2:4", None]
     assert method_statements.taken(rows, paths) == [1, None]
 
@@ -240,7 +241,7 @@ def test_b47e3a17():
     So the ternary's taken is 1, of 2, and the return's 1; never reached,
     the return's is 0."""
     rows = _statements(SHIP)["k.py:1:0"]
-    paths = {"k.py:4:15": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
+    paths = {"k.py:4:15": [{"path": [True], "tests": untested(2)}, {"path": [False], "tests": untested(0)}]}
     assert [row.name for row in rows] == ["k.py:4:15", "k.py:5:4"]
     taken = [method_statements.taken(rows, paths, reached) for reached in ({"k.py:5:4": 2}, {})]
     assert taken == [[1, 1], [1, 0]]
@@ -251,7 +252,7 @@ def test_b47e3a18():
     Its flow's total is [taken, size]: [2, 3].
     Without reaches, the return is not known.
     It counts as not taken: [1, 3], never more than it ran."""
-    paths = {"k.py:4:15": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
+    paths = {"k.py:4:15": [{"path": [True], "tests": untested(2)}, {"path": [False], "tests": untested(0)}]}
     totals = [
         method_statements.totals(SHIP, "k.py", paths, reached)
         for reached in ({"k.py:5:4": 1}, None)
@@ -394,15 +395,15 @@ def test_b47e3a27():
 
 def _then_taken(count):
     """A ternary's paths, its then taken count times, its else never."""
-    return [{"path": [True], "count": count}, {"path": [False], "count": 0}]
+    return [{"path": [True], "tests": untested(count)}, {"path": [False], "tests": untested(0)}]
 
 
 SHOP_PATHS = {
     "k.py:1:9": _then_taken(1),
     "k.py:3:21": [
-        {"path": [True, True], "count": 1},
-        {"path": [True, False], "count": 0},
-        {"path": [False, None], "count": 0},
+        {"path": [True, True], "tests": untested(1)},
+        {"path": [True, False], "tests": untested(0)},
+        {"path": [False, None], "tests": untested(0)},
     ],
     "k.py:5:13": _then_taken(0),
 }

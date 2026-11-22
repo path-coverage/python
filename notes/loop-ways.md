@@ -15,14 +15,15 @@ def total(orders):              call's way:  for 0 / 1 / 2+ items, return
     return amount
 ```
 
-`total` of 3 orders, then of 1, then of none, gives this flow:
+`total` of 3 orders, then of 1, then of none, all outside every test,
+gives this flow, each count tallied under `(no test)`'s key:
 
 ```
-"taken":  [{"way": [{"at": "3:04", "path": ["2+ items"]}, {"at": "6:04"}], "count": 1},
-           {"way": [{"at": "3:04", "path": ["1 item"]},   {"at": "6:04"}], "count": 1},
-           {"way": [{"at": "3:04", "path": ["0 items"]},  {"at": "6:04"}], "count": 1}]
-"passes": {"3:04": [{"way": [{"at": "4:08", "path": [true]}],  "count": 3},
-                    {"way": [{"at": "4:08", "path": [false]}], "count": 1}]}
+"taken":  [{"way": [{"at": "3:04", "path": ["2+ items"]}, {"at": "6:04"}], "tests": {"9a8e6a205ed4": 1}},
+           {"way": [{"at": "3:04", "path": ["1 item"]},   {"at": "6:04"}], "tests": {"9a8e6a205ed4": 1}},
+           {"way": [{"at": "3:04", "path": ["0 items"]},  {"at": "6:04"}], "tests": {"9a8e6a205ed4": 1}}]
+"passes": {"3:04": [{"way": [{"at": "4:08", "path": [true]}],  "tests": {"9a8e6a205ed4": 3}},
+                    {"way": [{"at": "4:08", "path": [false]}], "tests": {"9a8e6a205ed4": 1}}]}
 ```
 
 ## Designs weighed

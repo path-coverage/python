@@ -1,6 +1,7 @@
 from path_coverage.manifest import decisions
 from path_coverage.decision_paths import possible
 from path_coverage.decision_tree import tree_of
+from tallies import untested
 
 
 def _tree(source, counts, decision=None):
@@ -9,7 +10,7 @@ def _tree(source, counts, decision=None):
     order."""
     found = decisions(source, "k.py")
     [condition] = [found[decision]] if decision else found.values()
-    paths = [{"path": path, "count": count} for path, count in zip(possible(condition), counts)]
+    paths = [{"path": path, "tests": untested(count)} for path, count in zip(possible(condition), counts)]
     return tree_of(source, condition, paths)
 
 
