@@ -317,6 +317,22 @@ def test_5b1f3c0c():
     }
 
 
+def test_5b1f3c42():
+    """Example: ship, an if on quick or not order.held whose arm returns,
+    then a return.
+    not order.held reads no stable name, as order.held is no name, so no
+    path of the or is impossible."""
+    source = (
+        "def ship(order, quick):\n"
+        "    if quick or not order.held:\n"
+        "        return None\n"
+        "    return order\n"
+    )
+    left = [(("k.py:2:13", each), ("k.py:2:4", (True,)), ("k.py:3:8",)) for each in ((True, None), (False, True))]
+    on = (("k.py:2:13", (False, False)), ("k.py:2:4", (False,)), ("k.py:4:4",))
+    assert method_machine.ways(source, "k.py") == {"k.py:1:0": {"possible": [*left, on], "impossible": []}}
+
+
 def test_5b1f3c0d():
     """Example: ship, an if on quick or dry_run or order.held whose arm
     returns, then an if on not dry_run, then a return.

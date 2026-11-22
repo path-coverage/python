@@ -1,13 +1,15 @@
-"""The suites a run can be, each the test files it runs and whether its
-coverage is checked: all, every test; core, the hand-written tests, without
-the generated ones in test/property, neither run nor measured; property,
-those alone, whose coverage covers only part of the code, so, as a run of
-chosen tests, is not checked. The one place a suite is decided: a pytest
-plugin, loaded by bin/test.sh with -p suites, which collects only the
-suite's files; read by test/self_coverage.py, which skips the files the
-suite leaves out; and run by bin/test.sh as a script, which says whether
-the suite's coverage is checked. PATH_COVERAGE_SUITE names the suite, all
-when unset."""
+"""The suites a run can be, each the test files it runs, whether
+path_coverage measures itself while they run, and whether that coverage
+is checked: all, every test; core, the hand-written tests, without the
+generated ones in test/property, neither run nor measured; property,
+those alone, run unmeasured, as they check what path_coverage counts of
+generated code against an oracle, and measuring the tool as it measures
+them would only slow them. A full run of bin/test.sh is core then
+property. The one place a suite is decided: a pytest plugin, loaded by
+bin/test.sh with -p suites, which collects only the suite's files; read
+by test/self_coverage.py, which skips the files the suite leaves out; and
+run by bin/test.sh as a script, which says whether the suite is checked
+and measured. PATH_COVERAGE_SUITE names the suite, all when unset."""
 
 import os
 import sys
@@ -19,9 +21,9 @@ ROOT = Path(__file__).resolve().parent.parent
 PROPERTY = "test/property/**"
 
 TABLE = {
-    "all": {"runs": "test/**", "without": [], "checked": True},
-    "core": {"runs": "test/**", "without": [PROPERTY], "checked": True},
-    "property": {"runs": PROPERTY, "without": [], "checked": False},
+    "all": {"runs": "test/**", "without": [], "checked": True, "measured": True},
+    "core": {"runs": "test/**", "without": [PROPERTY], "checked": True, "measured": True},
+    "property": {"runs": PROPERTY, "without": [], "checked": False, "measured": False},
 }
 
 
@@ -62,5 +64,11 @@ def pytest_ignore_collect(collection_path, config):
     return None if runs(collection_path) else True
 
 
+def measured():
+    """True when path_coverage measures itself while the current suite
+    runs."""
+    return TABLE[name()]["measured"]
+
+
 if __name__ == "__main__":
-    print("checked" if checked() else "unchecked")
+    print(f"{'checked' if checked() else 'unchecked'} {'measured' if measured() else 'unmeasured'}")

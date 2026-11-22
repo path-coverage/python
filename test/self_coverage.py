@@ -19,6 +19,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -109,9 +110,20 @@ def pytest_runtest_protocol(item, nextitem):
 
 def pytest_unconfigure(config):
     """Writes the self-coverage report, once every test has run, then
-    removes the copy."""
+    removes the copy; with PATH_COVERAGE_SELF_PROGRESS on, says when the
+    report starts and how long it took, as it prints nothing else."""
+    started = time.monotonic()
+    _progress("self-coverage: writing the report")
     while _reports:
         _reports.pop(0)()
+    _progress(f"self-coverage: report written in {time.monotonic() - started:.1f}s")
+
+
+def _progress(line):
+    """Prints line when PATH_COVERAGE_SELF_PROGRESS is on, as
+    bin/test.sh --progress sets it; a plain run prints nothing."""
+    if os.environ.get("PATH_COVERAGE_SELF_PROGRESS") == "on":
+        print(line, flush=True)
 
 
 KERNEL = start()
