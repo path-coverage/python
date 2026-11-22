@@ -51,6 +51,74 @@ def _here():
     return (id(frame), id(frame.f_code))
 
 
+def test_4a8c2e11():
+    """Example: return not (order.paid and order.packed), in rewrite mode
+    A not tests only its operand's truth, so order.paid's call gives back
+    its truth. The and's value is only returned, so the truth of its last
+    leaf, order.packed, decides nothing, and it is not wrapped."""
+    tree, recorder, found = _rewritten("def ready(order):\n    return not (order.paid and order.packed)\n", "rewrite")
+    assert ast.unparse(tree) == (
+        "def ready(order):\n"
+        "    __path_coverage__(1)\n"
+        "    return not (__path_coverage__(0, order.paid) and order.packed)"
+    )
+    shape = found.shapes["k.py:2:27"]
+    assert recorder.records == [
+        Leaf((Outcome(shape, 0, False),), (Outcome(shape, 0, True),), True),
+        Mark((Enter("k.py:1:0"),)),
+    ]
+
+
+def test_4a8c2e12():
+    """Example: size, a match whose last case is case _, in rewrite mode
+    A match whose last pattern matches anything is never left with no case
+    taken, so no record follows it to say none was."""
+    source = "def size(n):\n    match n:\n        case 0:\n            return 'none'\n        case _:\n            return 'some'\n"
+    tree, recorder, found = _rewritten(source, "rewrite")
+    assert ast.unparse(tree) == (
+        "def size(n):\n"
+        "    __path_coverage__(5)\n"
+        "    match __path_coverage__(4, n):\n"
+        "        case 0:\n"
+        "            __path_coverage__(1)\n"
+        "            __path_coverage__(0)\n"
+        "            return 'none'\n"
+        "        case _:\n"
+        "            __path_coverage__(3)\n"
+        "            __path_coverage__(2)\n"
+        "            return 'some'"
+    )
+    shape = found.shapes["k.py:2:4"]
+    assert recorder.records == [
+        Mark((Reach("k.py:4:12"),)),
+        Mark((Matched(shape, 0, ()),)),
+        Mark((Reach("k.py:6:12"),)),
+        Mark((Matched(shape, 1, (0,)),)),
+        Mark((Opened(shape),)),
+        Mark((Enter("k.py:1:0"),)),
+    ]
+
+
+def test_4a8c2e13():
+    """Example: todo, whose body starts with ..., then with order.check(),
+    in rewrite mode
+    A first statement that is an expression but no string constant is no
+    docstring, so the record of the call's entry goes before it."""
+    for first in ("...", "order.check()"):
+        tree, recorder, found = _rewritten(f"def todo(order):\n    {first}\n    return order.paid or order.free\n", "rewrite")
+        assert ast.unparse(tree) == (
+            "def todo(order):\n"
+            "    __path_coverage__(1)\n"
+            f"    {first}\n"
+            "    return __path_coverage__(0, order.paid) or order.free"
+        )
+        shape = found.shapes["k.py:3:22"]
+        assert recorder.records == [
+            Leaf((Outcome(shape, 0, False),), (Outcome(shape, 0, True),), False),
+            Mark((Enter("k.py:1:0"),)),
+        ]
+
+
 def test_4a8c2e01():
     """Example: if a and (b or c): if (x := p or q), in monitoring mode
     The last operand of each and/or that is no and/or itself, c and q, is
