@@ -70,7 +70,7 @@ coverage drops it, as neither arm can be falsy.
 Decided 2026-11-08, for both implementations. A path that cannot
 happen is one of two things:
 
-- Impossible: the code is wrong, so the path goes in the card's
+- Impossible: the code is wrong, so the path goes in the flow's
   Impossible tab and its fix is a change to the code.
 - Absent: the code is fine and control simply does not fork there, so
   the path is never generated at all (as for Q1's last operand whose
@@ -96,7 +96,7 @@ smarter to chase a perfect answer.
   So the rules for when two reads give one outcome (stable leaves)
   stay conservative: when in doubt, report a gap.
 - Combined counts row paths on some possible way, not whole ways
-  taken. Which of a card's ways were taken is not recorded yet.
+  taken. Which of a flow's ways were taken is not recorded yet.
 
 ## Python now
 

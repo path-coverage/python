@@ -1,4 +1,4 @@
-"""The tree of a decision, from decision_tree.tree_of, as its row's fold in a card
+"""The tree of a decision, from decision_tree.tree_of, as its row's fold in a flow
 shows it: a grid whose columns are the decision's paths, as page data holds its
 rows, each a kind, a branch, a label, where its code is and a cell per
 path."""
@@ -27,8 +27,8 @@ LEAVES = {True: ["", "leaves"], False: [""]}
 
 
 def rows(decision, colours=code_tokens.PLAIN):
-    """The rows of decision's fold, a decision tree located as page_cards locates
-    it: its own row, naming its operator, or its label, eg if/else, each
+    """The rows of decision's fold, a decision tree as
+    decision_locations.located gives it: its own row, naming its operator, or its label, eg if/else, each
     path's count, and where its else keyword is, if it has one; then the
     rows of its operands, the code of each coloured by colours, its file's,
     as code_tokens.colours gives them."""

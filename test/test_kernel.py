@@ -44,8 +44,8 @@ def test_e5a70c01(tmp_path, capsys):
     The report at exit writes every decision's counts and paths as JSON.
     Each path has its count, and each leaf its line:col span.
     It names the kinds measured, as runs measuring others differ.
-    It lists each card, is_new's here, a row for its and, its 3 ways and
-    its 2 calls, and how each card's rows nest: the and at the top, inside
+    It lists each flow, is_new's here, a row for its and, its 3 ways and
+    its 2 calls, and how each flow's rows nest: the and at the top, inside
     no other decision.
     is_new's entry is reached on each call; it has no row that is no decision.
     It prints the one path never taken: true, then false."""
@@ -69,7 +69,7 @@ def test_e5a70c01(tmp_path, capsys):
     ternary = "src/single_and_trails.py:6:16"
     then, otherwise = {"at": "6:16", "path": [True]}, {"at": "6:16", "path": [False]}
     assert json.loads((tmp_path / "path_coverage.json").read_text()) == {
-        "$schema": "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json",
+        "$schema": "https://path-coverage.github.io/schemas/v2/path_coverage.schema.json",
         "decisions": {
             ternary: [{"truthy": 1, "falsy": 1}],
             decision: [
@@ -91,7 +91,7 @@ def test_e5a70c01(tmp_path, capsys):
         "loops": False,
         "max_paths": 4096,
         "totals": {"alone": [4, 5], "combined": [4, 5]},
-        "cards": {
+        "flows": {
             "src/single_and_trails.py:4:0": {
                 "name": "is_new",
                 "first": 4,
@@ -135,7 +135,7 @@ def test_e5a70c17(tmp_path, capsys):
     with a new trail
     The report at exit writes the source report beside the JSON report:
     each covered file's lines, all 6 of single_and_trails.py's, and its
-    decisions, and each card row's top coloured, and here."""
+    decisions, and each flow row's top coloured, and here."""
     project = PROJECTS / "single_and"
     exits = []
     path_coverage.start(root=project, cover=["src/**/*.py"], coverage_dir=tmp_path, on_exit=exits.append)
@@ -225,7 +225,7 @@ def test_e5a70c04(tmp_path, capsys):
         ],
     }
     assert report["paths"][decision]["taken"] == _taken(1, 1, 0)
-    assert report["cards"]["src/single_and_trails.py:4:0"]["taken"] == [
+    assert report["flows"]["src/single_and_trails.py:4:0"]["taken"] == [
         {"way": [{"at": "6:38", "path": [True, True]}, {"at": "6:16", "path": [True]}], "count": 1},
         {"way": [{"at": "6:38", "path": [True, False]}, {"at": "6:16", "path": [False]}], "count": 1},
     ]
@@ -341,7 +341,7 @@ def test_e5a70c0a(tmp_path, capsys):
     row that is no decision, its return; its writes are no rows.
     The report prints each if's own path never taken, as a decision.
     The JSON totals are [taken, possible]: alone [2, 4], one of each if's
-    two paths, and combined [3, 5], fee's card: 1+1+1 of 2+2+1."""
+    two paths, and combined [3, 5], fee's flow: 1+1+1 of 2+2+1."""
     project = PROJECTS / "two_decisions"
     exits = []
     path_coverage.start(
@@ -591,7 +591,7 @@ def test_e5a70c38(tmp_path, capsys):
     """Example: single_and_trails.is_new called three ways, started from
     PATH_COVERAGE_EVENTS=rewrite, then with no PATH_COVERAGE_EVENTS
     The rewrite mode's report names its mode, and, but for that, is the
-    monitoring mode's: every count, path, card and way the same."""
+    monitoring mode's: every count, path, flow and way the same."""
     rewritten = _single_and_report({"PATH_COVERAGE_EVENTS": "rewrite"}, tmp_path / "rewrite")
     monitored = _single_and_report({}, tmp_path / "monitoring")
     capsys.readouterr()
@@ -646,7 +646,7 @@ def test_e5a70c40(tmp_path, events):
     # path: disable and # path: enable, then a return, called once,
     express and verbose, measured in each events mode
     Lines between the comments are not analysed, though they run: the
-    report has no decision there, ship's card no row there, and its 2
+    report has no decision there, ship's flow no row there, and its 2
     ways are its first if's, the call covering the true one."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "shipping.py").write_text(
@@ -672,14 +672,14 @@ def test_e5a70c40(tmp_path, events):
     exits[0]()
     assert (order["days"], log.lines) == (1, ["A7"])
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    card = report["cards"]["src/shipping.py:1:0"]
+    flow = report["flows"]["src/shipping.py:1:0"]
     express, returned = {"at": "2:04", "path": [True]}, {"at": "9:04"}
-    assert (list(report["decisions"]), [row["at"] for row in card["rows"]], card["ways"]) == (
+    assert (list(report["decisions"]), [row["at"] for row in flow["rows"]], flow["ways"]) == (
         ["src/shipping.py:2:4"],
         ["2:04", "9:04"],
         2,
     )
-    assert (card["covered"], card["gaps"]) == (
+    assert (flow["covered"], flow["gaps"]) == (
         [{"way": [express, returned], "count": 1}],
         [[{"at": "2:04", "path": [False]}, returned]],
     )
@@ -869,7 +869,7 @@ def test_e5a70c18(tmp_path, capsys):
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
     assert sorted(report["decisions"]) == ["src/cafe_label.py:2:18", "src/cafe_label.py:2:23"]
-    rows = report["cards"]["src/cafe_label.py:1:0"]["rows"]
+    rows = report["flows"]["src/cafe_label.py:1:0"]["rows"]
     assert [row["at"] for row in rows] == ["2:18", "2:23"]
     assert list(report["tree"]["src/cafe_label.py"]["1:0"]) == ["2:18", "2:23"]
 
@@ -951,19 +951,19 @@ def _ordered(tmp_path, report, groups={}, cover="src/orders.py::Order.ship"):
 def test_e5a70c1c(tmp_path):
     """Example: cover src/orders.py::Order.ship of ORDERS, an Order whose
     ship holds a nested carrier, beside Order.total and a function refund
-    A cover glob's ::qualname keeps only the decisions and cards inside
+    A cover glob's ::qualname keeps only the decisions and flows inside
     that scope, a def nested in it included: ship's if and and, and
     carrier's conditional. total's and refund's are not measured, nor
     counted in the totals: 3 of ship's 7 paths alone, 4 of its 9
     combined, as a file holding ship alone gives. The JSON's paths, the
-    statements reached, and the cards in its tree, are of that scope
+    statements reached, and the flows in its tree, are of that scope
     only."""
     report = _ordered(tmp_path, [])
     kept = ["src/orders.py:4:27", "src/orders.py:5:19", "src/orders.py:5:8"]
     assert [
         sorted(report["decisions"]),
         sorted(report["paths"]),
-        sorted(report["cards"]),
+        sorted(report["flows"]),
         report["totals"],
         report["reached"],
         sorted(report["tree"]["src/orders.py"]),
@@ -1176,7 +1176,7 @@ def test_e5a70c1d(tmp_path):
     """Example: cover src/orders.py::Order.size, where size is a property
     whose getter and setter are both defs named size
     A ::qualname naming two defs keeps both: the getter's conditional and
-    the setter's and, and their two cards. total's are not measured."""
+    the setter's and, and their two flows. total's are not measured."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "orders.py").write_text(
         "class Order:\n"
@@ -1207,7 +1207,7 @@ def test_e5a70c1d(tmp_path):
         path_coverage.stop()
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    assert [sorted(report["decisions"]), sorted(report["cards"])] == [
+    assert [sorted(report["decisions"]), sorted(report["flows"])] == [
         ["src/orders.py:4:21", "src/orders.py:8:30"],
         ["src/orders.py:3:4", "src/orders.py:7:4"],
     ]
@@ -1285,7 +1285,7 @@ def test_e5a70c21(tmp_path):
     """Example: cover src/text.py::newline, where newline is defined once
     in an if and once in its else
     A ::qualname names defs inside an if as it names any other: both
-    newlines' conditionals are kept, and their cards; width's are not."""
+    newlines' conditionals are kept, and their flows; width's are not."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "text.py").write_text(
         "import sys\n"
@@ -1316,7 +1316,7 @@ def test_e5a70c21(tmp_path):
         path_coverage.stop()
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    assert [sorted(report["decisions"]), sorted(report["cards"])] == [
+    assert [sorted(report["decisions"]), sorted(report["flows"])] == [
         ["src/text.py:5:20", "src/text.py:8:20"],
         ["src/text.py:4:4", "src/text.py:7:4"],
     ]
@@ -1377,7 +1377,7 @@ SAVE = (
 
 def test_e5a70c2d(tmp_path, capsys):
     """Example: save called as a dry run, then twice for real
-    Each card lists the ways its calls took, whole: each step a decision
+    Each flow lists the ways its calls took, whole: each step a decision
     row's path or a statement row reached, in the order taken, with how
     many calls took that way."""
     (tmp_path / "src").mkdir()
@@ -1391,7 +1391,7 @@ def test_e5a70c2d(tmp_path, capsys):
         path_coverage.stop()
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    assert [capsys.readouterr().out, saved, report["cards"]["src/saving.py:1:0"]["taken"]] == [
+    assert [capsys.readouterr().out, saved, report["flows"]["src/saving.py:1:0"]["taken"]] == [
         "would save R1\n",
         [None, 1, 1],
         [
@@ -1405,7 +1405,7 @@ def test_e5a70c2e(tmp_path, capsys):
     """Example: a module setting MODE by a conditional, then save, called
     as a dry run and for real; that run's JSON report reported on
     The merged report lists the same ways save's calls took, read back
-    from the report's cards; the top card, which no call runs, lists none."""
+    from the report's flows; the top flow, which no call runs, lists none."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "saving.py").write_text("MODE = 'cli' if __name__ == '__main__' else 'lib'\n\n\n" + SAVE)
     exits = []
@@ -1420,8 +1420,8 @@ def test_e5a70c2e(tmp_path, capsys):
     exits[0]()
     capsys.readouterr()
     path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
-    cards = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["cards"]
-    assert [cards["src/saving.py:4:0"]["taken"], "taken" in cards["src/saving.py:1:0"]] == [
+    flows = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["flows"]
+    assert [flows["src/saving.py:4:0"]["taken"], "taken" in flows["src/saving.py:1:0"]] == [
         [
             {"way": [{"at": "5:04", "path": [True]}, {"at": "7:08"}], "count": 1},
             {"way": [{"at": "5:04", "path": [False]}, {"at": "9:04", "path": [True]}, {"at": "11:04"}], "count": 1},
@@ -1454,7 +1454,7 @@ def test_e5a70c2f(tmp_path):
         path_coverage.stop()
     exits[0]()
     report = json.loads((tmp_path / "path_coverage.json").read_text())
-    assert [firsts, rests, report["cards"]["src/stepping.py:1:0"]["taken"]] == [
+    assert [firsts, rests, report["flows"]["src/stepping.py:1:0"]["taken"]] == [
         ["start", "start"],
         [["done"], ["skip", "done"]],
         [
@@ -1468,23 +1468,23 @@ def test_e5a70c30(tmp_path):
     """Example: total of 3 orders, paid, unpaid, paid; then of 1 paid
     order; then of none
     A call's way holds its for once, as 0, 1 or 2+ items, however many
-    passes it made; the card lists each pass's own way under its for, so
+    passes it made; the flow lists each pass's own way under its for, so
     the ways kept never grow with the passes made."""
     amounts = _totalled(tmp_path, tmp_path)
-    card = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]["src/totals.py:1:0"]
-    assert [amounts, card["taken"], card["passes"]] == [[60, 30, 0], *TOTALLED]
+    flow = json.loads((tmp_path / "path_coverage.json").read_text())["flows"]["src/totals.py:1:0"]
+    assert [amounts, flow["taken"], flow["passes"]] == [[60, 30, 0], *TOTALLED]
 
 
 def test_e5a70c31(tmp_path):
     """Example: total of 3 orders, then of 1, then of none; that run's
     JSON report reported on
     The merged report lists the same passes of total's for, read back
-    from the report's cards."""
+    from the report's flows."""
     _totalled(tmp_path, tmp_path / "run")
     settings = {"root": tmp_path, "cover": ["src/*.py"], "report": []}
     path_coverage.report(**settings, coverage_dir=tmp_path / "merged", runs=[tmp_path / "run" / "path_coverage.json"])
-    card = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["cards"]["src/totals.py:1:0"]
-    assert [card["taken"], card["passes"]] == TOTALLED
+    flow = json.loads((tmp_path / "merged" / "path_coverage.json").read_text())["flows"]["src/totals.py:1:0"]
+    assert [flow["taken"], flow["passes"]] == TOTALLED
 
 
 def test_e5a70c32(tmp_path):
@@ -1509,9 +1509,9 @@ def test_e5a70c32(tmp_path):
     finally:
         path_coverage.stop()
     exits[0]()
-    card = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]["src/lateness.py:1:0"]
+    flow = json.loads((tmp_path / "path_coverage.json").read_text())["flows"]["src/lateness.py:1:0"]
     prompt, late = [{"at": "3:08", "path": [False]}], [{"at": "3:08", "path": [True]}, {"at": "4:12"}]
-    assert [found, card["taken"], card["passes"]] == [
+    assert [found, flow["taken"], flow["passes"]] == [
         ["O2", None],
         [
             {"way": [{"at": "2:04", "path": ["2+ items"], "passes": [prompt, late]}], "count": 1},
@@ -1550,8 +1550,8 @@ def test_e5a70c33(tmp_path):
     finally:
         path_coverage.stop()
     exits[0]()
-    cards = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]
-    assert [found, cards["src/spans.py:1:0"]["taken"], cards["src/spans.py:4:0"]["taken"]] == [
+    flows = json.loads((tmp_path / "path_coverage.json").read_text())["flows"]
+    assert [found, flows["src/spans.py:1:0"]["taken"], flows["src/spans.py:4:0"]["taken"]] == [
         [True, False, False],
         [
             {"way": [{"at": "2:32", "path": [True]}], "count": 2},
@@ -1581,9 +1581,9 @@ def test_e5a70c34(tmp_path):
     finally:
         path_coverage.stop()
     exits[0]()
-    card = json.loads((tmp_path / "path_coverage.json").read_text())["cards"]["src/amounts.py:1:0"]
+    flow = json.loads((tmp_path / "path_coverage.json").read_text())["flows"]["src/amounts.py:1:0"]
     paid, unpaid = [{"at": "2:48", "path": [True]}], [{"at": "2:48", "path": [False]}]
-    assert [found, card["taken"], card["passes"]] == [
+    assert [found, flow["taken"], flow["passes"]] == [
         [[30, 30], [30], []],
         [
             {"way": [{"at": "2:04"}, {"at": "2:28", "path": ["2+ items"], "passes": [unpaid, paid]}], "count": 1},
@@ -1608,7 +1608,7 @@ TOTALS = (
     "    return amount\n"
 )
 
-# The taken ways, then the passes, of total's card, called on 3 orders,
+# The taken ways, then the passes, of total's flow, called on 3 orders,
 # paid, unpaid, paid, then on 1 paid order, then on none.
 PAID_PASS, UNPAID_PASS = [{"at": "4:08", "path": [True]}], [{"at": "4:08", "path": [False]}]
 
@@ -1857,9 +1857,9 @@ def test_e5a70c3d(tmp_path):
     exits[0]()
     run = tmp_path / "run" / "path_coverage.json"
     path_coverage.report(**settings, coverage_dir=tmp_path / "reported", runs=[run], loops=True)
-    card = json.loads((tmp_path / "reported" / "path_coverage.json").read_text())["cards"]["src/loop_orders.py:1:0"]
+    flow = json.loads((tmp_path / "reported" / "path_coverage.json").read_text())["flows"]["src/loop_orders.py:1:0"]
     none, some, returned = {"at": "3:04", "path": ["0 items"]}, {"at": "3:04", "path": ["1+ items"]}, {"at": "6:04"}
-    assert (card["ways"], card["covered"], card["gaps"]) == (
+    assert (flow["ways"], flow["covered"], flow["gaps"]) == (
         3,
         [
             {"way": [none, returned], "count": 1},

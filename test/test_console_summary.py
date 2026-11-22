@@ -42,12 +42,12 @@ def test_7c3d9102():
 
 
 def test_7c3d9103():
-    """Example: fee's card in src/fee.py, 1 of its 4 paths taken, and
+    """Example: fee's flow in src/fee.py, 1 of its 4 paths taken, and
     groups code and test
     Each group has a combined line too: code has fee's 1 / 4.
     test, with no function, has 0 / 0, shown as -."""
-    cards = {"src/fee.py:1:0": [1, 4]}
-    assert lines({}, cards, GROUPS) == [
+    flows = {"src/fee.py:1:0": [1, 4]}
+    assert lines({}, flows, GROUPS) == [
         "code:",
         "  Paths alone: 0 / 0 (-)",
         "  Paths combined: 1 / 4 (25.00%)",

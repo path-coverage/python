@@ -367,7 +367,7 @@ def test_7b20d40e():
 def test_7b20d40a():
     """Example: a decorated function, f, and a lambda
     A function's entry is counted by its def's decision, decorators or
-    not; a lambda's is not counted, as it has no card."""
+    not; a lambda's is not counted, as it has no flow."""
     tables = _tables("import functools\n\n@functools.cache\ndef f(a):\n    return lambda: a\n")
     assert tables["f"].entry == "k.py:4:0"
     assert tables["<lambda>"].entry is None

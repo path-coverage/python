@@ -15,7 +15,7 @@ def total(orders):              call's way:  for 0 / 1 / 2+ items, return
     return amount
 ```
 
-`total` of 3 orders, then of 1, then of none, gives this card:
+`total` of 3 orders, then of 1, then of none, gives this flow:
 
 ```
 "taken":  [{"way": [{"at": "3:04", "path": ["2+ items"]}, {"at": "6:04"}], "count": 1},
@@ -54,16 +54,16 @@ def total(orders):              call's way:  for 0 / 1 / 2+ items, return
   steps.
 
 Self-coverage's report: 280 MB with every loop pass a step, 104 MB once
-code with no card no longer joined a way, 4.9 MB with comprehensions as
+code with no flow no longer joined a way, 4.9 MB with comprehensions as
 loops; its longest way 493 steps, from a while loop.
 
 ## Open
 
 - while loops: no FOR_ITER; a row in a while's body adds a step per pass.
 - A for whose header holds a decision has no `for` row; its loop step's
-  at names no row of the card. A comprehension's for is no row either.
-- `ways` of the card (method_machine.counts) counts a loop body once, not as
-  0/1/2+ times its passes, so the card's title can show fewer ways than
+  at names no row of the flow. A comprehension's for is no row either.
+- `ways` of the flow (method_machine.counts) counts a loop body once, not as
+  0/1/2+ times its passes, so the flow's title can show fewer ways than
   were taken.
 - Each pass logs an event: the suite went from about 40 s to 54 s.
 - A for over a literal has no way its literal rules out: no "0 items"

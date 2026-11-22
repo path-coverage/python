@@ -1,6 +1,6 @@
-# Cards: choices awaiting confirmation
+# Flows: choices awaiting confirmation
 
-Each function's card has a row per statement in it, flat, in the order
+Each function's flow has a row per statement in it, flat, in the order
 written. A statement that holds decisions is replaced by the outermost decisions
 in it, each followed by the decisions inside it. The choices below are
 provisional. Each one is pinned by the test named, in
@@ -27,7 +27,7 @@ test/test_method_statements.py unless stated.
    `class`, then its body's rows. (b47e3a12, b47e3a21)
 
 5. A nested def is one row, `def`: its body runs only when it is called,
-   and it has its own card. (b47e3a16)
+   and it has its own flow. (b47e3a16)
 
 6. A lambda's body and a comprehension's parts give a row for each decision in
    them, after the statement holding them, but no row of their own, as no
@@ -36,12 +36,12 @@ test/test_method_statements.py unless stated.
 7. A decision inside a decision's leaf, eg a ternary in a call inside an and, is
    a row of its own after the decision holding it. (b47e3a25)
 
-8. A decision outside every function is a top row, on the card of its span of
+8. A decision outside every function is a top row, on the flow of its span of
    lines, titled by the innermost class holding it, or `file`. Each file's
    top rows are totalled as `path:0:0`, so every decision is in some total.
-   (b47e3a27 to b47e3a29; test/test_listed_cards.py d3c9a101)
+   (b47e3a27 to b47e3a29; test/test_within_methods.py d3c9a101)
 
-9. Every decision of this repo's src and test is a card row or a top row.
+9. Every decision of this repo's src and test is a flow row or a top row.
    (b47e3a30)
 
 ## Tops (the row's label)

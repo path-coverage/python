@@ -1,6 +1,6 @@
 """Finds, without running it, the statements of each function in source, one
-row each in its card, and the decisions outside every function, each a row of a
-top card."""
+row each in its flow, and the decisions outside every function, each a row of a
+top flow."""
 
 import ast
 from dataclasses import dataclass
@@ -24,7 +24,7 @@ from .manifest import found as manifest_found
 
 @dataclass(frozen=True)
 class Statement:
-    """One row of a function's card, a top-level statement or a decision at its
+    """One row of a function's flow, a top-level statement or a decision at its
     top: where it starts, its column in UTF-8 bytes, as ast counts it, and in
     characters, as the reports give it; its top, what it is as written, eg =
     for a write; how many paths it has; the name of its decision, None when it
@@ -40,7 +40,7 @@ class Statement:
 
 
 # The nodes a statement's decisions are never looked for in: a function's body
-# runs only when it is called, its decisions rows of its own card, and a
+# runs only when it is called, its decisions rows of its own flow, and a
 # lambda's and a comprehension's parts give rows of their own, after the
 # statement holding them.
 UNSEEN = (
@@ -65,13 +65,13 @@ def of(source, path):
 
 def names(source, path):
     """{def decision: its name} for each function in source, eg {"k.py:4:4":
-    "ship"}, each its card's title."""
+    "ship"}, each its flow's title."""
     return {decision: node.name for decision, (node, _) in collected(source, path).items()}
 
 
 def lasts(source, path):
     """{def decision: its last line} for each function in source, eg
-    {"k.py:4:4": 6}, where its card ends."""
+    {"k.py:4:4": 6}, where its flow ends."""
     return {decision: node.end_lineno for decision, (node, _) in collected(source, path).items()}
 
 
@@ -119,14 +119,14 @@ def reaches(source, path):
 
 
 def top_rows(source, path):
-    """A Statement row for each decision in source on no function's card,
-    outside every function, for the card of its own lines, in the order
+    """A Statement row for each decision in source on no function's flow,
+    outside every function, for the flow of its own lines, in the order
     written: its operator, an elif's elif, and its paths. Example: RATE = 2
     if FAST else 1 gives a ternary row at 1:7."""
     found = decisions(source, path)
-    carded = {row.decision for rows in of(source, path).values() for row in rows}
+    in_flows = {row.decision for rows in of(source, path).values() for row in rows}
     lines = source.splitlines()
-    rows = [_top_row(lines, name, found[name]) for name in found if name not in carded]
+    rows = [_top_row(lines, name, found[name]) for name in found if name not in in_flows]
     return sorted(rows, key=lambda row: (row.line, row.column))
 
 
@@ -142,14 +142,14 @@ def _top_row(lines, name, condition):
 
 def top_level(source, path, paths):
     """[taken, possible] of the paths of the decisions in source on no
-    function's card, as top_rows gives them; paths as result.paths gives
+    function's flow, as top_rows gives them; paths as result.paths gives
     them. Example: RATE = 2 if FAST else 1, its then taken, gives [1, 2]."""
     names = [row.decision for row in top_rows(source, path)]
     return path_totals.alone({name: paths[name] for name in names})
 
 
 def totals(source, path, paths, reached):
-    """{def decision: [taken, size]} of each function's card in source, its
+    """{def decision: [taken, size]} of each function's flow in source, its
     rows' taken as taken gives them from paths and reached; a row not known
     counts as not taken, never more than it ran. Example: {"k.py:1:0": [2,
     4]}, 2 of ship's 4 paths taken."""
@@ -159,8 +159,8 @@ def totals(source, path, paths, reached):
     }
 
 
-def cards(files, paths, reached):
-    """{def decision: [taken, size]} of every function's card in files,
+def flows(files, paths, reached):
+    """{def decision: [taken, size]} of every function's flow in files,
     {path relative to root: (source, decisions)}, as totals gives them, and each
     file's top level's, as top_level gives it, named for line 0, which no
     function is on. Example: {"k.py:1:0": [2, 4], "k.py:0:0": [1, 2]}."""
@@ -172,8 +172,8 @@ def cards(files, paths, reached):
 
 
 def label(statement):
-    """statement's line:column as its card shows it, the column in
-    characters, two digits, so a card's columns line up. Example: "3:04"."""
+    """statement's line:column as its flow shows it, the column in
+    characters, two digits, so a flow's columns line up. Example: "3:04"."""
     return f"{statement.line}:{statement.char_column:02d}"
 
 
@@ -347,7 +347,7 @@ class _Rows:
         """(statements, None) for each body of statements in node, run 0 or
         more times or on a raise: a loop's, a with's, a class's, and a
         try's parts; (None, node) for each lambda and comprehension; none in
-        a function, whose rows are its own card's, nor in an arm, whose
+        a function, whose rows are its own flow's, nor in an arm, whose
         rows follow its decision's."""
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return []

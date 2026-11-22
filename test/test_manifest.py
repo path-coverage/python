@@ -163,7 +163,7 @@ def test_5c1e9a07():
     """Example: if order.big and order.new: ... else: ...
     An if statement is a decision, named at its keyword, col 4.
     Its predicate, the whole `and`, is one leaf of it, and the `and` is a
-    decision of its own, named at its keyword, so each row of a card is one
+    decision of its own, named at its keyword, so each row of a flow is one
     decision.
     Its then and else arms are plain, as they are statements, and each
     leaves the function by return."""
@@ -504,7 +504,7 @@ def test_5c1e9a19():
 def test_5c1e9a1a():
     """Example: grade, a match of two cases, the second's body an if.
     A match's Condition holds where each case's body is written, first
-    statement to last, case by case, so a card can place a row in the
+    statement to last, case by case, so a flow can place a row in the
     case holding it from the decision alone."""
     source = (
         "def grade(score, bonus):\n"

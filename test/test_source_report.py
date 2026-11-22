@@ -42,17 +42,17 @@ def test_5e2a9120():
 def test_5e2a9130():
     """Example: k.py's kata, in groups Katas, k*.py, and Other, x.py
     The source report of a run: no operators ignored, the covered files of
-    each group, each card row's top coloured, a return's too, and each
-    covered file's lines and decisions, each decision's fold headed by its card
+    each group, each flow row's top coloured, a return's too, and each
+    covered file's lines and decisions, each decision's fold headed by its flow
     row's top."""
     decisions = manifest.decisions(KATA, "k.py")
     files = {"k.py": (KATA, decisions)}
-    cards = {
+    flows = {
         "k.py:1:0": {"rows": [{"decision": "k.py:2:17", "top": "and"}, {"decision": None, "top": "return"}]}
     }
     groups = {"Katas": ["k*.py"], "Other": ["x.py"]}
-    assert source_report.of(files, {"k.py:2:17": PATHS}, cards, groups) == {
-        "$schema": "https://path-coverage.github.io/schemas/v1/path_coverage.source.schema.json",
+    assert source_report.of(files, {"k.py:2:17": PATHS}, flows, groups) == {
+        "$schema": "https://path-coverage.github.io/schemas/v2/path_coverage.source.schema.json",
         "schema": 1,
         "ignored": [],
         "groups": {"Katas": ["k.py"], "Other": []},

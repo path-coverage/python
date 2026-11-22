@@ -1,4 +1,4 @@
-"""How the rows of each card nest: for each row, the decision it runs inside,
+"""How the rows of each flow nest: for each row, the decision it runs inside,
 the arm of that decision it is in, and the paths of that decision on which it runs,
 so a reader can tell which paths reach a row."""
 
@@ -39,7 +39,7 @@ def of(source, path, decisions=None):
 
 
 def nested(source, decisions, rows):
-    """{"line:col": place} of each of rows, a card's, decisions being {decision:
+    """{"line:col": place} of each of rows, a flow's, decisions being {decision:
     Condition}: each placed in the innermost region of another row's decision
     holding all of its own decision's code, or, for a row that is no decision, where
     it starts. A place is {"parent": the "line:col" of that decision, "in": its

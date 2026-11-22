@@ -111,11 +111,11 @@ def _defs(node):
 
 
 def line(name):
-    """The line of name, a decision's or card's "path:line:col"."""
+    """The line of name, a decision's or flow's "path:line:col"."""
     return int(name.rsplit(":", 2)[1])
 
 
 def keeps(name, lines):
-    """True when name, a decision's or card's "path:line:col", is on one
+    """True when name, a decision's or flow's "path:line:col", is on one
     of the lines kept for its path in lines, {path: line numbers}."""
     return line(name) in lines[name.rsplit(":", 2)[0]]

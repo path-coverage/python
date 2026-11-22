@@ -72,7 +72,7 @@ def test_a91f2b02():
 def test_a91f2b03():
     """Example: if order.big: ... else: ..., one of its two paths taken
     An if's fold has no row for its arms: which arm a path takes follows
-    from its predicate, and the code in an arm is a card row of its own."""
+    from its predicate, and the code in an arm is a flow row of its own."""
     tree = {
         "operator": "if",
         "counts": [0, 1],

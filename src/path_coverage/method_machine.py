@@ -130,9 +130,9 @@ def _machines(source, path, loop_forks=False):
 
 def top_counter(source, path):
     """A function giving how many ways one run can go through rows, a top
-    card's decision rows in source, at path, counted as a function's are:
+    flow's decision rows in source, at path, counted as a function's are:
     its outermost decisions one after another, each deciding those inside
-    it. source is built once, for all its top cards."""
+    it. source is built once, for all its top flows."""
     _, _, built = _build(source, path, False)
 
     def count(rows):

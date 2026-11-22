@@ -1,6 +1,6 @@
 import signal
 
-from path_coverage import listed_cards, manifest, result
+from path_coverage import within_methods, manifest, result
 
 SHOP = (
     "RATE = 2 if FAST else 1\n"
@@ -28,21 +28,21 @@ PATHS = {
 
 
 def _listed(source, paths, reached):
-    """The listed cards of source, as if it were k.py, from paths and
+    """The listed flows of source, as if it were k.py, from paths and
     reached, its operands all zero, with no ways taken."""
     decisions = manifest.decisions(source, "k.py")
     files = {"k.py": (source, decisions)}
-    return listed_cards.of(files, result.operands(decisions, {}), paths, (reached, {}))
+    return within_methods.of(files, result.operands(decisions, {}), paths, (reached, {}))
 
 
 def test_d3c9a101():
     """Example: SHOP, RATE's then taken, SIZE's never, ship's and once
-    Each card is listed as its page draws it: its name, its first and
+    Each flow is listed as its page draws it: its name, its first and
     last lines, the ways one call can go through it, how many times it was
-    called, never here, none for a top card, and a row per statement.
+    called, never here, none for a top flow, and a row per statement.
     A row has its line:col, its top, its paths, how many were taken,
     and its decision.
-    A top card is named for its first line, its name the class holding
+    A top flow is named for its first line, its name the class holding
     it, or file when none does."""
     assert _listed(SHOP, PATHS, {}) == {
         "k.py:2:0": {
@@ -84,12 +84,12 @@ def test_d3c9a101():
 
 def test_d3c9a103():
     """Example: SHOP's tree
-    How each card's rows nest is listed for ship's card and for each top
-    card, RATE's and Shop's, each by its line:col; each row here at the
+    How each flow's rows nest is listed for ship's flow and for each top
+    flow, RATE's and Shop's, each by its line:col; each row here at the
     top, inside no other decision."""
     top = {"parent": None, "in": None, "on": None, "leaf": None, "gives": None}
     decisions = manifest.decisions(SHOP, "k.py")
-    tree = listed_cards.tree({"k.py": (SHOP, decisions)}, result.operands(decisions, {}))
+    tree = within_methods.tree({"k.py": (SHOP, decisions)}, result.operands(decisions, {}))
     assert tree == {"k.py": {"2:0": {"3:21": top}, "1:0": {"1:9": top}, "5:0": {"5:13": top}}}
 
 
@@ -114,7 +114,7 @@ def test_d3c9a102():
 def test_d3c9a104():
     """Example: save, an if on dry_run whose arm returns, a for loop, an
     if on not dry_run, a return; called twice, dry_run false, 2+ records.
-    A function card lists the possible paths of its machine some call
+    A function flow lists the possible paths of its machine some call
     witnessed, covered, each with how many calls did; its gaps, those no
     call witnessed; and its impossible paths, each giving the stable
     dry_run both outcomes, neither with a count. The for is a fork, 0 or
@@ -138,10 +138,10 @@ def test_d3c9a104():
         "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
     }
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, loops=True)["k.py:1:0"]
+    flow = within_methods.of(files, result.operands(decisions, {}), paths, counted, loops=True)["k.py:1:0"]
     on = {"at": "2:04", "path": [False]}
     none, some = {"at": "4:04", "path": ["0 items"]}, {"at": "4:04", "path": ["1+ items"]}
-    assert (card["ways"], card["covered"], card["gaps"], card["impossible"]) == (
+    assert (flow["ways"], flow["covered"], flow["gaps"], flow["impossible"]) == (
         3,
         [{"way": [on, some, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2}],
         [[{"at": "2:04", "path": [True]}, {"at": "3:08"}], [on, none, {"at": "6:04", "path": [True]}, {"at": "8:04"}]],
@@ -153,7 +153,7 @@ def test_d3c9a105():
     """Example: half, an if whose condition is an or, then a return;
     called once, with a child.
     A call steps the or, decided first, before the if holding it, though
-    the card's tree lists the if first; the machine steps in that order
+    the flow's tree lists the if first; the machine steps in that order
     too, so a taken way matches its possible path, and each gap lists its
     steps as a call would take them."""
     source = (
@@ -174,8 +174,8 @@ def test_d3c9a105():
         ],
     }
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
-    assert card["gaps"] == [
+    flow = within_methods.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
+    assert flow["gaps"] == [
         [{"at": "2:16", "path": [False, True]}, {"at": "2:04", "path": [True]}, {"at": "4:04"}],
         [{"at": "2:16", "path": [False, False]}, {"at": "2:04", "path": [False]}, {"at": "4:04"}],
     ]
@@ -191,24 +191,24 @@ HUGE = (
 
 def test_d3c9a110():
     """A file holding a function with 2**40 ways is listed within 5 seconds,
-    that function's card counting its ways."""
+    that function's flow counting its ways."""
     # A listing still running at the alarm is interrupted, not left to hang.
     previous = signal.signal(signal.SIGALRM, signal.default_int_handler)
     signal.alarm(5)
     try:
         never = {decision: _then_taken(0) for decision in manifest.decisions(HUGE, "k.py")}
-        cards = _listed(HUGE, never, {})
+        flows = _listed(HUGE, never, {})
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)
-    assert cards["k.py:3:0"]["ways"] == 2**40
+    assert flows["k.py:3:0"]["ways"] == 2**40
 
 
 def test_d3c9a120():
     """Example: retry, a for loop over BACKOFFS whose line says
     # path: impossible 0 items, called once with BACKOFFS empty.
     The call takes the 0 items way the comment declared impossible, so
-    the card lists that way as an impossible way taken."""
+    the flow lists that way as an impossible way taken."""
     source = (
         "BACKOFFS = ()\n"
         "def retry(call):\n"
@@ -220,8 +220,8 @@ def test_d3c9a120():
     taken = (("k.py:3:4", ("0 items",)), ("k.py:5:4",))
     counted = ({"k.py:2:0": 1}, {"k.py:2:0": {taken: 1}})
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), {}, counted, loops=True)["k.py:2:0"]
-    assert card["impossible_taken"] == [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]]
+    flow = within_methods.of(files, result.operands(decisions, {}), {}, counted, loops=True)["k.py:2:0"]
+    assert flow["impossible_taken"] == [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]]
 
 
 def test_d3c9a121():
@@ -229,7 +229,7 @@ def test_d3c9a121():
     if on not dry_run, a return; called twice, dry_run false, 2+ records,
     listed with loops as they are by default, off.
     With loops off the for is no fork: no way, covered, gap or impossible,
-    steps at it, and the card has one way fewer than with it a fork."""
+    steps at it, and the flow has one way fewer than with it a fork."""
     source = (
         "def save(records, dry_run, db):\n"
         "    if dry_run:\n"
@@ -248,9 +248,9 @@ def test_d3c9a121():
         "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
     }
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
+    flow = within_methods.of(files, result.operands(decisions, {}), paths, counted)["k.py:1:0"]
     on = {"at": "2:04", "path": [False]}
-    assert (card["ways"], card["covered"], card["gaps"], card["impossible"]) == (
+    assert (flow["ways"], flow["covered"], flow["gaps"], flow["impossible"]) == (
         2,
         [{"way": [on, {"at": "6:04", "path": [True]}, {"at": "8:04"}], "count": 2}],
         [[{"at": "2:04", "path": [True]}, {"at": "3:08"}]],
@@ -261,7 +261,7 @@ def test_d3c9a121():
 def test_d3c9a122():
     """Example: save, an if on dry_run whose arm returns, a for loop, an
     if on not dry_run, a return; called twice, listed with max_paths 1
-    A function with more paths than max_paths is not checked: its card
+    A function with more paths than max_paths is not checked: its flow
     lists no covered and no gaps, so the worklist names it as too many
     to check."""
     source = (
@@ -282,8 +282,8 @@ def test_d3c9a122():
         "k.py:6:4": [{"path": [True], "count": 2}, {"path": [False], "count": 0}],
     }
     files = {"k.py": (source, decisions)}
-    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, max_paths=1)["k.py:1:0"]
-    assert ("covered" in card, "gaps" in card) == (False, False)
+    flow = within_methods.of(files, result.operands(decisions, {}), paths, counted, max_paths=1)["k.py:1:0"]
+    assert ("covered" in flow, "gaps" in flow) == (False, False)
 
 
 def test_d3c9a123():
@@ -292,7 +292,7 @@ def test_d3c9a123():
     max_paths 3.
     Whether a function has more paths than max_paths is told by counting
     the very paths it lists: a break ends its pass, so restock has 3, not
-    over 3, and its card lists them, each a gap."""
+    over 3, and its flow lists them, each a gap."""
     source = (
         "def restock(items, low):\n"
         "    for item in items:\n"
@@ -307,22 +307,22 @@ def test_d3c9a123():
     counted = ({"k.py:1:0": 0}, {})
     never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
     paths = {"k.py:3:8": never, "k.py:5:8": never}
-    card = listed_cards.of(files, result.operands(decisions, {}), paths, counted, max_paths=3)["k.py:1:0"]
-    assert (card["ways"], len(card["gaps"])) == (3, 3)
+    flow = within_methods.of(files, result.operands(decisions, {}), paths, counted, max_paths=3)["k.py:1:0"]
+    assert (flow["ways"], len(flow["gaps"])) == (3, 3)
 
 
 def test_d3c9a124():
     """Example: READY, outside every function, an any over ORDERS whose
     generator's element is an and; never run.
-    A top card's ways are counted as a function's are: the and runs in
+    A top flow's ways are counted as a function's are: the and runs in
     the generator's frame, so adds no way; READY's ways are its any's 5,
     0 items, 1 or 2+ giving true or false."""
     source = "READY = any(o.paid and o.packed for o in ORDERS)\n"
     decisions = manifest.decisions(source, "k.py")
     never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
     paths = {decision: never for decision in decisions}
-    card = _listed(source, paths, None)["k.py:1:0"]
-    assert card["ways"] == 5
+    flow = _listed(source, paths, None)["k.py:1:0"]
+    assert flow["ways"] == 5
 
 
 def test_d3c9a125():
@@ -335,19 +335,19 @@ def test_d3c9a125():
     decisions = manifest.decisions(source, "k.py")
     never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
     paths = {decision: never for decision in decisions}
-    card = _listed(source, paths, None)["k.py:1:0"]
-    assert card["ways"] == 3
+    flow = _listed(source, paths, None)["k.py:1:0"]
+    assert flow["ways"] == 3
 
 
 def test_d3c9a126():
     """Example: FEE, outside every function, a conditional expression on
     PAID or FREE whose then is a conditional expression on VIP; never run.
-    A top card's decisions inside another are decided by it, not after
+    A top flow's decisions inside another are decided by it, not after
     it: the or's 2 true paths each take the inner one's 2, its false path
     the else, so FEE's ways are 5, not 3 times 2 times 2."""
     source = "FEE = (5 if VIP else 10) if PAID or FREE else 0\n"
     decisions = manifest.decisions(source, "k.py")
     never = [{"path": [True], "count": 0}, {"path": [False], "count": 0}]
     paths = {decision: never for decision in decisions}
-    card = _listed(source, paths, None)["k.py:1:0"]
-    assert (card["ways"], len(card["rows"])) == (5, 3)
+    flow = _listed(source, paths, None)["k.py:1:0"]
+    assert (flow["ways"], len(flow["rows"])) == (5, 3)

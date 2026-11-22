@@ -193,7 +193,7 @@ def test_b47e3a12():
 
 def test_b47e3a14():
     """Example: a class with __init__ and an async ship
-    Each def's name, by its decision, for its card's title."""
+    Each def's name, by its decision, for its flow's title."""
     source = (
         "class Shop:\n"
         "    def __init__(self):\n"
@@ -221,7 +221,7 @@ def test_b47e3a16():
     """Example: outer, defining inner, then returning it
     A nested def is no row of outer's, nor is it looked through, as its
     body runs when it is called.
-    inner has its own card, its rows its own."""
+    inner has its own flow, its rows its own."""
     source = (
         "def outer(rate):\n"
         "    def inner(x):\n"
@@ -248,7 +248,7 @@ def test_b47e3a17():
 
 def test_b47e3a18():
     """Example: ship, the ternary's then taken, the return reached
-    Its card's total is [taken, size]: [2, 3].
+    Its flow's total is [taken, size]: [2, 3].
     Without reaches, the return is not known.
     It counts as not taken: [1, 3], never more than it ran."""
     paths = {"k.py:4:15": [{"path": [True], "count": 2}, {"path": [False], "count": 0}]}
@@ -261,7 +261,7 @@ def test_b47e3a18():
 
 def test_b47e3a20():
     """Example: a class with __init__, on two lines, and ship, on four
-    Each def's last line, by its decision, where its card ends."""
+    Each def's last line, by its decision, where its flow ends."""
     source = (
         "class Shop:\n"
         "    def __init__(self):\n"
@@ -381,9 +381,9 @@ SHOP = (
 
 def test_b47e3a27():
     """Example: a ternary at the top, ship, and one in class Shop
-    A decision outside every function is on no function's card.
-    Each is a top row, for the card of its own lines, in order.
-    ship's and is on its card, so it is no top row."""
+    A decision outside every function is on no function's flow.
+    Each is a top row, for the flow of its own lines, in order.
+    ship's and is on its flow, so it is no top row."""
     rows = method_statements.top_rows(SHOP, "k.py")
     assert [(row.line, row.column, row.top, row.paths) for row in rows] == [
         (1, 9, "ternary", 2),
@@ -411,30 +411,30 @@ SHOP_PATHS = {
 def test_b47e3a28():
     """Example: SHOP, RATE's then taken, SIZE's never, ship's and once
     The top level's total is [taken, possible] of its top rows' paths.
-    ship's and is on its own card, so it is not in it: [1, 4]."""
+    ship's and is on its own flow, so it is not in it: [1, 4]."""
     assert method_statements.top_level(SHOP, "k.py", SHOP_PATHS) == [1, 4]
 
 
 def test_b47e3a29():
-    """Example: SHOP's cards
+    """Example: SHOP's flows
     Each file's top level has a total too, named for line 0.
     No function is on line 0, so every decision is in some total."""
     files = {"k.py": (SHOP, manifest.decisions(SHOP, "k.py"))}
-    cards = method_statements.cards(files, SHOP_PATHS, None)
-    assert cards == {"k.py:2:0": [1, 3], "k.py:0:0": [1, 4]}
+    flows = method_statements.flows(files, SHOP_PATHS, None)
+    assert flows == {"k.py:2:0": [1, 3], "k.py:0:0": [1, 4]}
 
 
 def test_b47e3a30():
     """Example: every file of this repo's src and test
-    Each decision is a row of a function's card, or a top row."""
+    Each decision is a row of a function's flow, or a top row."""
     root = Path(__file__).parent.parent
     missed = {}
     for file in sorted([*root.glob("src/**/*.py"), *root.glob("test/**/*.py")]):
         source = file.read_text()
         path = file.relative_to(root).as_posix()
-        carded = {row.decision for rows in method_statements.of(source, path).values() for row in rows}
+        in_flows = {row.decision for rows in method_statements.of(source, path).values() for row in rows}
         tops = {row.decision for row in method_statements.top_rows(source, path)}
-        missed[path] = sorted(set(manifest.decisions(source, path)) - carded - tops)
+        missed[path] = sorted(set(manifest.decisions(source, path)) - in_flows - tops)
     assert missed == {path: [] for path in missed}
 
 
@@ -451,7 +451,7 @@ def test_b47e3a31():
     """Example: ship, a write, a for over its items, a call, an if with an
     else, a return, and a raise in the else
     A row that is no decision and has one path tells the reader nothing, so a
-    card has no row for it: the write, the for and the call are dropped,
+    flow has no row for it: the write, the for and the call are dropped,
     though the for's body still gives rows. A return or a raise stays, as it
     cuts a path short. An if with an else is labelled if/else."""
     source = (

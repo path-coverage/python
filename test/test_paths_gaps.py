@@ -1,6 +1,6 @@
-from path_coverage.card_gaps import lines
+from path_coverage.paths_gaps import lines
 
-CARD = "source/fee.py:5:0"
+FLOW = "source/fee.py:5:0"
 ROWS = [
     {"at": "8:04", "top": "if", "paths": 2, "taken": 2, "decision": "source/fee.py:8:4"},
     {"at": "8:19", "top": "and", "paths": 3, "taken": 2, "decision": "source/fee.py:8:19"},
@@ -16,7 +16,7 @@ PARENTS = {"source/fee.py:8:19": "source/fee.py:8:4"}
 
 
 def test_a3c95e01():
-    """Example: fee, an if on an and, then an if on order.big, its card
+    """Example: fee, an if on an and, then an if on order.big, its flow
     with 4 of its 6 paths untested
     One heading for the function, then each untested path as a numbered
     line of its choices, in order, each leaf by its text. An if whose
@@ -28,8 +28,8 @@ def test_a3c95e01():
         [{"at": "8:19", "path": [True, False]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [False]}, {"at": "12:04"}],
         [{"at": "8:19", "path": [False, None]}, {"at": "8:04", "path": [False]}, {"at": "10:04", "path": [True]}, {"at": "12:04"}],
     ]
-    cards = {CARD: {"name": "fee", "rows": ROWS, "taken": [], "gaps": gaps, "impossible_taken": []}}
-    assert lines(cards, TEXTS, PARENTS) == [
+    flows = {FLOW: {"name": "fee", "rows": ROWS, "taken": [], "gaps": gaps, "impossible_taken": []}}
+    assert lines(flows, TEXTS, PARENTS) == [
         "source/fee.py:5 fee() has 4 untested paths.",
         "Add tests that take each of these paths:",
         "  1. line 8 `user.member` true, `order.paid` true, then line 10 `order.big` false",
@@ -40,7 +40,7 @@ def test_a3c95e01():
 
 
 def test_a3c95e02():
-    """Example: fee with every path tested, beside a card with one gap
+    """Example: fee with every path tested, beside a flow with one gap
     A function with no untested path gets no lines at all; one with a
     single untested path says path, not paths."""
     tested = {"name": "fee", "rows": ROWS, "taken": [], "gaps": [], "impossible_taken": []}
@@ -51,8 +51,8 @@ def test_a3c95e02():
         "taken": [],
         "impossible_taken": [],
     }
-    cards = {CARD: tested, "source/fee_copy.py:5:0": untested}
-    assert lines(cards, TEXTS, PARENTS) == [
+    flows = {FLOW: tested, "source/fee_copy.py:5:0": untested}
+    assert lines(flows, TEXTS, PARENTS) == [
         "source/fee_copy.py:5 fee() has 1 untested path.",
         "Add tests that take each of these paths:",
         "  1. line 8 `user.member` false, then line 10 `order.big` true",
@@ -64,7 +64,7 @@ def test_a3c95e03():
     A loop has no row, so its step is named by its line, and how many
     items it ran."""
     rows = [{"at": "6:04", "top": "return", "paths": 1, "taken": 1, "decision": None}]
-    cards = {
+    flows = {
         "src/nested.py:4:0": {
             "name": "left_in",
             "rows": rows,
@@ -73,7 +73,7 @@ def test_a3c95e03():
             "impossible_taken": [],
         }
     }
-    assert lines(cards, {}, {}) == [
+    assert lines(flows, {}, {}) == [
         "src/nested.py:4 left_in() has 1 untested path.",
         "Add tests that take each of these paths:",
         "  1. line 6 loop: 0 items",
@@ -86,7 +86,7 @@ def test_a3c95e10():
     One heading for the function, then each impossible path a call took,
     numbered, as the choices it made: the comment is wrong."""
     rows = [{"at": "5:04", "top": "return", "paths": 1, "taken": 1, "decision": None}]
-    cards = {
+    flows = {
         "src/retry.py:2:0": {
             "name": "retry",
             "rows": rows,
@@ -95,7 +95,7 @@ def test_a3c95e10():
             "impossible_taken": [[{"at": "3:04", "path": ["0 items"]}, {"at": "5:04"}]],
         }
     }
-    assert lines(cards, {}, {}) == [
+    assert lines(flows, {}, {}) == [
         "src/retry.py:2 retry() took 1 path declared impossible.",
         "Remove the # path: impossible comment that declares it:",
         "  1. line 3 loop: 0 items",
@@ -104,15 +104,15 @@ def test_a3c95e10():
 
 def test_a3c95e11():
     """Example: price, a function with 6912 paths, more than max paths, so
-    its card has taken ways but no gaps, beside a top card
+    its flow has taken ways but no gaps, beside a top flow
     A function with more paths than --max-paths allows fails: it is
     named, with how many it has, and what to do, never left out as if
-    every path were tested. A top card, which no call runs, still gets
+    every path were tested. A top flow, which no call runs, still gets
     no lines."""
     price = {"name": "price", "rows": ROWS, "ways": 6912, "taken": []}
     top = {"name": "<module>", "rows": ROWS, "ways": 6}
-    cards = {"source/price.py:5:0": price, "source/price.py:1:0": top}
-    assert lines(cards, TEXTS, PARENTS) == [
+    flows = {"source/price.py:5:0": price, "source/price.py:1:0": top}
+    assert lines(flows, TEXTS, PARENTS) == [
         "source/price.py:5 price() has 6912 paths, more than --max-paths allows.",
         "Split it into smaller functions.",
     ]

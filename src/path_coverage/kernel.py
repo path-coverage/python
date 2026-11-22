@@ -9,12 +9,12 @@ import sys
 from pathlib import Path
 
 from . import (
-    card_gaps,
+    paths_gaps,
     console_summary,
     gaps,
     inserted_records,
     kinds,
-    listed_cards,
+    within_methods,
     manifest,
     measured_by,
     method_statements,
@@ -40,7 +40,7 @@ INSTRUMENTS = {"monitoring": monitor.instrument, "rewrite": rewrite.instrument}
 EVENTS = tuple(INSTRUMENTS)
 
 # The URL of the schema the JSON report follows.
-SCHEMA_URL = "https://path-coverage.github.io/schemas/v1/path_coverage.schema.json"
+SCHEMA_URL = "https://path-coverage.github.io/schemas/v2/path_coverage.schema.json"
 
 
 class _Config:
@@ -138,12 +138,12 @@ def _check(setting, names, known):
             raise ValueError(f"unknown {setting} {name!r}; the {setting}s are: {', '.join(known)}")
 
 
-def _config(root, cover, coverage_dir, report, collector, skip, groups=None, events="monitoring", limits=(False, listed_cards.MAX_PATHS)):
+def _config(root, cover, coverage_dir, report, collector, skip, groups=None, events="monitoring", limits=(False, within_methods.MAX_PATHS)):
     """The settings, each checked: unknown reporters and events modes are
     refused by name, as is the post reporter with no collector; limits
-    (loops, max_paths), whether a loop is a fork in a function card's
+    (loops, max_paths), whether a loop is a fork in a function flow's
     ways, and the most paths a function may have and still be checked,
-    refused above listed_cards.PATHS_CAP."""
+    refused above within_methods.PATHS_CAP."""
     _check("reporter", report, REPORTERS)
     _check("events mode", [events], EVENTS)
     if "post" in report and not collector:
@@ -151,9 +151,9 @@ def _config(root, cover, coverage_dir, report, collector, skip, groups=None, eve
     config = _Config(root, cover, coverage_dir, report, collector, skip, groups)
     config.events = events
     config.loops, config.max_paths = limits
-    if config.max_paths > listed_cards.PATHS_CAP:
+    if config.max_paths > within_methods.PATHS_CAP:
         raise ValueError(
-            f"max paths {config.max_paths} is more than {listed_cards.PATHS_CAP}, the cap that keeps analysing"
+            f"max paths {config.max_paths} is more than {within_methods.PATHS_CAP}, the cap that keeps analysing"
             " each function's paths to about 2 seconds and 120 MB of JSON"
         )
     _check_lists(config)
@@ -298,7 +298,7 @@ def report(
     groups=None,
     events="monitoring",
     loops=False,
-    max_paths=listed_cards.MAX_PATHS,
+    max_paths=within_methods.MAX_PATHS,
 ):
     """Runs the reporters from the JSON reports at runs (eg those a collector
     saved), their counts added together, parsing each covered file afresh,
@@ -307,7 +307,7 @@ def report(
     coverage_dir too. A run that measured other kinds, was measured by
     other tools or versions of them, or in another events mode than
     events, is refused, as it can list a decision's paths differently.
-    With loops True each loop is a fork in a function card's ways, 0
+    With loops True each loop is a fork in a function flow's ways, 0
     items or 1+ items, as method_machine.ways has it; by default it is
     none. A function with more ways than max_paths lists none of them,
     and the ways reporter names it as failing."""
@@ -385,29 +385,29 @@ def _finish(config, files, operands, paths, counted):
     runs the chosen reporters. counted is (reached,
     ways): each statement's runs, None when not known, and each function's
     ways taken, as Evaluations.ways has them. A cover's ::qualname keeps
-    only the decisions and cards inside its scope."""
+    only the decisions and flows inside its scope."""
     reached, ways = counted
-    cards = method_statements.cards(files, paths, reached)
-    listed = listed_cards.of(files, operands, paths, counted, loops=config.loops, max_paths=config.max_paths)
+    flows = method_statements.flows(files, paths, reached)
+    listed = within_methods.of(files, operands, paths, counted, loops=config.loops, max_paths=config.max_paths)
     kept_operands = _kept(operands, config.lines)
     kept_paths = _kept(paths, config.lines)
-    kept_cards = _kept(cards, config.lines)
+    kept_flows = _kept(flows, config.lines)
     kept_reached = None if reached is None else _kept(reached, config.lines)
     report = _report_json(kept_operands, kept_paths, files, kept_reached, config.events)
     report["loops"], report["max_paths"] = config.loops, config.max_paths
-    report["totals"] = console_summary.totals(kept_paths, kept_cards)
+    report["totals"] = console_summary.totals(kept_paths, kept_flows)
     if config.groups:
-        report["totals"]["groups"] = console_summary.group_totals(kept_paths, kept_cards, config.groups)
-    report["cards"] = _kept(listed, config.lines)
-    report["tree"] = _carded(listed_cards.tree(files, operands), report["cards"])
+        report["totals"]["groups"] = console_summary.group_totals(kept_paths, kept_flows, config.groups)
+    report["flows"] = _kept(listed, config.lines)
+    report["tree"] = _in_flows(within_methods.tree(files, operands), report["flows"])
     text = json.dumps(report, indent=2)
     config.coverage_dir.mkdir(parents=True, exist_ok=True)
     (config.coverage_dir / "path_coverage.json").write_text(text)
     kept_files = {path: (source, _kept(decisions, config.lines)) for path, (source, decisions) in files.items()}
-    source = source_report.of(kept_files, paths, report["cards"], config.groups)
+    source = source_report.of(kept_files, paths, report["flows"], config.groups)
     (config.coverage_dir / "path_coverage.source.json").write_text(json.dumps(source))
     texts = paths_report.texts(files)
-    ways = card_gaps.lines(report["cards"], texts, _parents(report["tree"]))
+    ways = paths_gaps.lines(report["flows"], texts, _parents(report["tree"]))
     (config.coverage_dir / "path_coverage.ways.txt").write_text("".join(f"{line}\n" for line in ways))
     if "gaps" in config.report:
         for line in gaps.lines(kept_operands, kept_paths, texts):
@@ -416,7 +416,7 @@ def _finish(config, files, operands, paths, counted):
         for line in ways:
             print(line)
     if "summary" in config.report:
-        for line in console_summary.lines(kept_paths, kept_cards, config.groups):
+        for line in console_summary.lines(kept_paths, kept_flows, config.groups):
             print(line)
     if "post" in config.report:
         post.deliver(text, config.collector)
@@ -427,8 +427,8 @@ def _parents(tree):
     report["tree"] has it, that has a parent, each named path:line:column."""
     return {
         f"{path}:{at}": f"{path}:{node['parent']}"
-        for path, cards in tree.items()
-        for decisions in cards.values()
+        for path, flows in tree.items()
+        for decisions in flows.values()
         for at, node in decisions.items()
         if node["parent"] is not None
     }
@@ -505,11 +505,11 @@ def _lines(config):
     return lines
 
 
-def _carded(tree, cards):
-    """tree, as listed_cards.tree gives it, {path: {"line:col": rows}},
-    with only the cards in cards, {"path:line:col": card}, so the tree
-    and the cards always list the same cards."""
-    return {path: {at: rows for at, rows in nested.items() if f"{path}:{at}" in cards} for path, nested in tree.items()}
+def _in_flows(tree, flows):
+    """tree, as within_methods.tree gives it, {path: {"line:col": rows}},
+    with only the flows in flows, {"path:line:col": flow}, so the tree
+    and the flows always list the same flows."""
+    return {path: {at: rows for at, rows in nested.items() if f"{path}:{at}" in flows} for path, nested in tree.items()}
 
 
 def _kept(named, lines):

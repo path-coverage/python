@@ -66,7 +66,7 @@ A cover glob can end in `::` and a qualname, the names of a def or class
 from the module down joined by dots, eg `src/orders.py::Order.ship`. Only
 that scope is measured: code outside it runs as plain Python, with no
 events and nothing wrapped, and the totals, gaps and summary count
-only its decisions and cards. A def nested in the scope is part of it,
+only its decisions and flows. A def nested in the scope is part of it,
 as are both defs of a property's getter and setter, which share a name.
 Every file the glob matches must hold the qualname, or `start` refuses
 the cover, naming the file and the first name missing:
@@ -317,17 +317,17 @@ tags = record.get("tags") or []   # leaf 1: never evaluated, or no gap
 
 ### Methods
 
-Each function has a card, named by the `path:line:column` of its `def`,
+Each function has a flow, named by the `path:line:column` of its `def`,
 with a row for each statement that shapes its paths: each decision, and
 each `return` or `raise`, which ends a path. Any other statement, eg
 `x = 1`, runs exactly when what holds it does, so is no row. A nested
-`def` has a card of its own, as its body runs only when called. A
+`def` has a flow of its own, as its body runs only when called. A
 decision's row counts its paths; a `return` or `raise` row is one path,
 taken when it is reached. A function's total adds up its rows. A file's
-decisions outside every function get a card for each span of their
+decisions outside every function get a flow for each span of their
 lines.
 
-The JSON report's `cards` hold each card's rows, its `ways` and its
+The JSON report's `flows` hold each flow's rows, its `ways` and its
 `calls`, and its `tree` says how those rows nest.
 
 ### Reporters
@@ -418,7 +418,7 @@ manifest gives them.
 
 Decisions covered now: `and`, `or`, the conditional expression,
 `if`/`elif`/`else`, `match`, comprehension filters, and `any` and `all`
-called with a generator. Each function's card has a row for every decision
+called with a generator. Each function's flow has a row for every decision
 in it, and for each return and raise, as each cuts a path short.
 
 Next:

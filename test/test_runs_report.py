@@ -39,15 +39,15 @@ def test_7c2d9101(tmp_path, capsys):
     """Example: path_coverage_report --loops ROOT 'src/*.py' OUT RUN, of
     a saved run of total, a for loop whose body holds an if
     The command reports the saved runs into OUT, each loop a fork with
-    --loops: total's card has 3 ways, 0 items, or 1+ items then the if
+    --loops: total's flow has 3 ways, 0 items, or 1+ items then the if
     true or false, all covered. It prints its totals, read from the JSON
     it wrote, even when no way is untested."""
     run = _saved_run(tmp_path)
     out = tmp_path / "reported"
     assert runs_report.main(["--loops", str(tmp_path), "src/*.py", str(out), str(run)]) == 0
     assert capsys.readouterr().out == "Paths: 3 / 3 (100.00%)\nFunctions over --max-paths=4096: 0\n"
-    card = json.loads((out / "path_coverage.json").read_text())["cards"]["src/loop_orders.py:1:0"]
-    assert (card["ways"], card["gaps"]) == (3, [])
+    flow = json.loads((out / "path_coverage.json").read_text())["flows"]["src/loop_orders.py:1:0"]
+    assert (flow["ways"], flow["gaps"]) == (3, [])
 
 
 def test_7c2d9103(tmp_path, capsys):
