@@ -209,6 +209,33 @@ def test_7b20d408():
     ]
 
 
+LOOPED = (
+    "def first_small(orders):\n"
+    "    for order in orders:\n"
+    "        match order.size:\n"
+    "            case 1:\n"
+    "                return order\n"
+    "    return None\n"
+)
+
+
+def test_7b20d40f():
+    """Example: first_small, a match the last statement of its for's body,
+    its one case returning
+    Python tests the pattern by jumping into the case's body when it
+    matches, and going on, back to the loop's head, when it does not. No
+    case is taken where the pattern's failure goes, the instruction after
+    its jump, so after its first pattern starts and before the case's body:
+    there only, neither at the body nor at the loop's head."""
+    first_small = _tables(LOOPED)["first_small"]
+    assert _marks(first_small) == [
+        [("Opened", "k.py:3:8")],
+        [("Unmatched", "k.py:3:8", (0,))],
+        [("Matched", "k.py:3:8", 0, ()), ("Reach", "k.py:5:16")],
+        [("Reach", "k.py:6:4")],
+    ]
+
+
 LATE = "def any_late(orders):\n    return any(o.late for o in orders)\n"
 
 

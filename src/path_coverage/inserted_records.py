@@ -234,7 +234,7 @@ class _Inserter(ast.NodeTransformer):
             if isinstance(item, ast.stmt) and span(item) in self.reaches:
                 found.append(self._mark(item, Reach(self.reaches[span(item)])))
             found.append(self._wrapped(item, parent))
-            if isinstance(item, ast.Match) and span(item) in self.matches and not manifest.matches_anything(item.cases[-1]):
+            if isinstance(item, ast.Match) and span(item) in self.matches and manifest.left_open(item):
                 shape, cases = self.matches[span(item)]
                 found.append(self._mark(item, Unmatched(shape, tuple(pattern for pattern, _ in cases))))
         if field == "body" and isinstance(parent, _DEFS) and span(parent) in self.entries:

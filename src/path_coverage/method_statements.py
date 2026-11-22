@@ -13,14 +13,13 @@ from .manifest import (
     UNMEASURED,
     Arm,
     loop_places,
-    block_generator,
-    builtin_blocks,
     if_keywords,
     keyword_before,
     operator_keywords,
     decision_at,
     decisions,
 )
+from .manifest import found as manifest_found
 
 
 @dataclass(frozen=True)
@@ -213,9 +212,10 @@ def _taken_decision(row, paths):
 
 def collected(source, path):
     """{def decision: (def node, rows)} for each function in source, in source
-    order."""
-    tree = ast.parse(source)
-    finder = _Rows(path, source, decisions(source, path), tree)
+    order, its rows found in the very tree the manifest found its decisions
+    in, so each decision is known by its node."""
+    tree, found, nodes, _ = manifest_found(source, path)
+    finder = _Rows(path, source, found, nodes)
     columns = Columns(source)
     found = {
         columns.name(path, node.lineno, node.col_offset): (node, finder.rows(node))
@@ -271,13 +271,14 @@ class _Filter:
 class _Rows:
     """Finds the rows of a function's statements."""
 
-    def __init__(self, path, source, found, tree):
+    def __init__(self, path, source, found, nodes):
         """Names rows after path; found is the {decision: Condition} of source,
-        and tree its parse."""
+        and nodes its {decision: the node it is}, a filter's being its test,
+        as manifest.found gives them, of the tree whose rows are found."""
         self.path = path
         self.columns = Columns(source)
         self.found = found
-        self.builtins = builtin_blocks(tree)
+        self.sited = {_site(found[name], node): name for name, node in nodes.items()}
         self.keywords = if_keywords(source)
         self.operators = operator_keywords(source)
         self.lines = source.splitlines()
@@ -318,18 +319,12 @@ class _Rows:
     def _inner_decisions(self, decision):
         """The decisions inside decision that are decisions of their own, in the order
         written: in its heads, not its arms nor its bodies, which have rows
-        of their own. A node named as decision is, eg a ternary's then arm when
-        it is a call, is decision itself, so it is left out. None for a top that
-        is no decision. Example: valid(a if x else b) and ok gives the
+        of their own, each its own node, found once. None for a top that is
+        no decision. Example: valid(a if x else b) and ok gives the
         ternary."""
         if not self._decision_of(decision):
             return []
-        named = {}
-        for head in self._heads(decision):
-            for node in self._decisions_within(head):
-                named.setdefault(self._name(node), node)
-        named.pop(self._name(decision), None)
-        return list(named.values())
+        return [node for head in self._heads(decision) for node in self._decisions_within(head)]
 
     def _decisions_within(self, node):
         """node when it is a decision, then each decision within its heads, in
@@ -402,12 +397,11 @@ class _Rows:
 
     def _decision_of(self, node):
         """The name of the decision that node is, eg "k.py:2:4" for an if
-        statement there; None when node is no decision."""
-        kinds = (_Filter, ast.BoolOp, ast.IfExp, ast.If, ast.Match)
-        if isinstance(node, kinds) or (isinstance(node, ast.Call) and block_generator(node, self.builtins)):
-            name = self._name(node)
-            return name if name in self.found else None
-        return None
+        statement there, known by its node as the manifest found it; None
+        when node is no decision."""
+        if isinstance(node, _Filter):
+            return self.sited.get(("filter", node.test))
+        return self.sited.get(("node", node))
 
     def _name(self, node):
         """The name of where node is, as _at places it, eg "k.py:2:4"."""
@@ -429,15 +423,22 @@ class _Rows:
         statement that leaves the function with 1, its top leaving's word
         for it, return or raise."""
         decision = self._decision_of(node)
-        name = self._name(node)
         line, column = self._at(node)
         char_column = self.columns.char(line, column)
         if decision is None:
-            return Statement(line, column, char_column, leaving.word(node), 1, None, name)
+            return Statement(line, column, char_column, leaving.word(node), 1, None, self._name(node))
         condition = self.found[decision]
         top = _top_of_decision(self.lines, line, column, condition)
         paths = len(decision_paths.possible(condition))
-        return Statement(line, column, char_column, top, paths, decision, name)
+        return Statement(line, column, char_column, top, paths, decision, decision)
+
+
+def _site(condition, node):
+    """The key a decision is known by, condition its Condition and node its
+    node as manifest.found gives it: a filter's test is also the node of the
+    decision it may be, eg its and, so a filter is known by its test under a
+    role of its own."""
+    return ("filter", node) if condition.operator == "filter" else ("node", node)
 
 
 def _arms_of(node):

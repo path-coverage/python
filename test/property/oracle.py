@@ -134,6 +134,19 @@ class Oracle:
 
     _Raise = _Return
 
+    def _While(self, statement):
+        """Evaluates a while's test, which holds no decision."""
+        self.ev(statement.test)
+
+    def _For(self, statement):
+        """Evaluates a for's items, which hold no decision."""
+        self.ev(statement.iter)
+
+    def _Try(self, statement):
+        """Evaluates nothing: a try holds no decision of its own."""
+
+    _Break = _Try
+
     def _If(self, statement):
         """Evaluates an if's predicate, as its decision, and, when false, an
         elif's, which has no mark of its own."""
