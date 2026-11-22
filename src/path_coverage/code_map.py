@@ -252,8 +252,8 @@ def _match_marks(actions, instructions, handlers, match, shape, cases):
     """Adds the marks of match, the decision of shape, cases its (pattern,
     guard) leaf indexes: where its first pattern starts; where each case's
     guard, or its body when it has none, starts, matching its pattern; and,
-    when no case matches anything, where its last pattern's jumps go when
-    it does not match."""
+    when the match can be left open, as manifest.left_open says, where
+    each of its last pattern's failures goes, as _failures finds them."""
     patterns = tuple(pattern for pattern, _ in cases)
     first_pattern = next((ins.offset for ins in instructions if _within(_at(ins), span(match.cases[0].pattern))), None)
     actions.setdefault(first_pattern, []).append(Opened(shape))
@@ -261,11 +261,50 @@ def _match_marks(actions, instructions, handlers, match, shape, cases):
         first = case.guard if case.guard is not None else case.body[0]
         whole = (first.lineno, first.col_offset, case.body[-1].end_lineno, case.body[-1].end_col_offset)
         _mark_each(actions, instructions, handlers, span(first), whole, Matched(shape, pattern, patterns[: patterns.index(pattern)]))
+    if manifest.left_open(match):
+        for offset in sorted(_failures(instructions, match)):
+            actions.setdefault(offset, []).append(Unmatched(shape, patterns))
+
+
+# The jumps that always jump, so code goes on at their target; and the
+# instructions that end a block by leaving its code altogether.
+ALWAYS = ("JUMP_FORWARD", "JUMP_BACKWARD", "JUMP_BACKWARD_NO_INTERRUPT")
+LEAVES = tuple(name for name in ENDS if name not in ALWAYS)
+
+
+def _failures(instructions, match):
+    """The offsets where match's last pattern goes when it fails: each
+    successor, its target or the instruction after it, of each test of that
+    pattern, a jump, that _fails. Python may jump into the case when the
+    pattern matches and go on when it fails, or the other way round, so
+    which successor fails is found by where each leads, not by which it
+    is."""
     last = match.cases[-1]
-    if not manifest.matches_anything(last):
-        targets = [ins.argval for ins in instructions if ins.opname in JUMPS and _within(_at(ins), span(last.pattern))]
-        if targets:
-            actions.setdefault(max(targets), []).append(Unmatched(shape, patterns))
+    pattern = span(last.pattern)
+    first = last.guard if last.guard is not None else last.body[0]
+    case = (first.lineno, first.col_offset, last.body[-1].end_lineno, last.body[-1].end_col_offset)
+    index = {ins.offset: at for at, ins in enumerate(instructions)}
+    tests = [at for at, ins in enumerate(instructions) if ins.opname in JUMPS and _within(_at(ins), pattern)]
+    successors = {offset for at in tests for offset in (instructions[at].jump_target, instructions[at + 1].offset)}
+    return {offset for offset in successors if _fails(instructions, index, index[offset], (pattern, case, span(match)))}
+
+
+def _fails(instructions, index, at, spans):
+    """True when the code from the instruction at position at, run on
+    through always-jumps, leaves match, or leaves its code, before it
+    reaches the case, or another test of the pattern, as an or-pattern's
+    next alternative is; spans is (pattern, case, match), the spans of the
+    last pattern, of its case's guard and body, and of the match. Code
+    going on from a test always reaches one or the other, so this ends."""
+    pattern, case, whole = spans
+    while True:
+        ins = instructions[at]
+        where = _at(ins)
+        if _within(where, case) or (_within(where, pattern) and ins.opname in JUMPS):
+            return False
+        if not _within(where, whole) or ins.opname in LEAVES:
+            return True
+        at = index[ins.jump_target] if ins.opname in ALWAYS else at + 1
 
 
 def _mark_each(actions, instructions, handlers, first, whole, action):

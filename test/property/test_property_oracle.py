@@ -10,12 +10,12 @@ import path_coverage
 SEEDS = range(1, 121)
 
 
-def _generated(root):
-    """{seed: (FunctionGrammar, source)} for each of SEEDS, each source
-    written into root as generated_{seed}.py."""
+def _generated(root, held=False):
+    """{seed: (FunctionGrammar, source)} for each of SEEDS, each function
+    held or not, each source written into root as generated_{seed}.py."""
     found = {}
     for seed in SEEDS:
-        grammar = FunctionGrammar(seed)
+        grammar = FunctionGrammar(seed, held=held)
         found[seed] = (grammar, grammar.source())
         (root / f"generated_{seed}.py").write_text(found[seed][1])
     return found
@@ -58,9 +58,22 @@ def test_b61d3f01(tmp_path):
     and logs each leaf and statement, in order, exactly as it does compiled
     plainly: path coverage evaluates no leaf twice, skips none, runs none
     out of order, and skips no statement."""
-    generated = _generated(tmp_path)
+    _assert_runs_as_plainly(_generated(tmp_path), tmp_path)
+
+
+def test_b61d3f03(tmp_path):
+    """As b61d3f01, for every function FunctionGrammar generates held from
+    SEEDS: its first statement a while, a for or a try whose statements
+    start with an if or a match."""
+    _assert_runs_as_plainly(_generated(tmp_path, held=True), tmp_path)
+
+
+def _assert_runs_as_plainly(generated, root):
+    """Each of generated, imported from root under path coverage, called on
+    every combination of its leaves' values, returns or raises and logs
+    exactly as it does compiled plainly."""
     plain = {seed: _calls(_plainly(source), grammar) for seed, (grammar, source) in generated.items()}
-    runs, _ = _covered(tmp_path, list(generated))
+    runs, _ = _covered(root, list(generated))
     assert {seed: _calls(runs[seed], grammar) for seed, (grammar, _) in generated.items()} == plain
 
 
@@ -70,7 +83,21 @@ def test_b61d3f02(tmp_path):
     decision took, as the oracle derives them from each call's trace, are
     counted in path_coverage.json exactly, decision by decision, and the
     runs of each statement the marks say ran, in reached."""
-    generated = _generated(tmp_path)
+    _assert_counted_exactly(_generated(tmp_path), tmp_path)
+
+
+def test_b61d3f04(tmp_path):
+    """As b61d3f02, for every function FunctionGrammar generates held from
+    SEEDS: statements starting where their first decision does are never
+    taken for it, so each decision's paths are still counted exactly."""
+    _assert_counted_exactly(_generated(tmp_path, held=True), tmp_path)
+
+
+def _assert_counted_exactly(generated, tmp_path):
+    """The paths of each decision of generated, imported from tmp_path under
+    path coverage and called on every combination of its leaves' values,
+    and the runs of each statement, are counted exactly as the oracle
+    derives them from the calls' traces."""
     runs, write = _covered(tmp_path, list(generated))
     oracles = []
     for seed, (grammar, source) in generated.items():

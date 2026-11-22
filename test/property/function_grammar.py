@@ -2,7 +2,8 @@
 decide a function's paths or leave it, each written in a form path_coverage
 measures: and, or, not, conditional expressions, walrus, lambda, f-strings,
 starred items, chained comparisons, comprehension filters, any and all, if,
-elif and else, and match with guards, wildcards, or-patterns and captures.
+elif and else, and match with guards, wildcards, or-patterns and captures;
+and, held, each of those first inside a while, a for or a try.
 
 Each leaf is a spy, a call of a fresh parameter, eg p0(), which the oracle
 passes a callable logging its call and giving its value; or a fresh
@@ -67,6 +68,15 @@ NESTING = {
 # no code follows it.
 BODY = {**FLAT, "leave": "<leave>"}
 
+# The statements a held function starts with: each holds statements whose
+# first, one of NESTING, starts where they do, and runs them once. A raise of
+# Stop in the try's is caught by its handler.
+HOLDERS = {
+    "while": "while True:\n<held>\n    break",
+    "for": "for h in (0,):\n<held>",
+    "try": "try:\n<held>\nexcept Stop:\n    t -= 1",
+}
+
 # The kinds of leaf, a spy twice as often as each other kind: a spy,
 # written on one line or over two, a comment ending its first, a name or a
 # literal.
@@ -76,28 +86,32 @@ KINDS = ("spy", "spy", "spy_over_lines", "name", "literal")
 LITERALS = ("True", "False", "0", "1")
 
 # A piece of a template, filled by the method of its name.
-PIECE = re.compile(r"<(leaf|leave|cond|body)>")
+PIECE = re.compile(r"<(leaf|leave|cond|body|held)>")
 
 
 class FunctionGrammar:
     """The function of one seed. Example: FunctionGrammar(7).source(), the
     function of seed 7. Once its source is made, leaves is how many
-    parameters run has before mark, and spies which of them are called."""
+    parameters run has before mark, and spies which of them are called.
+    Held, its first statement is one of HOLDERS."""
 
-    def __init__(self, seed):
-        """A grammar drawing from seed's random numbers, with no leaves yet."""
+    def __init__(self, seed, held=False):
+        """A grammar drawing from seed's random numbers, with no leaves yet,
+        its function held or not."""
         self.random = random.Random(seed)
         self.kinds = random.Random(f"kinds of {seed}")
         self.leaves = 0
         self.spies = set()
+        self.held = held
 
     def source(self):
         """The source of a module holding Stop, the error its raises raise,
         and run, whose parameters are its leaves' then mark: two top-level
-        statements between t = 0 and its return of t, each statement
-        preceded by its mark."""
+        statements between t = 0 and its return of t, after one of HOLDERS
+        when held, each statement preceded by its mark."""
         top = {**FLAT, **NESTING}
-        return _marked(self.snippet("\n".join(self.statement(top) for _ in range(2))))
+        holder = [self.statement(HOLDERS)] if self.held else []
+        return _marked(self.snippet("\n".join([*holder, *(self.statement(top) for _ in range(2))])))
 
     def snippet(self, body):
         """The module whose run's parameters are the leaves so far and mark,
@@ -150,6 +164,11 @@ class FunctionGrammar:
         """The one statement of an arm or a case."""
         return self.statement(BODY)
 
+    def _held(self):
+        """The first statement a holder holds, one of NESTING, indented as
+        its body."""
+        return textwrap.indent(self.statement(NESTING), "    ")
+
 
 def _marked(source):
     """source with each statement of run preceded by its mark, numbered in
@@ -172,12 +191,13 @@ def _marked(source):
 
 
 def _statements(body, lines):
-    """Each statement in body, and in the bodies of each, at any depth, but
-    an elif, which no statement can precede, though its bodies' can."""
+    """Each statement in body, and in the bodies of each, at any depth, a
+    case's and a handler's included, but an elif, which no statement can
+    precede, though its bodies' can."""
     for statement in body:
         if not lines[statement.lineno - 1][statement.col_offset :].startswith("elif"):
             yield statement
         for part in (*getattr(statement, "body", []), *getattr(statement, "orelse", [])):
             yield from _statements([part], lines)
-        for case in getattr(statement, "cases", []):
+        for case in (*getattr(statement, "cases", []), *getattr(statement, "handlers", [])):
             yield from _statements(case.body, lines)

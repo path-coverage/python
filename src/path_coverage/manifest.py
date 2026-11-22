@@ -62,6 +62,10 @@ class Condition:
     # end_col) as ast counts them, so a card can tell which rows run
     # inside it.
     extent: tuple | None = field(default=None, compare=False)
+    # Where each case's body of a match is written, first statement to
+    # last, as extent counts them, case by case, so a card can place a
+    # row in the case holding it; none for any other decision.
+    cases: tuple = field(default=(), compare=False)
 
     def leaves(self):
         """Every Leaf, nested ones and arms' included, left to right; a
@@ -154,7 +158,8 @@ class _DecisionFinder(ast.NodeVisitor):
                 guard = case.guard
                 extent = (pattern.line, pattern.col, guard.end_lineno, guard.end_col_offset)
                 clauses.append(Condition("case", (pattern, self._leaf(guard)), extent))
-        self.decisions[decision] = Condition("match", tuple(clauses), _extent(node))
+        bodies = tuple(_statements_extent(case.body) for case in node.cases)
+        self.decisions[decision] = Condition("match", tuple(clauses), _extent(node), bodies)
         for case in node.cases:
             for statement in case.body:
                 self.visit(statement)
@@ -384,11 +389,14 @@ def wrapped(node, parent):
     return last or _only(node) is not None or isinstance(node, ast.IfExp)
 
 
-def matches_anything(case):
-    """True for a match statement's case that is taken whatever the
-    subject: an irrefutable pattern with no guard. The one place this is
-    decided, for the manifest's paths and code_map's marks alike."""
-    return case.guard is None and irrefutable(case.pattern)
+def left_open(match):
+    """True for a match statement that can be left with no case taken while
+    its evaluation is still open: one whose last case's pattern can fail,
+    as a failed pattern gives no outcome that ends it, while a guard's
+    false outcome does. Only such a match needs its evaluation ended where
+    it is left. The one place this is decided, for code_map's marks and the
+    rewrite's records alike."""
+    return not irrefutable(match.cases[-1].pattern)
 
 
 def _pattern_leaf(pattern):

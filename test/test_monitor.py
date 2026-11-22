@@ -174,6 +174,75 @@ def test_d86a1f09():
     assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): 1}, "k.py:2:9": {(True, True): 1}}
 
 
+FIRST_SMALL = (
+    "def first_small(orders):\n"
+    "    for order in orders:\n"
+    "        match order.size:\n"
+    "            case 1:\n"
+    "                return order\n"
+    "    return None\n"
+)
+
+
+def test_d86a1f18():
+    """Example: first_small, a match the last statement of its for's body,
+    for orders of size 2 then 1
+    The size 2 order takes no case, going on round the loop; the size 1
+    order takes the case. Each path is counted. The result is unchanged."""
+    first_small, evaluations = _measured(FIRST_SMALL, "first_small")
+    orders = [SimpleNamespace(size=2), SimpleNamespace(size=1)]
+    assert first_small(orders) is orders[1]
+    assert _rebuilt(evaluations).decision_paths == {"k.py:3:8": {(False,): 1, (True,): 1}}
+
+
+SMALL = (
+    "def small(order):\n"
+    "    match order.size:\n"
+    "        case 1 | 2:\n"
+    "            return True\n"
+    "    return False\n"
+)
+
+
+def test_d86a1f19():
+    """Example: small, a match whose one case is an or-pattern, 1 | 2, for
+    orders of size 1, 2 and 3
+    The first alternative failing goes on to the second, so only size 3,
+    failing both, takes no case. Each path is counted."""
+    small, evaluations = _measured(SMALL, "small")
+    assert [small(SimpleNamespace(size=size)) for size in (1, 2, 3)] == [True, True, False]
+    assert _rebuilt(evaluations).decision_paths == {"k.py:2:4": {(True,): 2, (False,): 1}}
+
+
+LABEL = (
+    "def label(order):\n"
+    "    match order.kind:\n"
+    '        case "gold":\n'
+    "            return 1\n"
+    '        case "silver" if order.big:\n'
+    "            return 2\n"
+    "    return 3\n"
+)
+
+
+def test_d86a1f1a():
+    """Example: label, a match whose last case has a pattern and a guard,
+    for a gold order, a big silver, a small silver and a bronze
+    The small silver order fails the last guard, the bronze order its
+    pattern, so each takes no case. Each path is counted."""
+    label, evaluations = _measured(LABEL, "label")
+    orders = [("gold", True), ("silver", True), ("silver", False), ("bronze", True)]
+    assert [label(SimpleNamespace(kind=kind, big=big)) for kind, big in orders] == [1, 2, 3, 3]
+    assert _rebuilt(evaluations).decision_paths == {
+        "k.py:2:4": {
+            (True, None, None): 1,
+            (False, True, True): 1,
+            (False, True, False): 1,
+            (False, False, None): 1,
+        }
+    }
+
+
 LATE = "def late(orders):\n    return any(o.late for o in orders)\n"
 
 

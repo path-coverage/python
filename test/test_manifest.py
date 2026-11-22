@@ -499,3 +499,21 @@ def test_5c1e9a19():
         "    return 'post'\n"
     )
     assert list(decisions(source, "k.py")) == ["k.py:3:4"]
+
+
+def test_5c1e9a1a():
+    """Example: grade, a match of two cases, the second's body an if.
+    A match's Condition holds where each case's body is written, first
+    statement to last, case by case, so a card can place a row in the
+    case holding it from the decision alone."""
+    source = (
+        "def grade(score, bonus):\n"
+        "    match score:\n"
+        "        case 1:\n"
+        "            return 'low'\n"
+        "        case _:\n"
+        "            if bonus:\n"
+        "                return 'high'\n"
+        "    return 'mid'\n"
+    )
+    assert decisions(source, "k.py")["k.py:2:4"].cases == ((4, 12, 4, 24), (6, 12, 7, 29))
