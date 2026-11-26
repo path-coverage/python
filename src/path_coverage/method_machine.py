@@ -504,26 +504,43 @@ def _uncaught(_raised_class):
 
 
 def _raised_class(statement):
-    """The name of the class a raise statement raises, eg KeyError for
-    raise KeyError(sku); None for a class it does not name, eg a bare
-    raise."""
+    """The name of the class a raise statement raises, as written, eg
+    KeyError for raise KeyError(sku) and yaml.YAMLError for raise
+    yaml.YAMLError(text); None for a class it does not name, eg a bare
+    raise or raise errors[0]."""
     exc = statement.exc.func if isinstance(statement.exc, ast.Call) else statement.exc
-    return exc.id if isinstance(exc, ast.Name) else None
+    return _class_name(exc)
+
+
+def _class_name(node):
+    """The dotted name node writes, eg yaml.YAMLError for an attribute of a
+    name; None for a node that is no name or attribute of one, eg
+    errors[0], or no node, as a bare raise has."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        owner = _class_name(node.value)
+        return None if owner is None else f"{owner}.{node.attr}"
+    return None
 
 
 def _catches(named, raised_class):
     """Whether a handler of named, its type's node, catches a raise of the
     class named raised_class: always for a bare except, its named None;
-    for a tuple, when any of its classes does; else when it names that class, or both are builtin classes and that
-    class is a subclass of the handler's."""
+    for a tuple, when any of its classes does; never when either class has
+    no name; else when it names that class, or both are builtin classes and
+    that class is a subclass of the handler's."""
     if named is None:
         return True
     if isinstance(named, ast.Tuple):
         return any(_catches(each, raised_class) for each in named.elts)
-    handled, raised = getattr(builtins, named.id, None), getattr(builtins, raised_class, None)
+    handled_class = _class_name(named)
+    if handled_class is None or raised_class is None:
+        return False
+    handled, raised = getattr(builtins, handled_class, None), getattr(builtins, raised_class, None)
     if isinstance(handled, type) and isinstance(raised, type):
         return issubclass(raised, handled)
-    return named.id == raised_class
+    return handled_class == raised_class
 
 
 def _count(state, known):

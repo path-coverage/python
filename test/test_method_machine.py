@@ -1,3 +1,5 @@
+import pytest
+
 from path_coverage import method_machine
 
 
@@ -1163,3 +1165,54 @@ def test_5b1f3c41():
         "    return orders\n"
     )
     assert method_machine.paths(source, "k.py", loops=True) == {"k.py:1:0": [(("k.py:3:4",),)]}
+
+
+@pytest.mark.parametrize(
+    "raised, handler, caught",
+    [
+        ("raise yaml.YAMLError(text)", "except yaml.YAMLError:", True),
+        ("raise yaml.YAMLError", "except yaml.YAMLError:", True),
+        ("raise yaml.YAMLError(text)", "except (KeyError, yaml.YAMLError):", True),
+        ("raise yaml.YAMLError(text)", "except json.JSONDecodeError:", False),
+        ("raise yaml.YAMLError(text)", "except YAMLError:", False),
+        ("raise YAMLError(text)", "except yaml.YAMLError:", False),
+        ("raise ValueError(text)", "except yaml.YAMLError:", False),
+        ("raise KeyError(text)", "except (ValueError, yaml.YAMLError):", False),
+        ("raise yaml.YAMLError(text)", "except Exception:", False),
+        ("raise yaml.YAMLError(text)", "except:", True),
+        ("raise", "except ValueError:", False),
+        ("raise", "except Exception:", False),
+        ("raise", "except (KeyError, yaml.YAMLError):", False),
+        ("raise", "except:", True),
+        ("raise errors[0]", "except ValueError:", False),
+        ("raise errors[0]", "except yaml.YAMLError:", False),
+        ("raise errors[0]", "except:", True),
+        ("raise errors[0].Error(text)", "except ValueError:", False),
+        ("raise ValueError(text)", "except errors[0]:", False),
+        ("raise errors[0].Error(text)", "except errors[0].Error:", False),
+    ],
+)
+def test_5b1f3c50(raised, handler, caught):
+    """Example: load, a try raising when strict, else returning, its one
+    handler returning.
+    A class is known by its dotted name as written, so a handler catches a
+    raise of the same dotted name and no other; a raise of a class no name
+    gives, a bare raise or a raise of errors[0], only a bare except catches,
+    and a handler of a class no name gives catches nothing, not even a
+    raise written the same."""
+    source = (
+        "def load(text, strict, errors):\n"
+        "    try:\n"
+        "        if strict:\n"
+        f"            {raised}\n"
+        "        return 1\n"
+        f"    {handler}\n"
+        "        return 0\n"
+    )
+    handled = (("k.py:7:8",),) if caught else ()
+    assert method_machine.paths(source, "k.py") == {
+        "k.py:1:0": [
+            (("k.py:3:8", (True,)), ("k.py:4:12",), *handled),
+            (("k.py:3:8", (False,)), ("k.py:5:8",)),
+        ]
+    }
